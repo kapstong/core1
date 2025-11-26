@@ -2279,10 +2279,16 @@ function displayProducts(products) {
     const isStaff = currentUser.role === 'staff';
 
         tbody.innerHTML = products.map(product => {
-            // Handle absolute URLs from ImageUpload class
+            // Handle absolute URLs from ImageUpload class and fix relative paths
             let imageUrl = '/public/assets/img/no-image.png';
             if (product.image_url) {
-                // Use URL directly - already includes correct absolute path
+                imageUrl = product.image_url;
+                // Remove double assets/img prefixes
+                imageUrl = imageUrl.replace(/assets\/img\/assets\/img\//g, 'assets/img/');
+                // Convert relative paths to absolute paths (add /public/ prefix)
+                if (imageUrl.startsWith('assets/')) {
+                    imageUrl = '/public/' + imageUrl;
+                }
             }
 
         // Use quantity_on_hand from API (not stock_quantity)
