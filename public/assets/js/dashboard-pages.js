@@ -2279,10 +2279,10 @@ function displayProducts(products) {
     const isStaff = currentUser.role === 'staff';
 
         tbody.innerHTML = products.map(product => {
-            // Handle relative paths that work with htaccess routing
-            let imageUrl = 'assets/img/no-image.png';
+            // Handle absolute URLs from ImageUpload class
+            let imageUrl = '/public/assets/img/no-image.png';
             if (product.image_url) {
-                imageUrl = product.image_url;
+                // Use URL directly - already includes correct absolute path
             }
 
         // Use quantity_on_hand from API (not stock_quantity)

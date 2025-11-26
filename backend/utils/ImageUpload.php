@@ -4,6 +4,8 @@
  * Handles product image uploads, validation, and processing
  */
 
+require_once __DIR__ . '/../config/env.php';
+
 class ImageUpload {
     private $uploadDir;
     private $maxFileSize;
@@ -294,16 +296,32 @@ class ImageUpload {
      * Get full image URL
      */
     private function getImageUrl($filename) {
-        // Return relative path that works with htaccess routing
-        return 'assets/img/products/' . $filename;
+        // Return absolute path for direct access with query string cache buster
+        // Use APP_URL from env to determine proper base path
+        $appUrl = Env::get('APP_URL', 'http://localhost');
+        if (strpos($appUrl, '/core1') !== false) {
+            // Running from subdirectory - use relative path from public
+            return '/assets/img/products/' . $filename . '?t=' . time();
+        }
+
+        // Running from root - use full path
+        return '/public/assets/img/products/' . $filename . '?t=' . time();
     }
 
     /**
      * Get thumbnail URL
      */
     private function getThumbnailUrl($filename) {
-        // Return relative path that works with htaccess routing
-        return 'assets/img/products/thumbnails/' . $filename;
+        // Return absolute path for direct access with query string cache buster
+        // Use APP_URL from env to determine proper base path
+        $appUrl = Env::get('APP_URL', 'http://localhost');
+        if (strpos($appUrl, '/core1') !== false) {
+            // Running from subdirectory - use relative path from public
+            return '/assets/img/products/thumbnails/' . $filename . '?t=' . time();
+        }
+
+        // Running from root - use full path
+        return '/public/assets/img/products/thumbnails/' . $filename . '?t=' . time();
     }
 
     /**
