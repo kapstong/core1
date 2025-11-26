@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(php:*)",
+      "Bash(findstr:*)",
+      "Bash(dir \"c:\\wamp64\\www\\core1\\public\\assets\\img\")",
+      "Bash(dir /s /b \"c:\\wamp64\\www\\core1\\backend\\api\")",
+      "Bash(dir:*)",
+      "Bash(powershell -Command \"Get-Content ''c:\\wamp64\\www\\core1\\public\\assets\\js\\grn-new.js'' | Select-Object -Last 5\")",
+      "Bash(powershell -Command:*)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

@@ -1,0 +1,120 @@
+/**
+ * Icon Performance Optimizations
+ * Reduces rendering overhead and speeds up icon display
+ */
+
+/* Optimize FontAwesome rendering */
+.fas, .fab, .far, .fal, .fad {
+    /* Force GPU acceleration for icon rendering */
+    transform: translateZ(0);
+    will-change: auto;
+    backface-visibility: hidden;
+}
+
+/* Prevent FOUT (Flash Of Unstyled Text) for icons */
+i[class^="fas"],
+i[class^="fab"],
+i[class^="far"],
+i[class^="fal"],
+i[class^="fad"] {
+    font-display: swap;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+/* Icon containers - optimize layout */
+.stat-icon,
+.page-title i,
+.btn i,
+.card-header i,
+.table i,
+.sidebar i,
+.nav-link i {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+/* Prevent icon shifting on hover */
+.btn i,
+.nav-link i,
+a i {
+    flex-shrink: 0;
+}
+
+/* Optimize large icon collections */
+.icon-grid [class^="fas"],
+.icon-grid [class^="fab"],
+.icon-list [class^="fas"],
+.icon-list [class^="fab"] {
+    /* Use CSS containment to isolate rendering */
+    contain: layout style paint;
+}
+
+/* Loading state - show placeholder while icons render */
+[data-lazy-icon] {
+    min-height: 1.5rem;
+}
+
+[data-lazy-icon] i[class^="fas"]:not(.fa-fw) {
+    animation: fadeIn 0.3s ease-in;
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+    }
+    to {
+        opacity: 1;
+    }
+}
+
+/* Reduce repaints for frequently updated icons */
+.animate-icon,
+.icon-spinner,
+.loading-indicator i {
+    will-change: transform;
+    animation-duration: 1s;
+    animation-timing-function: linear;
+    animation-iteration-count: infinite;
+}
+
+/* Optimize icon margins to prevent reflow */
+.me-2 {
+    margin-right: 0.5rem !important;
+    flex-shrink: 0;
+}
+
+.ms-2 {
+    margin-left: 0.5rem !important;
+    flex-shrink: 0;
+}
+
+/* Icon sizing optimization */
+i.fa-fw {
+    width: 1.25em;
+    flex-shrink: 0;
+}
+
+/* Prevent color transitions on hover for better performance */
+.btn i,
+.nav-link i {
+    transition: none;
+}
+
+/* High contrast mode support */
+@media (prefers-contrast: more) {
+    .fas, .fab, .far, .fal, .fad {
+        font-weight: 900;
+        text-shadow: 0 0 1px currentColor;
+    }
+}
+
+/* Reduced motion support */
+@media (prefers-reduced-motion: reduce) {
+    .fas, .fab, .far, .fal, .fad {
+        animation: none !important;
+        transition: none !important;
+    }
+}

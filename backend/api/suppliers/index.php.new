@@ -1,0 +1,76 @@
+<?php
+/**
+ * Suppliers API - List all suppliers
+ * GET /backend/api/suppliers/index.php
+ */
+
+header('Content-Type: application/json');
+session_start();
+
+require_once __DIR__ . '/../../config/database.php';
+require_once __DIR__ . '/../../utils/Response.php';
+require_once __DIR__ . '/../../middleware/Auth.php';
+require_once __DIR__ . '/../../middleware/CORS.php';
+require_once __DIR__ . '/../../utils/Logger.php';
+
+CORS::handle();
+
+// Only allow GET requests
+if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
+    Response::error('Method not allowed', 405);
+    exit;
+}
+
+// Check authentication
+if (!Auth::check()) {
+    Response::error('Unauthorized', 401);
+    exit;
+}
+
+try {
+    $user = Auth::user();
+    $logger = new Logger($user['id']);
+
+    $db = Database::getInstance();
+    $conn = $db->getConnection();
+
+    // Get suppliers with user information
+    $query = "SELECT 
+        s.id,
+        s.code,
+        s.name,
+        s.contact_person,
+        s.email,
+        s.phone,
+        s.address,
+        s.is_active,
+        s.rating,
+        s.created_at,
+        s.updated_at,
+        u.username as user_username,
+        u.full_name as user_full_name,
+        u.email as user_email
+    FROM suppliers s
+    LEFT JOIN users u ON s.user_id = u.id
+    WHERE s.is_active = 1
+    ORDER BY s.created_at DESC";
+
+    $stmt = $conn->prepare($query);
+    $stmt->execute();
+    $suppliers = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+    // Log results
+    $logger->log('suppliers_list', 'suppliers', null, [
+        'count' => count($suppliers),
+        'first_supplier' => !empty($suppliers) ? $suppliers[0]['code'] : null
+    ]);
+
+    Response::success(['suppliers' => $suppliers]);
+
+} catch (Exception $e) {
+    $logger->log('suppliers_error', 'error', null, [
+        'error' => $e->getMessage()
+    ]);
+    Response::error('Failed to fetch suppliers: ' . $e->getMessage());
+    exit;
+}

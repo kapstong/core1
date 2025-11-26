@@ -1,0 +1,21 @@
+{
+    "system_name": "PC Parts Central",
+    "system_version": "1.0",
+    "timezone": "UTC",
+    "currency": "PHP",
+    "currency_symbol": "\u20b1",
+    "store_name": "What",
+    "store_email": "noreply@pcparts.com",
+    "store_phone": "",
+    "store_address": "",
+    "tax_rate": 10,
+    "shop_enabled": true,
+    "guest_checkout": false,
+    "free_shipping_threshold": 100,
+    "default_shipping_cost": 10,
+    "enable_2fa": "false",
+    "session_timeout": "false",
+    "password_policy": "basic",
+    "email_from": "noreply@pcparts.com",
+    "maintenance_mode": "false"
+}

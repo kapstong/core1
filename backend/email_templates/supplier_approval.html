@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Supplier Account Approved</title>
+</head>
+<body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
+    <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 30px; text-align: center; border-radius: 10px 10px 0 0;">
+        <h1 style="color: white; margin: 0; font-size: 28px;">PC Parts Central</h1>
+        <p style="color: rgba(255, 255, 255, 0.9); margin: 10px 0 0 0;">Supplier Portal</p>
+    </div>
+
+    <div style="background: #ffffff; padding: 30px; border: 1px solid #e0e0e0; border-top: none; border-radius: 0 0 10px 10px; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);">
+        <div style="background: #d4edda; border: 1px solid #c3e6cb; border-radius: 5px; padding: 15px; margin-bottom: 20px;">
+            <h2 style="color: #155724; margin: 0 0 10px 0; font-size: 22px;">✓ Account Approved!</h2>
+            <p style="color: #155724; margin: 0;">Your supplier registration has been successfully approved.</p>
+        </div>
+
+        <p style="font-size: 16px;">Dear <strong>{name}</strong>,</p>
+
+        <p style="font-size: 15px;">We are pleased to inform you that your supplier account has been approved and is now active. You can now log in to the system using your registered email and password.</p>
+
+        <div style="background: #f8f9fa; border-left: 4px solid #667eea; padding: 15px; margin: 20px 0;">
+            <p style="margin: 0; font-size: 14px; color: #666;">Your Supplier Code</p>
+            <p style="margin: 5px 0 0 0; font-size: 24px; font-weight: bold; color: #667eea; letter-spacing: 1px;">{supplierCode}</p>
+        </div>
+
+        <p style="font-size: 15px;">Please keep this code for your records as it will be used for all transactions and communications.</p>
+
+        <div style="text-align: center; margin: 30px 0;">
+            <a href="{loginUrl}" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 15px 40px; text-decoration: none; border-radius: 25px; display: inline-block; font-weight: 600; font-size: 16px; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);">Login to Supplier Portal</a>
+        </div>
+
+        <div style="background: #fff3cd; border: 1px solid #ffc107; border-radius: 5px; padding: 15px; margin: 20px 0;">
+            <p style="margin: 0; font-size: 14px; color: #856404;"><strong>Next Steps:</strong></p>
+            <ul style="margin: 10px 0 0 0; padding-left: 20px; color: #856404;">
+                <li>Log in to your supplier account</li>
+                <li>Complete your company profile</li>
+                <li>Review our supplier guidelines</li>
+                <li>Start submitting purchase orders</li>
+            </ul>
+        </div>
+
+        <p style="font-size: 15px;">If you have any questions or need assistance getting started, please don't hesitate to contact our support team.</p>
+
+        <div style="border-top: 1px solid #e0e0e0; margin-top: 30px; padding-top: 20px;">
+            <p style="margin: 0; font-size: 15px;">Best regards,</p>
+            <p style="margin: 5px 0 0 0; font-weight: bold; font-size: 16px; color: #667eea;">{systemName} Team</p>
+        </div>
+
+        <div style="background: #f8f9fa; padding: 15px; margin-top: 20px; border-radius: 5px; text-align: center;">
+            <p style="margin: 0; font-size: 12px; color: #666;">
+                This is an automated email. Please do not reply to this message.<br>
+                If you need assistance, contact us at <a href="mailto:support@pcpartscentral.com" style="color: #667eea;">support@pcpartscentral.com</a>
+            </p>
+        </div>
+    </div>
+</body>
+</html>
