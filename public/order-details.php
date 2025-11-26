@@ -570,10 +570,10 @@ if (!$orderId) {
             const itemsContainer = document.getElementById('order-items');
             itemsContainer.innerHTML = order.items.map(item => `
                 <div class="order-item">
-                    <img src="${item.product_image || '/core1/public/assets/img/placeholder.png'}"
+                    <img src="${item.product_image || 'assets/img/no-image.png'}"
                          alt="${item.product_name}"
                          class="item-image"
-                         onerror="this.src='/core1/public/assets/img/placeholder.png'">
+                         onerror="this.src='assets/img/no-image.png'">
                     <div class="item-info">
                         <div class="item-name">${item.product_name}</div>
                         <div class="item-sku">SKU: ${item.product_sku}</div>

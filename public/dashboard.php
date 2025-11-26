@@ -1899,7 +1899,7 @@
     <!-- Inactivity Blur Timer JavaScript -->
     <script>
         // Automatic logout timeout configuration
-        const INACTIVITY_BLUR_TIMEOUT = 5000; // 5 seconds - show blur overlay
+        const INACTIVITY_BLUR_TIMEOUT = 10000; // 5 seconds - show blur overlay
         const INACTIVITY_LOGOUT_TIMEOUT = 60000; // 1 minute - auto logout (60,000 ms)
         const SHOW_FULL_TIMEOUT_COUNTDOWN = true; // Display countdown in blur overlay
 

@@ -285,16 +285,16 @@ class ImageUpload {
      * Get full image URL
      */
     private function getImageUrl($filename) {
-        // Since the app is accessed via /core1/, we need to include the base path
-        return '/core1/public/assets/img/products/' . $filename;
+        // Return relative path - will be properly handled by .htaccess
+        return 'assets/img/products/' . $filename;
     }
 
     /**
      * Get thumbnail URL
      */
     private function getThumbnailUrl($filename) {
-        // Since the app is accessed via /core1/, we need to include the base path
-        return '/core1/public/assets/img/products/thumbnails/' . $filename;
+        // Return relative path - will be properly handled by .htaccess
+        return 'assets/img/products/thumbnails/' . $filename;
     }
 
     /**
