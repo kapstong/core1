@@ -581,9 +581,9 @@ if (MaintenanceMode::handle()) {
                 if (!url) return '';
                 // Remove double assets/img prefixes
                 url = url.replace(/assets\/img\/assets\/img\//g, 'assets/img/');
-                // Convert relative paths to absolute paths from web root
+                // Convert relative paths to absolute paths (add /public/ prefix)
                 if (url.startsWith('assets/')) {
-                    url = '/' + url;
+                    url = '/public/' + url;
                 }
                 return url;
             };

@@ -747,9 +747,9 @@ if (MaintenanceMode::handle()) {
                 let imageUrl = product.image_url;
                 // Remove double assets/img prefixes
                 imageUrl = imageUrl.replace(/assets\/img\/assets\/img\//g, 'assets/img/');
-                // Convert relative paths to absolute paths from web root
+                // Convert relative paths to absolute paths (add /public/ prefix)
                 if (imageUrl.startsWith('assets/')) {
-                    imageUrl = '/' + imageUrl;
+                    imageUrl = '/public/' + imageUrl;
                 }
                 document.getElementById('product-image').src = imageUrl;
             }

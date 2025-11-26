@@ -297,8 +297,8 @@ class ImageUpload {
      */
     private function getImageUrl($filename) {
         // Return absolute path for direct access with query string cache buster
-        // Always use /assets/img/products/ as the web root is /public/
-        return '/assets/img/products/' . $filename . '?t=' . time();
+        // Use /public/assets/img/products/ since public is a subdirectory, not web root
+        return '/public/assets/img/products/' . $filename . '?t=' . time();
     }
 
     /**
@@ -306,8 +306,8 @@ class ImageUpload {
      */
     private function getThumbnailUrl($filename) {
         // Return absolute path for direct access with query string cache buster
-        // Always use /assets/img/products/thumbnails/ as the web root is /public/
-        return '/assets/img/products/thumbnails/' . $filename . '?t=' . time();
+        // Use /public/assets/img/products/thumbnails/ since public is a subdirectory, not web root
+        return '/public/assets/img/products/thumbnails/' . $filename . '?t=' . time();
     }
 
     /**
