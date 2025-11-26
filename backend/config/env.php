@@ -41,6 +41,11 @@ class Env {
                 $key = trim($key);
                 $value = trim($value);
 
+                // Skip if key is empty (malformed line)
+                if (empty($key)) {
+                    continue;
+                }
+
                 // Remove quotes if present
                 if (preg_match('/^(["\'])(.*)\1$/', $value, $matches)) {
                     $value = $matches[2];
