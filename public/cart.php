@@ -576,14 +576,17 @@ if (MaintenanceMode::handle()) {
             const summaryContent = document.getElementById('summary-content');
             const checkoutBtn = document.getElementById('checkout-btn');
 
+            // Auto-detect base path from current URL
+            const basePath = window.location.pathname.includes('/core1/') ? '/core1' : '';
+
             // Helper to fix image URLs
             const fixImageUrl = (url) => {
                 if (!url) return '';
                 // Remove double assets/img prefixes
                 url = url.replace(/assets\/img\/assets\/img\//g, 'assets/img/');
-                // Convert relative paths to absolute paths (add /core1/public/ prefix)
+                // Convert relative paths to absolute paths
                 if (url.startsWith('assets/')) {
-                    url = '/core1/public/' + url;
+                    url = basePath + '/public/' + url;
                 }
                 return url;
             };

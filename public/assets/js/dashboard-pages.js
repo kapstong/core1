@@ -2280,14 +2280,16 @@ function displayProducts(products) {
 
         tbody.innerHTML = products.map(product => {
             // Handle absolute URLs from ImageUpload class and fix relative paths
-            let imageUrl = '/core1/public/assets/img/no-image.png';
+            const assetsBase = window.ASSETS_BASE || '/public/assets';
+            const basePath = window.BASE_PATH || '';
+            let imageUrl = assetsBase + '/img/no-image.png';
             if (product.image_url) {
                 imageUrl = product.image_url;
                 // Remove double assets/img prefixes
                 imageUrl = imageUrl.replace(/assets\/img\/assets\/img\//g, 'assets/img/');
-                // Convert relative paths to absolute paths (add /core1/public/ prefix)
+                // Convert relative paths to absolute paths
                 if (imageUrl.startsWith('assets/')) {
-                    imageUrl = '/core1/public/' + imageUrl;
+                    imageUrl = basePath + '/public/' + imageUrl;
                 }
             }
 
@@ -2603,14 +2605,15 @@ async function loadProductForEdit(id) {
             // Show current image if exists
             if (product.image_url) {
                 const currentImage = document.getElementById('current-image');
+                const basePath = window.BASE_PATH || '';
 
                 // Handle both absolute paths (new uploads) and relative paths (old products)
                 if (product.image_url.startsWith('/')) {
                     currentImage.src = product.image_url;
                 } else if (product.image_url.startsWith('assets/')) {
-                    currentImage.src = `/core1/public/${product.image_url}`;
+                    currentImage.src = `${basePath}/public/${product.image_url}`;
                 } else {
-                    currentImage.src = `/core1/public/assets/img/products/${product.image_url}`;
+                    currentImage.src = `${basePath}/public/assets/img/products/${product.image_url}`;
                 }
 
                 document.getElementById('current-image-preview').classList.remove('d-none');

@@ -742,14 +742,17 @@ if (MaintenanceMode::handle()) {
             document.getElementById('product-brand-sidebar').textContent = product.brand || 'Generic';
             document.getElementById('product-warranty').textContent = `${product.warranty_months || 12} months`;
 
+            // Auto-detect base path from current URL
+            const basePath = window.location.pathname.includes('/core1/') ? '/core1' : '';
+
             // Image - fix URL to use absolute path
             if (product.image_url) {
                 let imageUrl = product.image_url;
                 // Remove double assets/img prefixes
                 imageUrl = imageUrl.replace(/assets\/img\/assets\/img\//g, 'assets/img/');
-                // Convert relative paths to absolute paths (add /core1/public/ prefix)
+                // Convert relative paths to absolute paths
                 if (imageUrl.startsWith('assets/')) {
-                    imageUrl = '/core1/public/' + imageUrl;
+                    imageUrl = basePath + '/public/' + imageUrl;
                 }
                 document.getElementById('product-image').src = imageUrl;
             }

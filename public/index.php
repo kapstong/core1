@@ -761,15 +761,18 @@ if (MaintenanceMode::handle()) {
                         const stockClass = (product.quantity_available || 0) > 0 ? 'success' : 'danger';
                         const stockIcon = (product.quantity_available || 0) > 0 ? 'check-circle' : 'times-circle';
 
+                        // Auto-detect base path from current URL
+                        const basePath = window.location.pathname.includes('/core1/') ? '/core1' : '';
+
                         // Check if product has an image
                         // Fix double assets/img paths and ensure absolute path
                         const fixImageUrl = (url) => {
                             if (!url) return '';
                             // Remove double assets/img prefixes
                             url = url.replace(/assets\/img\/assets\/img\//g, 'assets/img/');
-                            // Convert relative paths to absolute paths (add /core1/public/ prefix)
+                            // Convert relative paths to absolute paths
                             if (url.startsWith('assets/')) {
-                                url = '/core1/public/' + url;
+                                url = basePath + '/public/' + url;
                             }
                             return url;
                         };
