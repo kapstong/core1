@@ -294,16 +294,16 @@ class ImageUpload {
      * Get full image URL
      */
     private function getImageUrl($filename) {
-        // Return absolute path from web root
-        return '/public/assets/img/products/' . $filename;
+        // Return relative path that works with htaccess routing
+        return 'assets/img/products/' . $filename;
     }
 
     /**
      * Get thumbnail URL
      */
     private function getThumbnailUrl($filename) {
-        // Return absolute path from web root
-        return '/public/assets/img/products/thumbnails/' . $filename;
+        // Return relative path that works with htaccess routing
+        return 'assets/img/products/thumbnails/' . $filename;
     }
 
     /**

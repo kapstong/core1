@@ -2279,16 +2279,10 @@ function displayProducts(products) {
     const isStaff = currentUser.role === 'staff';
 
         tbody.innerHTML = products.map(product => {
-            // Handle absolute paths from updated ImageUpload system
-            let imageUrl = '/public/assets/img/no-image.png';
+            // Handle relative paths that work with htaccess routing
+            let imageUrl = 'assets/img/no-image.png';
             if (product.image_url) {
-                if (product.image_url.startsWith('/')) {
-                    // Absolute path from new upload system
-                    imageUrl = product.image_url;
-                } else {
-                    // Fallback for old URLs - construct full path
-                    imageUrl = `/public/assets/img/products/${product.image_url}`;
-                }
+                imageUrl = product.image_url;
             }
 
         // Use quantity_on_hand from API (not stock_quantity)
