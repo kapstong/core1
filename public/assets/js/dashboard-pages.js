@@ -2278,21 +2278,18 @@ function displayProducts(products) {
     const tbody = document.getElementById('products-table-body');
     const isStaff = currentUser.role === 'staff';
 
-    tbody.innerHTML = products.map(product => {
-        // Handle both absolute paths (new uploads) and relative paths (old products)
-        let imageUrl = '/public/assets/img/no-image.png';
-        if (product.image_url) {
-            if (product.image_url.startsWith('/')) {
-                // Absolute path from new upload system
-                imageUrl = product.image_url;
-            } else if (product.image_url.startsWith('assets/')) {
-                // Relative path from old/mock data
-                imageUrl = `/public/${product.image_url}`;
-            } else {
-                // Fallback for other formats
-                imageUrl = `/public/assets/img/products/${product.image_url}`;
+        tbody.innerHTML = products.map(product => {
+            // Handle absolute paths from updated ImageUpload system
+            let imageUrl = '/public/assets/img/no-image.png';
+            if (product.image_url) {
+                if (product.image_url.startsWith('/')) {
+                    // Absolute path from new upload system
+                    imageUrl = product.image_url;
+                } else {
+                    // Fallback for old URLs - construct full path
+                    imageUrl = `/public/assets/img/products/${product.image_url}`;
+                }
             }
-        }
 
         // Use quantity_on_hand from API (not stock_quantity)
         const stockQty = product.quantity_on_hand || product.quantity_available || 0;

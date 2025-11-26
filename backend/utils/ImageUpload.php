@@ -13,7 +13,7 @@ class ImageUpload {
     private $createThumbnails;
 
     public function __construct($config = []) {
-        $this->uploadDir = $config['upload_dir'] ?? __DIR__ . '/../../public/assets/img/products/';
+        $this->uploadDir = $config['upload_dir'] ?? __DIR__ . '/../../public/assets/img/';
         $this->maxFileSize = $config['max_file_size'] ?? 5 * 1024 * 1024; // 5MB
         $this->allowedTypes = $config['allowed_types'] ?? ['jpg', 'jpeg', 'png', 'gif', 'webp'];
         $this->maxWidth = $config['max_width'] ?? 1200;
@@ -25,10 +25,19 @@ class ImageUpload {
             mkdir($this->uploadDir, 0755, true);
         }
 
-        // Create thumbnails directory if needed
-        if ($this->createThumbnails && !is_dir($this->uploadDir . 'thumbnails/')) {
-            mkdir($this->uploadDir . 'thumbnails/', 0755, true);
+        // Create products subdirectory if it doesn't exist
+        $productsDir = $this->uploadDir . 'products/';
+        if (!is_dir($productsDir)) {
+            mkdir($productsDir, 0755, true);
         }
+
+        // Create thumbnails directory if needed
+        if ($this->createThumbnails && !is_dir($productsDir . 'thumbnails/')) {
+            mkdir($productsDir . 'thumbnails/', 0755, true);
+        }
+
+        // Update uploadDir to products subdirectory
+        $this->uploadDir = $productsDir;
     }
 
     /**
@@ -285,16 +294,16 @@ class ImageUpload {
      * Get full image URL
      */
     private function getImageUrl($filename) {
-        // Return relative path - will be properly handled by .htaccess
-        return 'assets/img/products/' . $filename;
+        // Return absolute path from web root
+        return '/public/assets/img/products/' . $filename;
     }
 
     /**
      * Get thumbnail URL
      */
     private function getThumbnailUrl($filename) {
-        // Return relative path - will be properly handled by .htaccess
-        return 'assets/img/products/thumbnails/' . $filename;
+        // Return absolute path from web root
+        return '/public/assets/img/products/thumbnails/' . $filename;
     }
 
     /**
