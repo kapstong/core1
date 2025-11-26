@@ -2280,14 +2280,14 @@ function displayProducts(products) {
 
         tbody.innerHTML = products.map(product => {
             // Handle absolute URLs from ImageUpload class and fix relative paths
-            let imageUrl = '/public/assets/img/no-image.png';
+            let imageUrl = '/core1/public/assets/img/no-image.png';
             if (product.image_url) {
                 imageUrl = product.image_url;
                 // Remove double assets/img prefixes
                 imageUrl = imageUrl.replace(/assets\/img\/assets\/img\//g, 'assets/img/');
-                // Convert relative paths to absolute paths (add /public/ prefix)
+                // Convert relative paths to absolute paths (add /core1/public/ prefix)
                 if (imageUrl.startsWith('assets/')) {
-                    imageUrl = '/public/' + imageUrl;
+                    imageUrl = '/core1/public/' + imageUrl;
                 }
             }
 
@@ -2608,9 +2608,9 @@ async function loadProductForEdit(id) {
                 if (product.image_url.startsWith('/')) {
                     currentImage.src = product.image_url;
                 } else if (product.image_url.startsWith('assets/')) {
-                    currentImage.src = `/public/${product.image_url}`;
+                    currentImage.src = `/core1/public/${product.image_url}`;
                 } else {
-                    currentImage.src = `/public/assets/img/products/${product.image_url}`;
+                    currentImage.src = `/core1/public/assets/img/products/${product.image_url}`;
                 }
 
                 document.getElementById('current-image-preview').classList.remove('d-none');

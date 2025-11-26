@@ -1,5 +1,6 @@
 RewriteEngine On
-RewriteBase /
+# Automatically detect the base directory
+RewriteBase /core1/
 
 # Disable directory browsing
 Options -Indexes
