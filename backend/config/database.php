@@ -26,10 +26,10 @@ class Database {
     private function __construct() {
         // Database configuration - MySQL only
         $this->db_type = 'mysql'; // Force MySQL only
-        $this->host     = Env::get('DB_HOST', '127.0.0.1');
-        $this->db_name  = Env::get('DB_NAME', 'core1');
-        $this->username = Env::get('DB_USER', 'root');
-        $this->password = Env::get('DB_PASSWORD', '');
+        $this->host     = Env::get('DB_HOST', 'localhost');
+        $this->db_name  = Env::get('DB_NAME', 'core1_core1merch');
+        $this->username = Env::get('DB_USER', 'core1_karldc');
+        $this->password = Env::get('DB_PASSWORD', 'karlkevin1122!!');
         $this->charset  = Env::get('DB_CHARSET', 'utf8mb4');
 
         try {

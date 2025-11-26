@@ -291,7 +291,7 @@
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script>
-        const API_BASE = '/core1/backend/api';
+        const API_BASE = '/backend/api';
 
         // Auto-focus and move to next input
         const inputs = document.querySelectorAll('.code-input');

@@ -158,7 +158,7 @@
     <div class="toast-container"></div>
 
     <script>
-        const API_BASE = '/core1/backend/api';
+        const API_BASE = '/backend/api';
 
         // Password toggle functionality
         function togglePassword() {

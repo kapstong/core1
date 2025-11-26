@@ -1,6 +1,0 @@
-[17-Nov-2025 06:24:30 UTC] MySQL Database Connection Error: could not find driver
-[17-Nov-2025 06:24:30 UTC] PHP Warning:  Undefined variable $conn in C:\wamp64\www\core1\test_stock_fix.php on line 58
-[17-Nov-2025 06:24:30 UTC] PHP Fatal error:  Uncaught Error: Call to a member function prepare() on null in C:\wamp64\www\core1\test_stock_fix.php:58
-Stack trace:
-#0 {main}
-  thrown in C:\wamp64\www\core1\test_stock_fix.php on line 58

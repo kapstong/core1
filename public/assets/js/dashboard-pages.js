@@ -1201,7 +1201,7 @@ function contactSupport() {
 
 function viewDocumentation() {
     // Open documentation page
-    window.open('/core1/docs/supplier-guide.html', '_blank');
+    window.open('/docs/supplier-guide.html', '_blank');
 }
 
 // Supplier-specific page functions
@@ -2280,17 +2280,17 @@ function displayProducts(products) {
 
     tbody.innerHTML = products.map(product => {
         // Handle both absolute paths (new uploads) and relative paths (old products)
-        let imageUrl = '/core1/public/assets/img/no-image.png';
+        let imageUrl = '/public/assets/img/no-image.png';
         if (product.image_url) {
             if (product.image_url.startsWith('/')) {
                 // Absolute path from new upload system
                 imageUrl = product.image_url;
             } else if (product.image_url.startsWith('assets/')) {
                 // Relative path from old/mock data
-                imageUrl = `/core1/public/${product.image_url}`;
+                imageUrl = `/public/${product.image_url}`;
             } else {
                 // Fallback for other formats
-                imageUrl = `/core1/public/assets/img/products/${product.image_url}`;
+                imageUrl = `/public/assets/img/products/${product.image_url}`;
             }
         }
 
@@ -2611,9 +2611,9 @@ async function loadProductForEdit(id) {
                 if (product.image_url.startsWith('/')) {
                     currentImage.src = product.image_url;
                 } else if (product.image_url.startsWith('assets/')) {
-                    currentImage.src = `/core1/public/${product.image_url}`;
+                    currentImage.src = `/public/${product.image_url}`;
                 } else {
-                    currentImage.src = `/core1/public/assets/img/products/${product.image_url}`;
+                    currentImage.src = `/public/assets/img/products/${product.image_url}`;
                 }
 
                 document.getElementById('current-image-preview').classList.remove('d-none');
@@ -2736,14 +2736,14 @@ async function viewProduct(id) {
             const product = data.data;
 
             // Handle both absolute paths (new uploads) and relative paths (old products)
-            let imageUrl = '/core1/public/assets/img/no-image.png';
+            let imageUrl = '/public/assets/img/no-image.png';
             if (product.image_url) {
                 if (product.image_url.startsWith('/')) {
                     imageUrl = product.image_url;
                 } else if (product.image_url.startsWith('assets/')) {
-                    imageUrl = `/core1/public/${product.image_url}`;
+                    imageUrl = `/public/${product.image_url}`;
                 } else {
-                    imageUrl = `/core1/public/assets/img/products/${product.image_url}`;
+                    imageUrl = `/public/assets/img/products/${product.image_url}`;
                 }
             }
 

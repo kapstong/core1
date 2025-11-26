@@ -732,7 +732,7 @@
 
     <script>
         const IS_DEVELOPMENT = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
-        const API_BASE = IS_DEVELOPMENT ? '/core1/backend/api' : '/backend/api';
+        const API_BASE = IS_DEVELOPMENT ? '/backend/api' : '/backend/api';
 
         // Development-only console logging
         function devLog(message, data = null) {

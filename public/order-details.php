@@ -520,7 +520,7 @@ if (!$orderId) {
     <!-- Order Details JS -->
     <script>
         const IS_DEVELOPMENT = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
-        const API_BASE = '/core1/backend/api';
+        const API_BASE = '/backend/api';
         const customerId = <?php echo json_encode($customerId); ?>;
         const customerEmail = <?php echo json_encode($customerEmail); ?>;
         const orderId = <?php echo json_encode($orderId); ?>;
