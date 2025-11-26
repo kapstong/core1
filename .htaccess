@@ -1,4 +1,5 @@
 RewriteEngine On
+RewriteBase /
 
 # Disable directory browsing
 Options -Indexes
@@ -12,6 +13,9 @@ Options -Indexes
 
 # Redirect root to public/index.php
 RewriteRule ^$ public/index.php [L]
+
+# Allow direct access to public/assets/
+RewriteRule ^public/assets/(.*)$ public/assets/$1 [L]
 
 # Allow access to backend/api/ for AJAX requests
 RewriteRule ^backend/api/(.*)$ backend/api/$1 [L,QSA]
