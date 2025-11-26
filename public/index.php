@@ -762,11 +762,16 @@ if (MaintenanceMode::handle()) {
                         const stockIcon = (product.quantity_available || 0) > 0 ? 'check-circle' : 'times-circle';
 
                         // Check if product has an image
-                        // Fix double assets/img paths if they exist
+                        // Fix double assets/img paths and ensure absolute path
                         const fixImageUrl = (url) => {
                             if (!url) return '';
                             // Remove double assets/img prefixes
-                            return url.replace(/assets\/img\/assets\/img\//g, 'assets/img/');
+                            url = url.replace(/assets\/img\/assets\/img\//g, 'assets/img/');
+                            // Convert relative paths to absolute paths from web root
+                            if (url.startsWith('assets/')) {
+                                url = '/' + url;
+                            }
+                            return url;
                         };
                         const imageUrl = fixImageUrl(product.image_url);
                         const imageHtml = imageUrl

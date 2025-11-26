@@ -576,13 +576,25 @@ if (MaintenanceMode::handle()) {
             const summaryContent = document.getElementById('summary-content');
             const checkoutBtn = document.getElementById('checkout-btn');
 
+            // Helper to fix image URLs
+            const fixImageUrl = (url) => {
+                if (!url) return '';
+                // Remove double assets/img prefixes
+                url = url.replace(/assets\/img\/assets\/img\//g, 'assets/img/');
+                // Convert relative paths to absolute paths from web root
+                if (url.startsWith('assets/')) {
+                    url = '/' + url;
+                }
+                return url;
+            };
+
             // Render cart items
             cartItems.innerHTML = cartData.items.map(item => `
                 <div class="cart-item" data-product-id="${item.product_id}">
                     <div class="d-flex align-items-center">
                         <div class="cart-item-image">
                             ${item.product.image_url
-                                ? `<img src="${item.product.image_url}" alt="${item.product.name}" style="width: 100%; height: 100%; object-fit: cover; border-radius: 0.5rem;">`
+                                ? `<img src="${fixImageUrl(item.product.image_url)}" alt="${item.product.name}" style="width: 100%; height: 100%; object-fit: cover; border-radius: 0.5rem;">`
                                 : `<i class="fas fa-microchip fa-2x text-accent"></i>`
                             }
                         </div>

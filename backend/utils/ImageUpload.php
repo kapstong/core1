@@ -297,15 +297,8 @@ class ImageUpload {
      */
     private function getImageUrl($filename) {
         // Return absolute path for direct access with query string cache buster
-        // Use APP_URL from env to determine proper base path
-        $appUrl = Env::get('APP_URL', 'http://localhost');
-        if (strpos($appUrl, '/core1') !== false) {
-            // Running from subdirectory - use relative path from public
-            return '/assets/img/products/' . $filename . '?t=' . time();
-        }
-
-        // Running from root - use full path
-        return '/public/assets/img/products/' . $filename . '?t=' . time();
+        // Always use /assets/img/products/ as the web root is /public/
+        return '/assets/img/products/' . $filename . '?t=' . time();
     }
 
     /**
@@ -313,15 +306,8 @@ class ImageUpload {
      */
     private function getThumbnailUrl($filename) {
         // Return absolute path for direct access with query string cache buster
-        // Use APP_URL from env to determine proper base path
-        $appUrl = Env::get('APP_URL', 'http://localhost');
-        if (strpos($appUrl, '/core1') !== false) {
-            // Running from subdirectory - use relative path from public
-            return '/assets/img/products/thumbnails/' . $filename . '?t=' . time();
-        }
-
-        // Running from root - use full path
-        return '/public/assets/img/products/thumbnails/' . $filename . '?t=' . time();
+        // Always use /assets/img/products/thumbnails/ as the web root is /public/
+        return '/assets/img/products/thumbnails/' . $filename . '?t=' . time();
     }
 
     /**

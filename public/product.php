@@ -742,9 +742,16 @@ if (MaintenanceMode::handle()) {
             document.getElementById('product-brand-sidebar').textContent = product.brand || 'Generic';
             document.getElementById('product-warranty').textContent = `${product.warranty_months || 12} months`;
 
-            // Image
+            // Image - fix URL to use absolute path
             if (product.image_url) {
-                document.getElementById('product-image').src = product.image_url;
+                let imageUrl = product.image_url;
+                // Remove double assets/img prefixes
+                imageUrl = imageUrl.replace(/assets\/img\/assets\/img\//g, 'assets/img/');
+                // Convert relative paths to absolute paths from web root
+                if (imageUrl.startsWith('assets/')) {
+                    imageUrl = '/' + imageUrl;
+                }
+                document.getElementById('product-image').src = imageUrl;
             }
 
             // Stock status
