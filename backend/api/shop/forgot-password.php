@@ -90,8 +90,16 @@ function requestPasswordReset() {
         require_once __DIR__ . '/../../utils/Email.php';
         $emailUtil = new Email();
 
+        // Determine base path (local dev vs production)
+        $basePath = '';
+        if (isset($_SERVER['SERVER_NAME']) &&
+            (strpos($_SERVER['SERVER_NAME'], 'localhost') !== false ||
+             strpos($_SERVER['SERVER_NAME'], '127.0.0.1') !== false)) {
+            $basePath = '/core1';
+        }
+
         $resetUrl = (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? "https" : "http") .
-                    "://{$_SERVER['HTTP_HOST']}/backend/api/shop/reset-password.php?token={$resetToken}";
+                    "://{$_SERVER['HTTP_HOST']}{$basePath}/public/reset-password.php?token={$resetToken}";
 
         $emailUtil->sendPasswordResetEmail($customer, $resetUrl);
     } catch (Exception $e) {
