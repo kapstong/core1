@@ -88,30 +88,24 @@ try {
     // Send reset email - ALWAYS show debug info for troubleshooting
     try {
         require_once __DIR__ . '/../../utils/Email.php';
+        require_once __DIR__ . '/../config/env.php';
         $emailService = new Email();
 
         // Debug: Get email settings
         $emailSettings = $emailService->getSettings();
 
+        // Use configured APP_URL instead of building dynamically
+        $appUrl = Env::get('APP_URL', 'https://core1.merchandising-c23.com');
+
         // Build reset URL based on user type
-        $protocol = (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on') ? 'https' : 'http';
-        $host = $_SERVER['HTTP_HOST'] ?? 'localhost';
-        $basePath = '';
-
-        // Extract base path (e.g., /core1) from script path
-        $scriptPath = $_SERVER['SCRIPT_NAME'] ?? '';
-        if (preg_match('#^(/[^/]+)/#', $scriptPath, $matches)) {
-            $basePath = $matches[1];
-        }
-
         $resetUrl = '';
 
         if ($userType === 'supplier') {
-            // Supplier reset URL
-            $resetUrl = $protocol . '://' . $host . $basePath . "/supplier/reset-password.php?token={$resetToken}";
+            // Supplier reset URL - use root level URL
+            $resetUrl = $appUrl . "/reset-password.php?token={$resetToken}&type=supplier";
         } else {
-            // Staff reset URL (use existing customer reset page or create staff version)
-            $resetUrl = $protocol . '://' . $host . $basePath . "/public/reset-password.php?token={$resetToken}&type=staff";
+            // Staff reset URL - use root level URL
+            $resetUrl = $appUrl . "/reset-password.php?token={$resetToken}&type=staff";
         }
 
         // Always include reset URL and debug info
