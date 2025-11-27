@@ -4,6 +4,9 @@ RewriteEngine On
 # Production (CyberPanel): RewriteBase /
 RewriteBase /
 
+# Set default directory index
+DirectoryIndex index.php
+
 # Disable directory browsing
 Options -Indexes
 
