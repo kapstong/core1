@@ -159,7 +159,7 @@
 
     <script>
         const IS_DEVELOPMENT = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
-        const BASE_PATH = IS_DEVELOPMENT ? '' : '/core1';
+        const BASE_PATH = IS_DEVELOPMENT ? '/core1' : '';
         const API_BASE = BASE_PATH + '/backend/api';
 
         // Password toggle functionality

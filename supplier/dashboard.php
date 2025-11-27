@@ -1022,7 +1022,7 @@
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script>
         const IS_DEVELOPMENT = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
-        const BASE_PATH = IS_DEVELOPMENT ? '' : '/core1';
+        const BASE_PATH = IS_DEVELOPMENT ? '/core1' : '';
         const API_BASE = BASE_PATH + '/backend/api';
 
         // Toast Notification System

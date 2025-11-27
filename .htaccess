@@ -1,6 +1,7 @@
 RewriteEngine On
 # Automatically detect the base directory
 RewriteBase /core1/
+# For production (CyberPanel public_html), change to: RewriteBase /
 
 # Disable directory browsing
 Options -Indexes
