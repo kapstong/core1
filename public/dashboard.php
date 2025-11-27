@@ -16,6 +16,8 @@
     <link rel="stylesheet" href="assets/css/icon-optimizations.css">
     <!-- CUSTOM CHECKBOX SYSTEM - Modern redesign for entire application -->
     <link rel="stylesheet" href="assets/css/checkboxes.css?v=1.0">
+    <!-- User Manual System -->
+    <link rel="stylesheet" href="assets/css/user-manual.css">
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <style>
         body {
@@ -410,6 +412,11 @@
                 <!-- View Shop button will be inserted here by JavaScript -->
                 <span id="view-shop-button"></span>
 
+                <!-- Help/Manual Button -->
+                <button class="help-button" onclick="openUserManual()" title="User Manual">
+                    <i class="fas fa-question"></i>
+                </button>
+
                 <div class="dropdown">
                     <button class="user-menu" type="button" data-bs-toggle="dropdown" aria-expanded="false">
                         <div class="user-avatar" id="user-avatar">A</div>
@@ -639,6 +646,9 @@
 
     <!-- Audit Logs Page -->
     <script src="assets/js/audit-logs-page.js?v=1.0"></script>
+
+    <!-- User Manual System -->
+    <script src="assets/js/user-manual.js"></script>
 
     <script>
         let currentUser = null;

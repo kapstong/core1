@@ -24,6 +24,8 @@ if (MaintenanceMode::handle()) {
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <!-- Custom Premium CSS -->
     <link rel="stylesheet" href="assets/css/main.css">
+    <!-- User Manual System -->
+    <link rel="stylesheet" href="assets/css/user-manual.css">
 
     <style>
         /* Additional shop-specific styles */
@@ -207,6 +209,11 @@ if (MaintenanceMode::handle()) {
                 <div class="d-flex align-items-center gap-3">
                     <a href="#categories" class="nav-link d-none d-md-inline">Categories</a>
                     <a href="#products" class="nav-link d-none d-md-inline">Products</a>
+
+                    <!-- Help/Manual Button (shown when authenticated) -->
+                    <button class="help-button" id="shop-help-button" onclick="openUserManual()" title="User Manual" style="display: none;">
+                        <i class="fas fa-question"></i>
+                    </button>
 
                     <!-- User Menu (shown when authenticated) -->
                     <li class="nav-item dropdown" id="user-menu" style="display: none;">
@@ -452,11 +459,13 @@ if (MaintenanceMode::handle()) {
             const customerName = document.getElementById('customer-name');
             const posMenuItem = document.getElementById('pos-menu-item');
             const posMenuLink = document.getElementById('pos-menu-link');
+            const helpButton = document.getElementById('shop-help-button');
 
             if (isAuthenticated && user) {
                 // User is authenticated, show user menu and load database cart
                 userMenu.style.display = 'block';
                 loginBtn.style.display = 'none';
+                if (helpButton) helpButton.style.display = 'inline-flex';
                 customerName.textContent = user.first_name || 'User';
 
                 // Check if user is staff (can access POS)
@@ -475,6 +484,7 @@ if (MaintenanceMode::handle()) {
                 // User not authenticated, show login button and use localStorage cart
                 userMenu.style.display = 'none';
                 loginBtn.style.display = 'block';
+                if (helpButton) helpButton.style.display = 'none';
                 posMenuItem.style.display = 'none';
                 posMenuLink.style.display = 'none';
 
@@ -1292,5 +1302,8 @@ if (MaintenanceMode::handle()) {
             }
         });
     </script>
+
+    <!-- User Manual System -->
+    <script src="assets/js/user-manual.js"></script>
 </body>
 </html>
