@@ -7,7 +7,7 @@
 
 // Suppress error display for clean JSON responses
 error_reporting(E_ALL);
-ini_set('display_errors', '1'); // Temporarily enable to see errors
+ini_set('display_errors', '0');
 ini_set('log_errors', '1');
 ini_set('error_log', __DIR__ . '/../../logs/api_errors.log');
 header('Content-Type: application/json');
@@ -257,9 +257,17 @@ function validateAddress($addressData, $type) {
         }
     }
 
+    // Validate state/province - require one of them
+    if (empty($addressData['state']) && empty($addressData['province'])) {
+        $errors[] = "$type address state/province is required";
+    }
+
     if (!empty($errors)) {
         return ['valid' => false, 'errors' => $errors];
     }
+
+    // Map province to state for consistency
+    $state = !empty($addressData['state']) ? trim($addressData['state']) : trim($addressData['province']);
 
     $address = [
         'address_type' => $type,
@@ -270,7 +278,7 @@ function validateAddress($addressData, $type) {
         'address_line_1' => trim($addressData['address_line_1']),
         'address_line_2' => isset($addressData['address_line_2']) ? trim($addressData['address_line_2']) : null,
         'city' => trim($addressData['city']),
-        'state' => isset($addressData['state']) ? trim($addressData['state']) : null,
+        'state' => $state,
         'postal_code' => trim($addressData['postal_code']),
         'country' => trim($addressData['country']),
         'phone' => isset($addressData['phone']) ? trim($addressData['phone']) : null
