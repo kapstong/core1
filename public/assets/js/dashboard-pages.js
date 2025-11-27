@@ -726,13 +726,14 @@ async function saveSecuritySettings() {
 
     const timeoutValue = parseInt(inactivityTimeoutEl.value) || 0;
 
-    console.log('💾 Saving security settings:', { inactivity_timeout: timeoutValue });
+    console.log('💾 Saving inactivity timeout to settings:', { inactivity_timeout: timeoutValue });
 
     const formData = {
         inactivity_timeout: timeoutValue.toString()
     };
 
     try {
+        // Save to global settings table
         const response = await fetch(`${API_BASE}/settings/index.php`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -744,7 +745,7 @@ async function saveSecuritySettings() {
 
         if (result.success) {
             showSuccess('Security settings saved successfully');
-            console.log('✓ Setting saved to database, re-initializing monitor with', timeoutValue, 'minutes');
+            console.log('✓ Settings saved, re-initializing monitor with', timeoutValue, 'minutes');
 
             // Reinitialize inactivity monitor with new timeout
             if (typeof initializeInactivityMonitor === 'function') {
@@ -755,18 +756,18 @@ async function saveSecuritySettings() {
             const statusEl = document.getElementById('timeout-status');
             if (statusEl) {
                 if (timeoutValue === 0) {
-                    statusEl.innerHTML = '<span class="text-muted">⚠ Inactivity timeout is disabled</span>';
+                    statusEl.innerHTML = '<span class="text-muted">⚠ Auto-logout disabled</span>';
                 } else {
                     statusEl.innerHTML = `<span class="text-success">✓ Auto-logout after ${timeoutValue} minutes of inactivity</span>`;
                 }
             }
         } else {
             console.error('❌ Save failed:', result.message);
-            showError(result.message || 'Failed to save security settings');
+            showError(result.message || 'Failed to save preference');
         }
     } catch (error) {
         console.error('❌ Save error:', error);
-        showError('Failed to save security settings');
+        showError('Failed to save preference');
     }
 }
 

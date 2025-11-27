@@ -9,7 +9,7 @@ let inactivityTimer = null;
 let countdownTimer = null;
 let countdownInterval = null;
 let warningShown = false;
-let countdownSeconds = 0;
+let expiryTimestamp = null; // Timestamp when session will expire
 
 // Format seconds to MM:SS or HH:MM:SS
 function formatCountdown(totalSeconds) {
@@ -165,50 +165,56 @@ function showWarningWithCountdown() {
     const bsModal = new bootstrap.Modal(document.getElementById('inactivityWarningModal'));
     bsModal.show();
 
-    // Start countdown based on admin's timeout setting
-    countdownSeconds = sessionTimeout * 60; // Convert minutes to seconds
-    const totalSeconds = countdownSeconds;
+    // Calculate expiry timestamp (using timestamps ensures accuracy across tabs)
+    expiryTimestamp = Date.now() + (sessionTimeout * 60 * 1000);
+    const totalSeconds = sessionTimeout * 60;
     const countdownEl = document.getElementById('countdown-timer');
     const progressRing = document.getElementById('progress-ring');
     const circumference = 339.292; // 2 * PI * 54
 
     // Update display immediately
-    if (countdownEl) {
-        countdownEl.textContent = formatCountdown(countdownSeconds);
-    }
+    updateCountdownDisplay(countdownEl, progressRing, totalSeconds, circumference);
 
-    // Update countdown every second
+    // Update countdown every second using timestamp comparison
     countdownInterval = setInterval(() => {
-        countdownSeconds--;
-
-        if (countdownEl) {
-            countdownEl.textContent = formatCountdown(countdownSeconds);
-        }
-
-        // Update progress ring
-        if (progressRing) {
-            const progress = countdownSeconds / totalSeconds;
-            const offset = circumference * (1 - progress);
-            progressRing.style.strokeDashoffset = offset;
-
-            // Change color when time is running out
-            if (countdownSeconds <= 60) {
-                progressRing.style.stroke = '#dc3545'; // Red
-            } else if (countdownSeconds <= 300) {
-                progressRing.style.stroke = '#fd7e14'; // Orange
-            }
-        }
-
-        if (countdownSeconds <= 0) {
-            clearInterval(countdownInterval);
-            handleSessionExpired();
-        }
+        updateCountdownDisplay(countdownEl, progressRing, totalSeconds, circumference);
     }, 1000);
 
     // Set logout timer (same duration as countdown)
     countdownTimer = setTimeout(() => {
         handleSessionExpired();
     }, sessionTimeout * 60 * 1000);
+}
+
+// Update countdown display based on expiry timestamp
+function updateCountdownDisplay(countdownEl, progressRing, totalSeconds, circumference) {
+    const now = Date.now();
+    const secondsLeft = Math.max(0, Math.floor((expiryTimestamp - now) / 1000));
+
+    // Update countdown text
+    if (countdownEl) {
+        countdownEl.textContent = formatCountdown(secondsLeft);
+    }
+
+    // Update progress ring
+    if (progressRing) {
+        const progress = secondsLeft / totalSeconds;
+        const offset = circumference * (1 - progress);
+        progressRing.style.strokeDashoffset = offset;
+
+        // Change color when time is running out
+        if (secondsLeft <= 60) {
+            progressRing.style.stroke = '#dc3545'; // Red
+        } else if (secondsLeft <= 300) {
+            progressRing.style.stroke = '#fd7e14'; // Orange
+        }
+    }
+
+    // Check if time expired
+    if (secondsLeft <= 0) {
+        clearInterval(countdownInterval);
+        handleSessionExpired();
+    }
 }
 
 // Handle session expiration
