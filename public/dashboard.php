@@ -629,7 +629,7 @@
     </script>
 
     <!-- Inactivity Monitor -->
-    <script src="assets/js/inactivity-monitor.js?v=3.0"></script>
+    <script src="assets/js/inactivity-monitor.js?v=3.1"></script>
 
     <!-- Include all page loaders -->
     <script src="assets/js/dashboard-pages.js?v=2.0"></script>

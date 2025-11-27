@@ -36,13 +36,11 @@ class Auth {
             }
         }
 
-        // Check session timeout
-        if (!self::validateSessionTimeout()) {
-            self::logout();
-            return false;
-        }
+        // Session timeout is now handled by frontend inactivity-monitor.js
+        // Backend no longer enforces automatic timeout - only frontend controls auto-logout
+        // This allows admin-configurable timeout from system settings
 
-        // Update last activity time
+        // Update last activity time for session tracking
         $_SESSION['last_activity'] = time();
 
         // Regenerate session ID periodically for security

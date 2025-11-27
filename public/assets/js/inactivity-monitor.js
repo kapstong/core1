@@ -197,7 +197,7 @@ function showWarningWithCountdown() {
 }
 
 // Handle session expiration
-function handleSessionExpired() {
+async function handleSessionExpired() {
     console.log(`🚪 Session expired - logging out`);
     clearAllTimers();
     warningShown = false;
@@ -207,9 +207,20 @@ function handleSessionExpired() {
         showError('Session expired due to inactivity. Please log in again.');
     }
 
-    // Perform logout
+    // Perform logout via POST request
+    try {
+        await fetch(`${API_BASE}/auth/logout.php`, {
+            method: 'POST',
+            credentials: 'same-origin'
+        });
+    } catch (error) {
+        console.error('Logout request failed:', error);
+        // Continue with redirect even if logout API fails
+    }
+
+    // Redirect to login page
     setTimeout(() => {
-        window.location.href = `${API_BASE}/auth/logout.php`;
+        window.location.href = 'simple-login.php';
     }, 1000);
 }
 
@@ -272,5 +283,17 @@ window.resetInactivityTimer = resetOnActivity; // Keep function name for compati
 window.handleLogout = async function() {
     console.log('🚪 Manual logout requested');
     clearAllTimers();
-    window.location.href = `${API_BASE}/auth/logout.php`;
+
+    // Perform logout via POST request
+    try {
+        await fetch(`${API_BASE}/auth/logout.php`, {
+            method: 'POST',
+            credentials: 'same-origin'
+        });
+    } catch (error) {
+        console.error('Logout request failed:', error);
+    }
+
+    // Redirect to login page
+    window.location.href = 'simple-login.php';
 };
