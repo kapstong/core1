@@ -764,7 +764,8 @@ if (MaintenanceMode::handle()) {
                         const stockIcon = (product.quantity_available || 0) > 0 ? 'check-circle' : 'times-circle';
 
                         // Auto-detect base path from current URL
-                        const basePath = window.location.pathname.includes('/core1/') ? '/core1' : '';
+                        const isDevEnvironment = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+            const basePath = isDevEnvironment ? '/core1' : '';
 
                         // Check if product has an image
                         // Fix double assets/img paths and ensure absolute path

@@ -296,18 +296,29 @@ class ImageUpload {
      * Get full image URL
      */
     private function getImageUrl($filename) {
+        // Auto-detect base path: /core1 for local dev, empty for production
+        $basePath = $this->getBasePath();
         // Return absolute path for direct access with query string cache buster
-        // Include /core1/ prefix for production server configuration
-        return '/core1/public/assets/img/products/' . $filename . '?t=' . time();
+        return $basePath . '/public/assets/img/products/' . $filename . '?t=' . time();
     }
 
     /**
      * Get thumbnail URL
      */
     private function getThumbnailUrl($filename) {
+        // Auto-detect base path: /core1 for local dev, empty for production
+        $basePath = $this->getBasePath();
         // Return absolute path for direct access with query string cache buster
-        // Include /core1/ prefix for production server configuration
-        return '/core1/public/assets/img/products/thumbnails/' . $filename . '?t=' . time();
+        return $basePath . '/public/assets/img/products/thumbnails/' . $filename . '?t=' . time();
+    }
+
+    /**
+     * Get base path based on environment
+     */
+    private function getBasePath() {
+        // Check if running on localhost
+        $isLocal = in_array($_SERVER['HTTP_HOST'] ?? '', ['localhost', '127.0.0.1', 'localhost:80', 'localhost:8080']);
+        return $isLocal ? '/core1' : '';
     }
 
     /**

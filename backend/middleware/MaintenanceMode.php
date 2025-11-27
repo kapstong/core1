@@ -75,6 +75,7 @@ class MaintenanceMode
     public static function renderMaintenancePage()
     {
         $message = self::getMessage();
+        $basePath = self::getBasePath();
 
         // Clear any output buffers
         while (ob_get_level()) {
@@ -90,7 +91,7 @@ class MaintenanceMode
             <meta charset="UTF-8">
             <meta name="viewport" content="width=device-width, initial-scale=1.0">
             <title>Maintenance Mode - PC Parts Central</title>
-            <link rel="icon" type="image/png" href="/core1/ppc.png">
+            <link rel="icon" type="image/png" href="<?php echo $basePath; ?>/ppc.png">
             <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
             <style>
                 :root {
@@ -444,6 +445,16 @@ class MaintenanceMode
         $settings[$key] = $value;
 
         file_put_contents($settingsFile, json_encode($settings, JSON_PRETTY_PRINT));
+    }
+
+    /**
+     * Get base path based on environment
+     */
+    private static function getBasePath()
+    {
+        // Check if running on localhost
+        $isLocal = in_array($_SERVER['HTTP_HOST'] ?? '', ['localhost', '127.0.0.1', 'localhost:80', 'localhost:8080']);
+        return $isLocal ? '/core1' : '';
     }
 }
 ?>

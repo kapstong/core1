@@ -1,7 +1,8 @@
 RewriteEngine On
-# Automatically detect the base directory
-RewriteBase /core1/
-# For production (CyberPanel public_html), change to: RewriteBase /
+# Base directory - change based on environment:
+# Local: RewriteBase /core1/
+# Production (CyberPanel): RewriteBase /
+RewriteBase /
 
 # Disable directory browsing
 Options -Indexes

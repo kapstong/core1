@@ -579,7 +579,8 @@ if (MaintenanceMode::handle()) {
             const checkoutBtn = document.getElementById('checkout-btn');
 
             // Auto-detect base path from current URL
-            const basePath = window.location.pathname.includes('/core1/') ? '/core1' : '';
+            const isDevEnvironment = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+            const basePath = isDevEnvironment ? '/core1' : '';
 
             // Helper to fix image URLs
             const fixImageUrl = (url) => {
