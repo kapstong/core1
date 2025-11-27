@@ -669,10 +669,10 @@
     </script>
 
     <!-- Inactivity Monitor -->
-    <script src="assets/js/inactivity-monitor.js?v=1.0"></script>
+    <script src="assets/js/inactivity-monitor.js?v=1.1"></script>
 
     <!-- Include all page loaders -->
-    <script src="assets/js/dashboard-pages.js?v=1.1"></script>
+    <script src="assets/js/dashboard-pages.js?v=2.0"></script>
 
     <!-- NEW: Complete GRN Management System -->
     <script src="assets/js/grn-new.js?v=3.5"></script>
