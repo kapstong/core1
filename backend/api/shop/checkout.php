@@ -7,7 +7,7 @@
 
 // Suppress error display for clean JSON responses
 error_reporting(E_ALL);
-ini_set('display_errors', '0');
+ini_set('display_errors', '1'); // Temporarily enable to see errors
 ini_set('log_errors', '1');
 ini_set('error_log', __DIR__ . '/../../logs/api_errors.log');
 header('Content-Type: application/json');
@@ -36,11 +36,11 @@ if ($method === 'POST') {
     try {
         processCheckout($customerModel, $customerId, $sessionId);
     } catch (Exception $e) {
-        error_log('Checkout API fatal error: ' . $e->getMessage());
-        Response::error('Internal server error occurred while processing checkout', 500);
+        error_log('Checkout API fatal error: ' . $e->getMessage() . ' | File: ' . $e->getFile() . ' | Line: ' . $e->getLine() . ' | Trace: ' . $e->getTraceAsString());
+        Response::error('Internal server error occurred while processing checkout: ' . $e->getMessage(), 500);
     } catch (Throwable $t) {
-        error_log('Checkout API fatal error: ' . $t->getMessage());
-        Response::error('Internal server error occurred while processing checkout', 500);
+        error_log('Checkout API fatal error: ' . $t->getMessage() . ' | File: ' . $t->getFile() . ' | Line: ' . $t->getLine() . ' | Trace: ' . $t->getTraceAsString());
+        Response::error('Internal server error occurred while processing checkout: ' . $t->getMessage(), 500);
     }
 } else {
     Response::error('Method not allowed', 405);
