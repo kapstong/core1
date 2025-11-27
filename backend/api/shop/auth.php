@@ -170,20 +170,12 @@ function registerCustomer($data, $customerModel) {
     // Send verification email
     try {
         require_once __DIR__ . '/../../utils/Email.php';
+        require_once __DIR__ . '/../config/env.php';
         $email = new Email();
 
         // Build verification URL pointing to public page
-        $protocol = (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on') ? 'https' : 'http';
-        $host = $_SERVER['HTTP_HOST'] ?? 'localhost';
-        $basePath = '';
-
-        // Extract base path (e.g., /core1) from script path
-        $scriptPath = $_SERVER['SCRIPT_NAME'] ?? '';
-        if (preg_match('#^(/[^/]+)/#', $scriptPath, $matches)) {
-            $basePath = $matches[1];
-        }
-
-        $verificationUrl = $protocol . '://' . $host . $basePath . "/public/verify-email.php?token={$verificationToken}";
+        $appUrl = Env::get('APP_URL', 'https://core1.merchandising-c23.com');
+        $verificationUrl = $appUrl . "/verify-email.php?token={$verificationToken}";
         $email->sendEmailVerification($customer, $verificationUrl);
     } catch (Exception $e) {
         // Log error but don't fail registration
@@ -365,20 +357,14 @@ function forgotPassword($data, $customerModel) {
 
             // Send reset email
             require_once __DIR__ . '/../../utils/Email.php';
+            require_once __DIR__ . '/../config/env.php';
             $emailService = new Email();
 
-            // Build reset URL
-            $protocol = (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on') ? 'https' : 'http';
-            $host = $_SERVER['HTTP_HOST'] ?? 'localhost';
-            $basePath = '';
+            // Use configured APP_URL instead of building dynamically
+            $appUrl = Env::get('APP_URL', 'https://core1.merchandising-c23.com');
 
-            // Extract base path (e.g., /core1) from script path
-            $scriptPath = $_SERVER['SCRIPT_NAME'] ?? '';
-            if (preg_match('#^(/[^/]+)/#', $scriptPath, $matches)) {
-                $basePath = $matches[1];
-            }
-
-            $resetUrl = $protocol . '://' . $host . $basePath . "/public/reset-password.php?token={$resetToken}";
+            // Build reset URL - use root level URL for customers
+            $resetUrl = $appUrl . "/reset-password.php?token={$resetToken}&type=customer";
             $emailService->sendPasswordResetEmail($customer, $resetUrl);
 
         } catch (Exception $e) {
