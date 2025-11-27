@@ -9,6 +9,7 @@ let inactivityTimer = null;
 let warningTimer = null;
 let countdownInterval = null;
 let warningShown = false;
+let timerStartTime = null; // Track when timer was started/reset
 
 // Calculate appropriate warning duration based on total timeout
 function calculateWarningDuration(timeoutMinutes) {
@@ -24,6 +25,18 @@ function calculateWarningDuration(timeoutMinutes) {
         // For timeouts > 10 minutes, use 2 minutes warning
         return 120;
     }
+}
+
+// Format time for logging
+function formatTime() {
+    const now = new Date();
+    return now.toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
+}
+
+// Calculate future time
+function getFutureTime(milliseconds) {
+    const future = new Date(Date.now() + milliseconds);
+    return future.toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
 }
 
 // Warning modal HTML
@@ -78,14 +91,21 @@ function initializeInactivityMonitor(timeoutMinutes) {
 
     // If timeout is 0 or negative, disable monitoring
     if (inactivityTimeout <= 0) {
-        console.log('Inactivity monitoring disabled');
+        console.log('🔓 Inactivity monitoring DISABLED');
         return;
     }
 
     // Calculate appropriate warning duration based on timeout
     warningDuration = calculateWarningDuration(inactivityTimeout);
 
-    console.log(`Inactivity monitor initialized: ${inactivityTimeout} minutes timeout, ${warningDuration} seconds warning`);
+    const warningMinutes = Math.floor(warningDuration / 60);
+    const warningSeconds = warningDuration % 60;
+    const warningTimeStr = warningMinutes > 0 ? `${warningMinutes}m ${warningSeconds}s` : `${warningSeconds}s`;
+
+    console.log(`🔐 Inactivity Monitor Initialized:
+    ├─ Total Timeout: ${inactivityTimeout} minutes
+    ├─ Warning Duration: ${warningTimeStr} (${warningDuration} seconds)
+    └─ Warning appears after: ${inactivityTimeout - (warningDuration / 60)} minutes of inactivity`);
 
     // Create warning modal
     createWarningModal();
@@ -123,6 +143,7 @@ function resetInactivityTimer() {
             bsModal.hide();
         }
         warningShown = false;
+        console.log(`⏱️ [${formatTime()}] Warning dismissed - timer reset`);
     }
 
     // Clear existing timers
@@ -133,6 +154,9 @@ function resetInactivityTimer() {
         return;
     }
 
+    // Record start time
+    timerStartTime = Date.now();
+
     // Calculate timeout in milliseconds
     const timeoutMs = inactivityTimeout * 60 * 1000;
     const warningMs = timeoutMs - (warningDuration * 1000); // Show warning based on calculated duration
@@ -142,11 +166,19 @@ function resetInactivityTimer() {
         warningTimer = setTimeout(() => {
             showInactivityWarning();
         }, warningMs);
+
+        const warningAtTime = getFutureTime(warningMs);
+        const logoutAtTime = getFutureTime(timeoutMs);
+
+        console.log(`⏱️ [${formatTime()}] Timer started:
+    ├─ Warning will appear at: ${warningAtTime} (in ${Math.floor(warningMs / 60000)}m ${Math.floor((warningMs % 60000) / 1000)}s)
+    └─ Auto-logout at: ${logoutAtTime} (in ${inactivityTimeout}m)`);
     } else {
         // If timeout is very short (less than warning duration), show warning immediately
         setTimeout(() => {
             showInactivityWarning();
         }, 100);
+        console.log(`⏱️ [${formatTime()}] Timeout is very short - warning will appear immediately`);
     }
 
     // Set logout timer
@@ -157,6 +189,13 @@ function resetInactivityTimer() {
 
 // Show inactivity warning
 function showInactivityWarning() {
+    const timeElapsed = Math.floor((Date.now() - timerStartTime) / 1000);
+    const minutesElapsed = Math.floor(timeElapsed / 60);
+    const secondsElapsed = timeElapsed % 60;
+
+    console.log(`⚠️ [${formatTime()}] WARNING TRIGGERED after ${minutesElapsed}m ${secondsElapsed}s of inactivity`);
+    console.log(`   └─ Countdown: ${warningDuration} seconds until auto-logout`);
+
     warningShown = true;
     const modal = document.getElementById('inactivityWarningModal');
 
@@ -189,6 +228,7 @@ function showInactivityWarning() {
 
 // Handle inactivity logout
 function handleInactivityLogout() {
+    console.log(`🚪 [${formatTime()}] AUTO-LOGOUT triggered - session expired`);
     clearAllTimers();
 
     // Show logout message
@@ -217,12 +257,20 @@ function setupActivityListeners() {
     // Throttle to avoid excessive resets
     let throttleTimeout = null;
     const throttleMs = 1000; // Only reset once per second
+    let activityLogThrottle = null;
 
     const handleActivity = () => {
         if (!throttleTimeout) {
             throttleTimeout = setTimeout(() => {
                 resetInactivityTimer();
                 throttleTimeout = null;
+
+                // Log activity reset (throttled to once per 5 seconds to avoid spam)
+                if (!activityLogThrottle) {
+                    activityLogThrottle = setTimeout(() => {
+                        activityLogThrottle = null;
+                    }, 5000);
+                }
             }, throttleMs);
         }
     };
@@ -231,6 +279,8 @@ function setupActivityListeners() {
     activityEvents.forEach(event => {
         document.addEventListener(event, handleActivity, true);
     });
+
+    console.log('👂 Activity listeners registered:', activityEvents.join(', '));
 }
 
 // Make functions globally available
@@ -239,6 +289,7 @@ window.resetInactivityTimer = resetInactivityTimer;
 
 // Handle logout button
 window.handleLogout = async function() {
+    console.log(`🚪 [${formatTime()}] Manual logout requested`);
     clearAllTimers();
     window.location.href = `${API_BASE}/auth/logout.php`;
 };
