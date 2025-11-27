@@ -41,10 +41,14 @@ if (isset($_SESSION['user_id']) && isset($_SESSION['user_role'])) {
             --accent: #00f5ff;
             --bg-primary: #0a0e27;
             --bg-secondary: #1a1f3a;
+            --bg-card: #1e293b;
             --text-primary: #e2e8f0;
             --text-secondary: #94a3b8;
             --text-muted: #64748b;
             --border-color: rgba(148, 163, 184, 0.2);
+            --success: #10b981;
+            --danger: #ef4444;
+            --warning: #f59e0b;
         }
 
         * {
