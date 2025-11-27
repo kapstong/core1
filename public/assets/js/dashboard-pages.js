@@ -529,13 +529,16 @@ async function loadSettingsData() {
         if (data.success) {
             // Convert settings array to object for easier access
             const settings = {};
-            if (data.settings && Array.isArray(data.settings)) {
-                data.settings.forEach(setting => {
+            // Settings are nested in data.data.settings (not data.settings)
+            const settingsArray = data.data?.settings || data.settings || [];
+
+            if (Array.isArray(settingsArray)) {
+                settingsArray.forEach(setting => {
                     settings[setting.setting_key] = setting.parsed_value !== undefined ? setting.parsed_value : setting.setting_value;
                 });
-            } else if (data.data) {
-                // Fallback for different response structure
-                Object.assign(settings, data.data);
+                console.log('✅ Loaded', settingsArray.length, 'settings from database');
+            } else {
+                console.warn('⚠️ No settings array found in response');
             }
 
             // Helper function to safely set element value

@@ -632,7 +632,7 @@
     <script src="assets/js/inactivity-monitor.js?v=3.3"></script>
 
     <!-- Include all page loaders -->
-    <script src="assets/js/dashboard-pages.js?v=2.4"></script>
+    <script src="assets/js/dashboard-pages.js?v=2.5"></script>
 
     <!-- NEW: Complete GRN Management System -->
     <script src="assets/js/grn-new.js?v=3.5"></script>
@@ -688,31 +688,23 @@
                 const response = await fetch(`${API_BASE}/settings/index.php`);
                 const data = await response.json();
 
-                console.log('📦 Settings API FULL response:', JSON.stringify(data, null, 2));
-                console.log('🔍 data.success =', data.success);
-                console.log('🔍 data.settings =', data.settings);
-                console.log('🔍 data.data =', data.data);
+                // Settings are nested in data.data.settings (not data.settings)
+                const settingsArray = data.data?.settings || data.settings || [];
 
-                if (data.success && data.settings && Array.isArray(data.settings)) {
-                    console.log('📋 Settings array length:', data.settings.length);
+                if (data.success && settingsArray && Array.isArray(settingsArray)) {
+                    console.log('📋 Settings array found with', settingsArray.length, 'items');
                     // Find inactivity_timeout setting
-                    const setting = data.settings.find(s => s.setting_key === 'inactivity_timeout');
+                    const setting = settingsArray.find(s => s.setting_key === 'inactivity_timeout');
                     console.log('🔍 Found inactivity_timeout setting:', setting);
                     const timeoutMinutes = parseInt(setting?.setting_value) || 30;
-                    console.log('✓ Using saved setting:', timeoutMinutes, 'minutes');
+                    console.log('✅ LOADED FROM DATABASE:', timeoutMinutes, 'minutes');
 
                     // Initialize monitor with saved setting
                     if (typeof initializeInactivityMonitor === 'function') {
                         initializeInactivityMonitor(timeoutMinutes);
                     }
                 } else {
-                    console.warn('⚠️ No settings array found. Response structure:', {
-                        success: data.success,
-                        hasSettings: !!data.settings,
-                        isArray: Array.isArray(data.settings),
-                        keys: Object.keys(data)
-                    });
-                    console.warn('⚠️ Using default 30 minutes');
+                    console.warn('⚠️ No settings array found, using default 30 minutes');
                     if (typeof initializeInactivityMonitor === 'function') {
                         initializeInactivityMonitor(30);
                     }
