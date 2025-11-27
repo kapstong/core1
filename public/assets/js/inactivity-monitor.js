@@ -4,10 +4,27 @@
  */
 
 let inactivityTimeout = 30; // Default: 30 minutes
+let warningDuration = 60; // Warning duration in seconds (calculated based on timeout)
 let inactivityTimer = null;
 let warningTimer = null;
 let countdownInterval = null;
 let warningShown = false;
+
+// Calculate appropriate warning duration based on total timeout
+function calculateWarningDuration(timeoutMinutes) {
+    // For timeouts less than 2 minutes, use 20% of timeout
+    // For longer timeouts, use minimum of 2 minutes or 10% of timeout
+    if (timeoutMinutes <= 0) {
+        return 60; // Default 1 minute
+    } else if (timeoutMinutes < 2) {
+        return Math.floor(timeoutMinutes * 60 * 0.2); // 20% of timeout in seconds
+    } else if (timeoutMinutes <= 10) {
+        return 60; // 1 minute warning for 2-10 minute timeouts
+    } else {
+        // For timeouts > 10 minutes, use 2 minutes warning
+        return 120;
+    }
+}
 
 // Warning modal HTML
 const createWarningModal = () => {
@@ -65,7 +82,10 @@ function initializeInactivityMonitor(timeoutMinutes) {
         return;
     }
 
-    console.log(`Inactivity monitor initialized: ${inactivityTimeout} minutes`);
+    // Calculate appropriate warning duration based on timeout
+    warningDuration = calculateWarningDuration(inactivityTimeout);
+
+    console.log(`Inactivity monitor initialized: ${inactivityTimeout} minutes timeout, ${warningDuration} seconds warning`);
 
     // Create warning modal
     createWarningModal();
@@ -115,13 +135,18 @@ function resetInactivityTimer() {
 
     // Calculate timeout in milliseconds
     const timeoutMs = inactivityTimeout * 60 * 1000;
-    const warningMs = timeoutMs - 60000; // Show warning 1 minute before logout
+    const warningMs = timeoutMs - (warningDuration * 1000); // Show warning based on calculated duration
 
-    // Set warning timer (1 minute before logout)
+    // Set warning timer
     if (warningMs > 0) {
         warningTimer = setTimeout(() => {
             showInactivityWarning();
         }, warningMs);
+    } else {
+        // If timeout is very short (less than warning duration), show warning immediately
+        setTimeout(() => {
+            showInactivityWarning();
+        }, 100);
     }
 
     // Set logout timer
@@ -142,9 +167,13 @@ function showInactivityWarning() {
     const bsModal = new bootstrap.Modal(document.getElementById('inactivityWarningModal'));
     bsModal.show();
 
-    // Start countdown
-    let secondsLeft = 60;
+    // Start countdown using calculated warning duration
+    let secondsLeft = warningDuration;
     const countdownEl = document.getElementById('countdown-timer');
+
+    if (countdownEl) {
+        countdownEl.textContent = secondsLeft;
+    }
 
     countdownInterval = setInterval(() => {
         secondsLeft--;
