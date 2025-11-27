@@ -414,16 +414,16 @@ async function loadSettingsPage() {
                     <div class="card-body">
                         <form id="securityForm">
                             <div class="mb-3">
-                                <label class="form-label">Inactivity Timeout (minutes)</label>
-                                <input type="number" class="form-control" id="inactivity-timeout" min="0" max="1440" value="30">
+                                <label class="form-label fw-bold">Inactivity Timeout (minutes)</label>
+                                <input type="number" class="form-control" id="inactivity-timeout" min="0" max="1440" placeholder="Loading from settings table...">
                                 <div class="form-text">
-                                    Auto-logout after this many minutes of inactivity. Set to 0 to disable.
-                                    <div id="timeout-status" class="mt-2"></div>
+                                    Set how many minutes of inactivity before auto-logout. Value is loaded from and saved to <strong>settings table</strong>. Set to 0 to disable.
+                                    <div id="timeout-status" class="mt-2 fw-bold"></div>
                                 </div>
                             </div>
                             <div id="security-message"></div>
                             <button type="submit" class="btn btn-primary">
-                                <i class="fas fa-save me-2"></i>Save Security Settings
+                                <i class="fas fa-save me-2"></i>Update Inactivity Timeout in Settings Table
                             </button>
                         </form>
                     </div>
@@ -564,9 +564,21 @@ async function loadSettingsData() {
             setElementValue('smtp-password', settings.smtp_password);
             setElementValue('smtp-ssl', settings.smtp_ssl || false);
 
-            // Security settings
+            // Security settings - Load from settings table
             const inactivityTimeout = settings.inactivity_timeout || 30;
+            console.log('🔐 Loading inactivity_timeout from settings table:', inactivityTimeout);
+            console.log('📋 All settings:', settings);
             setElementValue('inactivity-timeout', inactivityTimeout);
+
+            // Update status message
+            const statusEl = document.getElementById('timeout-status');
+            if (statusEl) {
+                if (inactivityTimeout === 0) {
+                    statusEl.innerHTML = '<span class="text-muted">⚠ Auto-logout is DISABLED</span>';
+                } else {
+                    statusEl.innerHTML = `<span class="text-info">📌 Current value from settings table: ${inactivityTimeout} minutes</span>`;
+                }
+            }
 
             // Note: Inactivity monitor is initialized on page load (dashboard.php)
             // Only re-initialize when user saves new setting (see saveSecuritySettings)
