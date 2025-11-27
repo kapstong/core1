@@ -406,6 +406,28 @@ async function loadSettingsPage() {
                         </form>
                     </div>
                 </div>
+
+                <div class="card mt-4" style="background: var(--bg-card); border: 1px solid var(--border-color);">
+                    <div class="card-header" style="background: var(--bg-tertiary); border-color: var(--border-color);">
+                        <h5 class="mb-0"><i class="fas fa-shield-alt me-2"></i>Security Settings</h5>
+                    </div>
+                    <div class="card-body">
+                        <form id="securityForm">
+                            <div class="mb-3">
+                                <label class="form-label">Inactivity Timeout (minutes)</label>
+                                <input type="number" class="form-control" id="inactivity-timeout" min="0" max="1440" value="30">
+                                <div class="form-text">
+                                    Auto-logout after this many minutes of inactivity. Set to 0 to disable.
+                                    <div id="timeout-status" class="mt-2"></div>
+                                </div>
+                            </div>
+                            <div id="security-message"></div>
+                            <button type="submit" class="btn btn-primary">
+                                <i class="fas fa-save me-2"></i>Save Security Settings
+                            </button>
+                        </form>
+                    </div>
+                </div>
             </div>
 
             <div class="col-lg-4">
@@ -491,6 +513,12 @@ async function loadSettingsPage() {
         e.preventDefault();
         await saveEmailSettings();
     });
+
+    // Security form handler
+    document.getElementById('securityForm').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        await saveSecuritySettings();
+    });
 }
 
 async function loadSettingsData() {
@@ -535,6 +563,15 @@ async function loadSettingsData() {
             setElementValue('smtp-username', settings.smtp_username);
             setElementValue('smtp-password', settings.smtp_password);
             setElementValue('smtp-ssl', settings.smtp_ssl || false);
+
+            // Security settings
+            const inactivityTimeout = settings.inactivity_timeout || 30;
+            setElementValue('inactivity-timeout', inactivityTimeout);
+
+            // Initialize inactivity monitor with the loaded timeout
+            if (typeof initializeInactivityMonitor === 'function') {
+                initializeInactivityMonitor(parseInt(inactivityTimeout));
+            }
 
             // Maintenance mode settings
             const maintenanceEnabled = settings.maintenance_mode === 'true' || settings.maintenance_mode === true;
@@ -678,6 +715,53 @@ async function saveEmailSettings() {
         }
     } catch (error) {
         showError('Failed to save email settings');
+    }
+}
+
+async function saveSecuritySettings() {
+    const inactivityTimeoutEl = document.getElementById('inactivity-timeout');
+
+    if (!inactivityTimeoutEl) {
+        showError('Could not find security settings form elements');
+        return;
+    }
+
+    const timeoutValue = parseInt(inactivityTimeoutEl.value) || 0;
+
+    const formData = {
+        inactivity_timeout: timeoutValue.toString()
+    };
+
+    try {
+        const response = await fetch(`${API_BASE}/settings/index.php`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(formData)
+        });
+
+        const result = await response.json();
+        if (result.success) {
+            showSuccess('Security settings saved successfully');
+
+            // Reinitialize inactivity monitor with new timeout
+            if (typeof initializeInactivityMonitor === 'function') {
+                initializeInactivityMonitor(timeoutValue);
+            }
+
+            // Update status message
+            const statusEl = document.getElementById('timeout-status');
+            if (statusEl) {
+                if (timeoutValue === 0) {
+                    statusEl.innerHTML = '<span class="text-muted">⚠ Inactivity timeout is disabled</span>';
+                } else {
+                    statusEl.innerHTML = `<span class="text-success">✓ Auto-logout after ${timeoutValue} minutes of inactivity</span>`;
+                }
+            }
+        } else {
+            showError(result.message || 'Failed to save security settings');
+        }
+    } catch (error) {
+        showError('Failed to save security settings');
     }
 }
 

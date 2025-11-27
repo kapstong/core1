@@ -668,6 +668,9 @@
         }
     </script>
 
+    <!-- Inactivity Monitor -->
+    <script src="assets/js/inactivity-monitor.js?v=1.0"></script>
+
     <!-- Include all page loaders -->
     <script src="assets/js/dashboard-pages.js?v=1.1"></script>
 

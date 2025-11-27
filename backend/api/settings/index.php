@@ -383,6 +383,9 @@ function initializeDefaultSettings($db) {
         ['key' => 'currency_symbol', 'value' => '₱', 'description' => 'Currency symbol', 'category' => 'payment'],
         ['key' => 'paypal_enabled', 'value' => 'false', 'description' => 'Enable PayPal payments', 'category' => 'payment'],
         ['key' => 'stripe_enabled', 'value' => 'false', 'description' => 'Enable Stripe payments', 'category' => 'payment'],
+
+        // Security settings
+        ['key' => 'inactivity_timeout', 'value' => '30', 'description' => 'Auto-logout after inactivity (minutes, 0 = disabled)', 'category' => 'security'],
     ];
 
     foreach ($defaultSettings as $setting) {
@@ -539,6 +542,7 @@ function createDefaultSettingsFile($filePath) {
         'enable_2fa' => 'false',
         'session_timeout' => 'false',
         'password_policy' => 'basic',
+        'inactivity_timeout' => '30', // Minutes before auto-logout due to inactivity
 
         // Email settings
         'email_from' => 'noreply@pcparts.com'
@@ -567,7 +571,7 @@ function getSettingCategory($key) {
         'store' => ['store_name', 'store_email', 'store_phone', 'store_address'],
         'tax' => ['tax_rate'],
         'shop' => ['shop_enabled', 'guest_checkout', 'free_shipping_threshold', 'default_shipping_cost'],
-        'security' => ['enable_2fa', 'session_timeout', 'password_policy'],
+        'security' => ['enable_2fa', 'session_timeout', 'password_policy', 'inactivity_timeout'],
         'email' => ['email_from']
     ];
 
