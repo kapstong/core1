@@ -568,10 +568,8 @@ async function loadSettingsData() {
             const inactivityTimeout = settings.inactivity_timeout || 30;
             setElementValue('inactivity-timeout', inactivityTimeout);
 
-            // Initialize inactivity monitor with the loaded timeout
-            if (typeof initializeInactivityMonitor === 'function') {
-                initializeInactivityMonitor(parseInt(inactivityTimeout));
-            }
+            // Note: Inactivity monitor is initialized on page load (dashboard.php)
+            // Only re-initialize when user saves new setting (see saveSecuritySettings)
 
             // Maintenance mode settings
             const maintenanceEnabled = settings.maintenance_mode === 'true' || settings.maintenance_mode === true;
