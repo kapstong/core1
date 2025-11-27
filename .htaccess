@@ -14,8 +14,8 @@ Options -Indexes
     Header always set Referrer-Policy "strict-origin-when-cross-origin"
 </IfModule>
 
-# Redirect root to public/index.php
-RewriteRule ^$ public/index.php [L]
+# Redirect root to public/index.php (commented out to allow landing page)
+# RewriteRule ^$ public/index.php [L]
 
 # Allow direct access to public/assets/
 RewriteRule ^public/assets/(.*)$ public/assets/$1 [L]
