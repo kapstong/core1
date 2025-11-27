@@ -983,7 +983,17 @@ if (!isset($_SESSION['customer_id'])) {
         // Initialize
         document.addEventListener('DOMContentLoaded', function() {
             loadCheckoutData();
+            initializePaymentSelection(); // Initialize payment method selection
         });
+
+        // Initialize payment method selection (for pre-checked default)
+        function initializePaymentSelection() {
+            document.querySelectorAll('.payment-radio').forEach(radio => {
+                if (radio.checked) {
+                    radio.parentElement.classList.add('selected');
+                }
+            });
+        }
     </script>
 </body>
 </html>
