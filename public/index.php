@@ -375,6 +375,9 @@ if (MaintenanceMode::handle()) {
         const BASE_PATH = IS_DEVELOPMENT ? '/core1' : '';
         const API_BASE = BASE_PATH + '/backend/api';
 
+        // Expose BASE_PATH globally for other scripts
+        window.BASE_PATH = BASE_PATH;
+
         // Authentication check
         let isAuthenticated = false;
 
