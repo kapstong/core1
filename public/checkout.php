@@ -56,6 +56,37 @@ if (!isset($_SESSION['customer_id'])) {
             min-height: 100vh;
         }
 
+        .navbar {
+            background: rgba(30, 41, 59, 0.95);
+            backdrop-filter: blur(20px);
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .navbar-brand {
+            font-weight: 800;
+            background: linear-gradient(135deg, var(--primary), var(--accent));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .nav-link {
+            color: var(--text-primary) !important;
+            transition: all 0.3s ease;
+        }
+
+        .nav-link:hover {
+            color: var(--accent) !important;
+        }
+
+        .dropdown-item {
+            color: var(--text-primary);
+        }
+
+        .dropdown-item:hover {
+            background: rgba(0, 102, 255, 0.1);
+            color: var(--accent);
+        }
+
         .checkout-container {
             max-width: 1200px;
             margin: 0 auto;
@@ -419,6 +450,48 @@ if (!isset($_SESSION['customer_id'])) {
     </style>
 </head>
 <body>
+    <!-- Navigation -->
+    <nav class="navbar navbar-expand-lg sticky-top">
+        <div class="container-fluid">
+            <a class="navbar-brand" href="index.php">
+                <i class="fas fa-microchip me-2"></i>PC Parts Central
+            </a>
+
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav ms-auto">
+                    <li class="nav-item">
+                        <a class="nav-link" href="index.php">
+                            <i class="fas fa-store me-1"></i>Shop
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="cart.php">
+                            <i class="fas fa-shopping-cart me-1"></i>Cart
+                        </a>
+                    </li>
+                </ul>
+
+                <ul class="navbar-nav">
+                    <li class="nav-item dropdown">
+                        <a class="nav-link dropdown-toggle" href="#" data-bs-toggle="dropdown">
+                            <i class="fas fa-user me-1"></i><span id="customer-name">Loading...</span>
+                        </a>
+                        <ul class="dropdown-menu dropdown-menu-end" style="background: var(--bg-card); border: 1px solid var(--border-color);">
+                            <li><a class="dropdown-item" href="profile.php"><i class="fas fa-user me-2"></i>My Profile</a></li>
+                            <li><a class="dropdown-item" href="orders.php"><i class="fas fa-receipt me-2"></i>My Orders</a></li>
+                            <li><hr class="dropdown-divider" style="border-color: var(--border-color);"></li>
+                            <li><a class="dropdown-item text-danger" href="#" onclick="logout()"><i class="fas fa-sign-out-alt me-2"></i>Logout</a></li>
+                        </ul>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </nav>
+
     <!-- Loading State -->
     <div id="loading" class="loading" style="display: none;">
         <div class="spinner"></div>
@@ -441,7 +514,7 @@ if (!isset($_SESSION['customer_id'])) {
                         <i class="fas fa-shopping-bag me-2"></i>Continue Shopping
                     </button>
                     <p style="color: var(--text-secondary); font-size: 0.9rem;">
-                        <a href="#" onclick="window.location.href='profile.php'" style="color: var(--accent);">View your orders</a> to track this purchase.
+                        <a href="#" onclick="window.location.href='orders.php'" style="color: var(--accent);">View your orders</a> to track this purchase.
                     </p>
                 </div>
             </div>
@@ -982,10 +1055,34 @@ if (!isset($_SESSION['customer_id'])) {
             return isValid;
         }
 
+        // Load customer name
+        async function loadCustomerName() {
+            try {
+                const response = await fetch(`${API_BASE}/auth/session.php`);
+                const data = await response.json();
+
+                if (data.success && data.data) {
+                    document.getElementById('customer-name').textContent = data.data.first_name || 'Account';
+                }
+            } catch (error) {
+                console.error('Error loading customer name:', error);
+            }
+        }
+
+        // Logout
+        function logout() {
+            if (confirm('Are you sure you want to logout?')) {
+                fetch(`${API_BASE}/auth/logout.php`, { method: 'POST' })
+                    .then(() => window.location.href = 'login.php')
+                    .catch(() => window.location.href = 'login.php');
+            }
+        }
+
         // Initialize
         document.addEventListener('DOMContentLoaded', function() {
             loadCheckoutData();
             initializePaymentSelection(); // Initialize payment method selection
+            loadCustomerName(); // Load customer name in navbar
         });
 
         // Initialize payment method selection (for pre-checked default)
