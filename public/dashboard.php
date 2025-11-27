@@ -688,11 +688,16 @@
                 const response = await fetch(`${API_BASE}/settings/index.php`);
                 const data = await response.json();
 
-                console.log('📦 Settings response:', data);
+                console.log('📦 Settings API FULL response:', JSON.stringify(data, null, 2));
+                console.log('🔍 data.success =', data.success);
+                console.log('🔍 data.settings =', data.settings);
+                console.log('🔍 data.data =', data.data);
 
-                if (data.success && data.settings) {
+                if (data.success && data.settings && Array.isArray(data.settings)) {
+                    console.log('📋 Settings array length:', data.settings.length);
                     // Find inactivity_timeout setting
                     const setting = data.settings.find(s => s.setting_key === 'inactivity_timeout');
+                    console.log('🔍 Found inactivity_timeout setting:', setting);
                     const timeoutMinutes = parseInt(setting?.setting_value) || 30;
                     console.log('✓ Using saved setting:', timeoutMinutes, 'minutes');
 
@@ -701,7 +706,13 @@
                         initializeInactivityMonitor(timeoutMinutes);
                     }
                 } else {
-                    console.warn('⚠️ No setting found, using default 30 minutes');
+                    console.warn('⚠️ No settings array found. Response structure:', {
+                        success: data.success,
+                        hasSettings: !!data.settings,
+                        isArray: Array.isArray(data.settings),
+                        keys: Object.keys(data)
+                    });
+                    console.warn('⚠️ Using default 30 minutes');
                     if (typeof initializeInactivityMonitor === 'function') {
                         initializeInactivityMonitor(30);
                     }
