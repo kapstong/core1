@@ -374,9 +374,9 @@ if (!isset($_SESSION['customer_id'])) {
                 document.getElementById('loading').style.display = 'none';
                 document.getElementById('orders-content').style.display = 'block';
 
-                if (data.success && data.data && data.data.length > 0) {
-                    console.log('Rendering', data.data.length, 'orders');
-                    renderOrders(data.data);
+                if (data.success && data.data && data.data.orders && data.data.orders.length > 0) {
+                    console.log('Rendering', data.data.orders.length, 'orders');
+                    renderOrders(data.data.orders);
                 } else {
                     console.log('No orders found or error:', data);
                     renderEmptyState();
@@ -407,7 +407,7 @@ if (!isset($_SESSION['customer_id'])) {
                                 <div class="order-number">${order.order_number}</div>
                                 <div class="order-date">
                                     <i class="far fa-calendar me-1"></i>
-                                    ${new Date(order.created_at).toLocaleDateString('en-US', {
+                                    ${new Date(order.order_date).toLocaleDateString('en-US', {
                                         year: 'numeric',
                                         month: 'long',
                                         day: 'numeric'

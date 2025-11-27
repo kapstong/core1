@@ -122,12 +122,12 @@ function getCustomerOrders($customerId) {
     }
 
     if (!empty($dateFrom)) {
-        $whereConditions[] = "DATE(co.created_at) >= ?";
+        $whereConditions[] = "DATE(co.order_date) >= ?";
         $params[] = $dateFrom;
     }
 
     if (!empty($dateTo)) {
-        $whereConditions[] = "DATE(co.created_at) <= ?";
+        $whereConditions[] = "DATE(co.order_date) <= ?";
         $params[] = $dateTo;
     }
 
@@ -139,7 +139,7 @@ function getCustomerOrders($customerId) {
             co.id,
             co.order_number,
             co.status,
-            co.created_at,
+            co.order_date,
             co.subtotal,
             co.tax_amount,
             co.shipping_amount,
@@ -149,7 +149,7 @@ function getCustomerOrders($customerId) {
             co.shipping_method
         FROM customer_orders co
         WHERE {$whereClause}
-        ORDER BY co.created_at DESC
+        ORDER BY co.order_date DESC
         LIMIT ? OFFSET ?
     ");
 
