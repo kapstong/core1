@@ -112,12 +112,15 @@ $manuals = [
                 'icon' => 'fas fa-shopping-cart',
                 'content' => 'Monitor and manage customer orders:
                     <ul>
-                        <li><strong>Order Processing:</strong> View and process incoming orders</li>
-                        <li><strong>Order Status:</strong> Update order status (Processing → Shipped → Delivered)</li>
-                        <li><strong>POS Access:</strong> Use Point of Sale for in-store transactions</li>
-                        <li><strong>Refunds:</strong> Process returns and refunds</li>
+                        <li><strong>Online Orders:</strong> View and process customer e-commerce orders</li>
+                        <li><strong>Order Status:</strong> Update order status (Pending → Processing → Shipped → Delivered)</li>
+                        <li><strong>POS Transactions:</strong> Use Point of Sale for in-store sales</li>
+                        <li><strong>Sales History:</strong> View all sales transactions with filters</li>
+                        <li><strong>Returns & Refunds:</strong> Process customer return requests and issue refunds</li>
+                        <li><strong>Export Data:</strong> Export sales data to CSV for analysis</li>
                     </ul>
-                    <strong>Data Flow:</strong> Customer Order → Payment → Inventory Deduction → Order Fulfillment → Shipping → Delivery'
+                    <strong>Data Flow:</strong> Customer Order → Payment → Inventory Deduction → Order Fulfillment → Shipping → Delivery
+                    <br><strong>Return Flow:</strong> Customer Requests Return → Admin Reviews → Approve/Reject → Process Refund → Update Inventory'
             ],
             [
                 'title' => 'Reports & Analytics',
@@ -135,12 +138,17 @@ $manuals = [
                 'icon' => 'fas fa-cog',
                 'content' => 'Configure system-wide settings:
                     <ul>
-                        <li><strong>Company Info:</strong> Business name, logo, contact details</li>
-                        <li><strong>Tax Settings:</strong> Configure tax rates and calculations</li>
-                        <li><strong>Email Templates:</strong> Customize notification emails</li>
-                        <li><strong>Security:</strong> Session timeout, password policies, 2FA</li>
-                        <li><strong>Backup & Restore:</strong> Database backup management</li>
-                    </ul>'
+                        <li><strong>System Info:</strong> System name, version, timezone</li>
+                        <li><strong>Tax Settings:</strong> Tax rate, tax inclusive/exclusive calculation</li>
+                        <li><strong>Currency:</strong> Set currency and symbol</li>
+                        <li><strong>Email Settings:</strong> SMTP host, port, credentials for sending emails</li>
+                        <li><strong>Payment Settings:</strong> Enable/disable PayPal and Stripe (simulation mode)</li>
+                        <li><strong>Shop Settings:</strong> Enable/disable shop, guest checkout, free shipping threshold</li>
+                        <li><strong>Security:</strong> Inactivity timeout (auto-logout), 2FA available for users</li>
+                        <li><strong>Maintenance Mode:</strong> Enable/disable site access with custom message</li>
+                        <li><strong>Cache:</strong> Clear system cache, reset settings to defaults</li>
+                    </ul>
+                    <strong>Note:</strong> Payment gateways (PayPal/Stripe) are in simulation mode. Full integration requires API credentials.'
             ],
             [
                 'title' => 'Audit Logs',
@@ -176,10 +184,11 @@ $manuals = [
                 'icon' => 'fas fa-box',
                 'content' => 'Manage product catalog:
                     <ul>
-                        <li><strong>Add Products:</strong> Create new products with SKU, barcode, pricing</li>
+                        <li><strong>Add Products:</strong> Create new products with SKU, pricing, descriptions</li>
                         <li><strong>Edit Products:</strong> Update details, images, descriptions</li>
-                        <li><strong>Product Variants:</strong> Manage sizes, colors, options</li>
-                        <li><strong>Pricing:</strong> Set cost price, selling price, discount rates</li>
+                        <li><strong>Upload Images:</strong> Add product photos for online shop</li>
+                        <li><strong>Pricing:</strong> Set cost price, selling price</li>
+                        <li><strong>Product Status:</strong> Enable/disable products for sale</li>
                     </ul>
                     <strong>Data Flow:</strong> Product Creation → Category Assignment → Initial Stock Entry → Available for Sale'
             ],
@@ -391,14 +400,15 @@ $manuals = [
                 'icon' => 'fas fa-cash-register',
                 'content' => 'Process in-store transactions:
                     <ul>
-                        <li><strong>Product Search:</strong> Find products by name, SKU, or barcode</li>
+                        <li><strong>Product Search:</strong> Find products by name, SKU</li>
                         <li><strong>Add to Cart:</strong> Build transaction with multiple items</li>
                         <li><strong>Quantities:</strong> Adjust item quantities</li>
-                        <li><strong>Payment:</strong> Accept cash or card payments</li>
-                        <li><strong>Receipt:</strong> Print or email customer receipts</li>
-                        <li><strong>Returns:</strong> Process returns and refunds</li>
+                        <li><strong>Payment Methods:</strong> Cash, Credit Card, Bank Transfer, or COD</li>
+                        <li><strong>Complete Sale:</strong> Finalize transaction and update inventory</li>
+                        <li><strong>Transaction History:</strong> View POS sales history</li>
                     </ul>
-                    <strong>Data Flow:</strong> Scan/Search Product → Add to Cart → Review Total → Process Payment → Update Inventory → Generate Receipt'
+                    <strong>Data Flow:</strong> Search Product → Add to Cart → Review Total → Select Payment Method → Complete Sale → Update Inventory
+                    <br><strong>Note:</strong> For returns/refunds, use the Sales History section to process refunds.'
             ],
             [
                 'title' => 'Product Catalog (View Only)',
@@ -446,24 +456,25 @@ $manuals = [
                 'icon' => 'fas fa-file-invoice',
                 'content' => 'View and manage your purchase orders:
                     <ul>
-                        <li><strong>View POs:</strong> See all purchase orders sent to you</li>
-                        <li><strong>PO Details:</strong> Review items, quantities, delivery dates</li>
-                        <li><strong>Confirm Orders:</strong> Acknowledge receipt of PO</li>
-                        <li><strong>Download PO:</strong> Export PO details as PDF</li>
+                        <li><strong>View POs:</strong> See all purchase orders sent to you (Pending, Approved, Rejected)</li>
+                        <li><strong>PO Details:</strong> Review items, quantities, delivery dates, pricing</li>
+                        <li><strong>Approve Orders:</strong> Accept purchase orders you can fulfill</li>
+                        <li><strong>Reject Orders:</strong> Decline orders with reason if unable to fulfill</li>
+                        <li><strong>Filter Orders:</strong> View orders by status (Pending, Approved, etc.)</li>
+                        <li><strong>Order History:</strong> Track all historical purchase orders</li>
                     </ul>
-                    <strong>PO Flow:</strong> Receive PO → Review → Confirm → Prepare Items → Ship → Update Tracking'
+                    <strong>PO Flow:</strong> Receive PO Notification → Review PO Details → Approve/Reject → Prepare Items (if approved) → Ship to Customer'
             ],
             [
-                'title' => 'Shipment Management',
-                'icon' => 'fas fa-shipping-fast',
-                'content' => 'Track and update shipments:
+                'title' => 'Notifications',
+                'icon' => 'fas fa-bell',
+                'content' => 'Stay informed with real-time notifications:
                     <ul>
-                        <li><strong>Create Shipment:</strong> Register outgoing shipments</li>
-                        <li><strong>Tracking Info:</strong> Add carrier and tracking number</li>
-                        <li><strong>Update Status:</strong> Mark as shipped, in transit, delivered</li>
-                        <li><strong>Shipping Documents:</strong> Upload packing lists, invoices</li>
-                    </ul>
-                    <strong>Data Flow:</strong> Pack Order → Create Shipment → Add Tracking → Notify Customer → Delivery → GRN Created'
+                        <li><strong>New PO Alerts:</strong> Get notified when new purchase orders are sent</li>
+                        <li><strong>Notification Bell:</strong> View unread notification count in header</li>
+                        <li><strong>Mark as Read:</strong> Clear notifications after reviewing</li>
+                        <li><strong>Email Notifications:</strong> Receive email alerts for important updates</li>
+                    </ul>'
             ],
             [
                 'title' => 'Product Catalog',
@@ -473,16 +484,6 @@ $manuals = [
                         <li><strong>Your Products:</strong> See products linked to your account</li>
                         <li><strong>Pricing:</strong> View agreed pricing</li>
                         <li><strong>Stock Info:</strong> Current customer inventory levels</li>
-                    </ul>'
-            ],
-            [
-                'title' => 'Communications',
-                'icon' => 'fas fa-comments',
-                'content' => 'Stay connected with the purchasing team:
-                    <ul>
-                        <li><strong>Messages:</strong> Receive and send messages</li>
-                        <li><strong>PO Questions:</strong> Ask about order details</li>
-                        <li><strong>Notifications:</strong> Email alerts for new POs</li>
                     </ul>'
             ],
             [
