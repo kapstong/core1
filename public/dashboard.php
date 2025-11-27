@@ -487,6 +487,11 @@
         const API_BASE = BASE_PATH + '/backend/api';
         const ASSETS_BASE = BASE_PATH + '/public/assets';
 
+        // Expose BASE_PATH globally for dashboard-pages.js
+        window.BASE_PATH = BASE_PATH;
+        window.API_BASE = API_BASE;
+        window.ASSETS_BASE = ASSETS_BASE;
+
         // Development-only console logging
         function devLog(message, data = null) {
             if (IS_DEVELOPMENT) {
