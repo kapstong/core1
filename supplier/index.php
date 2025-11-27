@@ -814,8 +814,9 @@
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 
     <script>
-        const API_BASE = '../backend/api';
         const IS_DEVELOPMENT = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+        const BASE_PATH = window.location.pathname.includes('/core1/') ? '/core1' : '';
+        const API_BASE = BASE_PATH + '/backend/api';
 
         // Silent logging for production
         function devLog(message, data = null) {

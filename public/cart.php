@@ -526,7 +526,8 @@ if (MaintenanceMode::handle()) {
     <!-- Cart JS -->
     <script>
         const IS_DEVELOPMENT = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
-        const API_BASE = '/backend/api';
+        const BASE_PATH = window.location.pathname.includes('/core1/') ? '/core1' : '';
+        const API_BASE = BASE_PATH + '/backend/api';
 
         // Show alert function
         function showAlert(message, type = 'info') {

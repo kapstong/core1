@@ -364,7 +364,8 @@ if (MaintenanceMode::handle()) {
         }
 
         // Determine API base path based on environment
-        const API_BASE = '/backend/api';
+        const BASE_PATH = window.location.pathname.includes('/core1/') ? '/core1' : '';
+        const API_BASE = BASE_PATH + '/backend/api';
 
         // Authentication check
         let isAuthenticated = false;

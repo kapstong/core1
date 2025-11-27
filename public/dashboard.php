@@ -481,10 +481,10 @@
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script>
         const IS_DEVELOPMENT = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
-        const API_BASE = IS_DEVELOPMENT ? '/backend/api' : '/backend/api';
 
         // Auto-detect base path from current URL
         const BASE_PATH = window.location.pathname.includes('/core1/') ? '/core1' : '';
+        const API_BASE = BASE_PATH + '/backend/api';
         const ASSETS_BASE = BASE_PATH + '/public/assets';
 
         // Development-only console logging
