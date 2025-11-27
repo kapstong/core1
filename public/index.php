@@ -222,6 +222,7 @@ if (MaintenanceMode::handle()) {
                         </a>
                         <ul class="dropdown-menu dropdown-menu-end" style="background: var(--bg-card); border: 1px solid var(--border-color);">
                             <li><a class="dropdown-item" href="profile.php"><i class="fas fa-user me-2"></i>My Profile</a></li>
+                            <li><a class="dropdown-item" href="orders.php"><i class="fas fa-receipt me-2"></i>My Orders</a></li>
                             <li id="pos-menu-item" style="display: none;"><hr class="dropdown-divider" style="border-color: var(--border-color);"></li>
                             <li id="pos-menu-link" style="display: none;"><a class="dropdown-item" href="pos.php"><i class="fas fa-cash-register me-2"></i>Point of Sale</a></li>
                             <li><hr class="dropdown-divider" style="border-color: var(--border-color);"></li>
