@@ -56,19 +56,6 @@ if (!isset($_SESSION['customer_id'])) {
             min-height: 100vh;
         }
 
-        .navbar {
-            background: rgba(30, 41, 59, 0.95);
-            backdrop-filter: blur(20px);
-            border-bottom: 1px solid var(--border-color);
-        }
-
-        .navbar-brand {
-            font-weight: 800;
-            background: linear-gradient(135deg, var(--primary), var(--accent));
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-        }
-
         .nav-link {
             color: var(--text-primary) !important;
             transition: all 0.3s ease;
@@ -95,9 +82,7 @@ if (!isset($_SESSION['customer_id'])) {
         }
 
         .orders-container {
-            max-width: 1200px;
-            margin: 0 auto;
-            padding: 0 2rem 4rem;
+            padding: 0 0 4rem;
         }
 
         .order-card {
@@ -294,10 +279,11 @@ if (!isset($_SESSION['customer_id'])) {
 </head>
 <body>
     <!-- Navigation -->
-    <nav class="navbar navbar-expand-lg sticky-top">
-        <div class="container-fluid">
-            <a class="navbar-brand" href="index.php">
-                <i class="fas fa-microchip me-2"></i>PC Parts Central
+    <nav class="navbar navbar-expand-lg navbar-dark sticky-top" style="background: var(--bg-secondary); border-bottom: 1px solid var(--border-color);">
+        <div class="container">
+            <a class="navbar-brand d-flex align-items-center" href="index.php">
+                <img src="ppc.png" alt="PC Parts Central Logo" style="height: 32px; width: auto; margin-right: 8px;">
+                <span style="font-weight: 700;">PC Parts Central</span>
             </a>
 
             <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
@@ -305,7 +291,7 @@ if (!isset($_SESSION['customer_id'])) {
             </button>
 
             <div class="collapse navbar-collapse" id="navbarNav">
-                <ul class="navbar-nav ms-auto">
+                <ul class="navbar-nav me-auto">
                     <li class="nav-item">
                         <a class="nav-link" href="index.php">
                             <i class="fas fa-store me-1"></i>Shop
@@ -348,7 +334,7 @@ if (!isset($_SESSION['customer_id'])) {
     </div>
 
     <!-- Orders Container -->
-    <div class="orders-container">
+    <div class="container orders-container">
         <div id="loading" class="loading">
             <div class="spinner"></div>
             <p style="color: var(--text-secondary);">Loading your orders...</p>
@@ -383,16 +369,22 @@ if (!isset($_SESSION['customer_id'])) {
                 const response = await fetch(`${API_BASE}/shop/orders.php?action=list`);
                 const data = await response.json();
 
+                console.log('Orders API response:', data);
+
                 document.getElementById('loading').style.display = 'none';
                 document.getElementById('orders-content').style.display = 'block';
 
                 if (data.success && data.data && data.data.length > 0) {
+                    console.log('Rendering', data.data.length, 'orders');
                     renderOrders(data.data);
                 } else {
+                    console.log('No orders found or error:', data);
                     renderEmptyState();
                 }
             } catch (error) {
                 console.error('Error loading orders:', error);
+                document.getElementById('loading').style.display = 'none';
+                document.getElementById('orders-content').style.display = 'block';
                 document.getElementById('orders-content').innerHTML = `
                     <div class="alert alert-danger">
                         <i class="fas fa-exclamation-circle me-2"></i>
