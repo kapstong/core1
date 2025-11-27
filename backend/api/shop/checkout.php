@@ -33,7 +33,15 @@ $sessionId = $_SESSION['guest_session_id'] ?? null;
 $method = $_SERVER['REQUEST_METHOD'];
 
 if ($method === 'POST') {
-    processCheckout($customerModel, $customerId, $sessionId);
+    try {
+        processCheckout($customerModel, $customerId, $sessionId);
+    } catch (Exception $e) {
+        error_log('Checkout API fatal error: ' . $e->getMessage());
+        Response::error('Internal server error occurred while processing checkout', 500);
+    } catch (Throwable $t) {
+        error_log('Checkout API fatal error: ' . $t->getMessage());
+        Response::error('Internal server error occurred while processing checkout', 500);
+    }
 } else {
     Response::error('Method not allowed', 405);
 }
