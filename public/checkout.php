@@ -891,15 +891,17 @@ if (!isset($_SESSION['customer_id'])) {
         // Collect form data
         function collectFormData() {
             const sameAsBilling = document.getElementById('same_as_billing').checked;
-            const paymentMethod = document.querySelector('input[name="payment_method"]:checked').value;
+            const paymentMethodValue = document.querySelector('input[name="payment_method"]:checked').value;
+            // Convert frontend value to backend expected value
+            const paymentMethod = paymentMethodValue === 'cash' ? 'cash_on_delivery' : paymentMethodValue === 'card' ? 'credit_card' : paymentMethodValue;
 
             let billingAddress = {
                 first_name: document.getElementById('billing_first_name').value,
                 last_name: document.getElementById('billing_last_name').value,
                 email: document.getElementById('billing_email').value,
                 phone: document.getElementById('billing_phone').value,
-                address_1: document.getElementById('billing_address_1').value,
-                address_2: document.getElementById('billing_address_2').value,
+                address_line_1: document.getElementById('billing_address_1').value,
+                address_line_2: document.getElementById('billing_address_2').value,
                 city: document.getElementById('billing_city').value,
                 province: document.getElementById('billing_province').value,
                 postal_code: document.getElementById('billing_postal').value,
@@ -911,8 +913,8 @@ if (!isset($_SESSION['customer_id'])) {
                 last_name: document.getElementById('billing_last_name').value,
                 email: document.getElementById('billing_email').value,
                 phone: document.getElementById('billing_phone').value,
-                address_1: document.getElementById('shipping_address_1').value,
-                address_2: document.getElementById('shipping_address_2').value,
+                address_line_1: document.getElementById('shipping_address_1').value,
+                address_line_2: document.getElementById('shipping_address_2').value,
                 city: document.getElementById('shipping_city').value,
                 province: document.getElementById('shipping_province').value,
                 postal_code: document.getElementById('shipping_postal').value,
