@@ -21,7 +21,7 @@ try {
     // Step 1: Check if files exist
     $debug['step'] = 'Checking files';
     $configPath = __DIR__ . '/../../config/database.php';
-    $authPath = __DIR__ . '/../../middleware/auth.php';
+    $authPath = __DIR__ . '/../../middleware/Auth.php';
     $debug['config_exists'] = file_exists($configPath);
     $debug['auth_exists'] = file_exists($authPath);
 

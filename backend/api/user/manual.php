@@ -9,7 +9,7 @@ error_reporting(E_ALL);
 
 try {
     require_once __DIR__ . '/../../config/database.php';
-    require_once __DIR__ . '/../../middleware/auth.php';
+    require_once __DIR__ . '/../../middleware/Auth.php';
 
     // Clear any previous output
     ob_end_clean();
