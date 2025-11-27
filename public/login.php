@@ -1219,9 +1219,9 @@ if (isset($_SESSION['user_id']) && isset($_SESSION['user_role'])) {
                         </div>
                     `;
 
-                    // Redirect to shop or dashboard
+                    // Redirect to shop
                     setTimeout(() => {
-                        window.location.href = 'index.php';
+                        window.location.href = '/public/index.php';
                     }, 1000);
                 } else {
                     // Show error message
