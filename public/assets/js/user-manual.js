@@ -85,17 +85,25 @@ class UserManual {
             const response = await fetch(`${basePath}/backend/api/user/manual.php`, {
                 credentials: 'include' // Include cookies for session authentication
             });
+
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => ({ error: 'Server error' }));
+                console.error('Server error:', errorData);
+                this.showError(errorData.message || errorData.error || 'Server error occurred');
+                return;
+            }
+
             const result = await response.json();
 
             if (result.success && result.data) {
                 this.manualData = result.data;
                 this.renderManual();
             } else {
-                this.showError('Failed to load manual');
+                this.showError(result.error || result.message || 'Failed to load manual');
             }
         } catch (error) {
             console.error('Error loading manual:', error);
-            this.showError('Error loading manual. Please try again.');
+            this.showError(`Error: ${error.message}`);
         }
     }
 

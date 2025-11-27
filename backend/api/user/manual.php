@@ -2,27 +2,46 @@
 // Prevent any output before JSON
 ob_start();
 
-// Disable error display (errors should be logged, not displayed)
+// Enable error logging but disable display
 ini_set('display_errors', 0);
+ini_set('log_errors', 1);
 error_reporting(E_ALL);
 
-require_once __DIR__ . '/../../config/database.php';
-require_once __DIR__ . '/../../middleware/auth.php';
+try {
+    require_once __DIR__ . '/../../config/database.php';
+    require_once __DIR__ . '/../../middleware/auth.php';
 
-// Clear any previous output
-ob_end_clean();
+    // Clear any previous output
+    ob_end_clean();
 
-header('Content-Type: application/json');
+    header('Content-Type: application/json');
 
-// Check authentication
-$user = Auth::user();
-if (!$user) {
-    http_response_code(401);
-    echo json_encode(['error' => 'Unauthorized']);
+    // Start session if not already started
+    if (session_status() === PHP_SESSION_NONE) {
+        session_start();
+    }
+
+    // Check authentication
+    $user = Auth::user();
+    if (!$user) {
+        http_response_code(401);
+        echo json_encode(['success' => false, 'error' => 'Unauthorized']);
+        exit;
+    }
+
+    $role = $user['role'] ?? 'staff';
+} catch (Exception $e) {
+    // Clear output buffer and send error response
+    if (ob_get_length()) ob_end_clean();
+    header('Content-Type: application/json');
+    http_response_code(500);
+    echo json_encode([
+        'success' => false,
+        'error' => 'Server error occurred',
+        'message' => $e->getMessage()
+    ]);
     exit;
 }
-
-$role = $user['role'] ?? 'staff';
 
 // Manual content structure for each role
 $manuals = [
@@ -482,18 +501,27 @@ $manuals = [
 ];
 
 // Return the manual for the user's role
-if (isset($manuals[$role])) {
+try {
+    if (isset($manuals[$role])) {
+        echo json_encode([
+            'success' => true,
+            'data' => $manuals[$role]
+        ]);
+    } else {
+        echo json_encode([
+            'success' => true,
+            'data' => [
+                'title' => 'User Manual',
+                'welcome' => 'Welcome to the system.',
+                'sections' => []
+            ]
+        ]);
+    }
+} catch (Exception $e) {
+    http_response_code(500);
     echo json_encode([
-        'success' => true,
-        'data' => $manuals[$role]
-    ]);
-} else {
-    echo json_encode([
-        'success' => true,
-        'data' => [
-            'title' => 'User Manual',
-            'welcome' => 'Welcome to the system.',
-            'sections' => []
-        ]
+        'success' => false,
+        'error' => 'Error generating manual',
+        'message' => $e->getMessage()
     ]);
 }
