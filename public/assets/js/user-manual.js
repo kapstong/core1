@@ -82,7 +82,9 @@ class UserManual {
         try {
             // Use BASE_PATH if available (for local dev), otherwise use root path
             const basePath = typeof window.BASE_PATH !== 'undefined' ? window.BASE_PATH : '';
-            const response = await fetch(`${basePath}/backend/api/user/manual.php`);
+            const response = await fetch(`${basePath}/backend/api/user/manual.php`, {
+                credentials: 'include' // Include cookies for session authentication
+            });
             const result = await response.json();
 
             if (result.success && result.data) {

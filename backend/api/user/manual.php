@@ -1,6 +1,16 @@
 <?php
+// Prevent any output before JSON
+ob_start();
+
+// Disable error display (errors should be logged, not displayed)
+ini_set('display_errors', 0);
+error_reporting(E_ALL);
+
 require_once __DIR__ . '/../../config/database.php';
 require_once __DIR__ . '/../../middleware/auth.php';
+
+// Clear any previous output
+ob_end_clean();
 
 header('Content-Type: application/json');
 
