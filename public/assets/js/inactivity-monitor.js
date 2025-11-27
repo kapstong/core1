@@ -24,12 +24,27 @@ function formatCountdown(totalSeconds) {
     }
 }
 
-// Warning modal HTML
+// Warning modal HTML with blur backdrop
 const createWarningModal = () => {
     const modalHTML = `
+        <style>
+            #inactivityWarningModal.show {
+                display: block !important;
+            }
+            #inactivityWarningModal .modal-backdrop {
+                backdrop-filter: blur(8px);
+                -webkit-backdrop-filter: blur(8px);
+                background-color: rgba(0, 0, 0, 0.7) !important;
+            }
+            .modal-backdrop.show {
+                backdrop-filter: blur(8px);
+                -webkit-backdrop-filter: blur(8px);
+                background-color: rgba(0, 0, 0, 0.7) !important;
+            }
+        </style>
         <div class="modal fade" id="inactivityWarningModal" data-bs-backdrop="static" data-bs-keyboard="false" tabindex="-1">
             <div class="modal-dialog modal-dialog-centered">
-                <div class="modal-content" style="background: #1a1a1a; border: 2px solid #ffc107;">
+                <div class="modal-content" style="background: #1a1a1a; border: 2px solid #ffc107; box-shadow: 0 0 30px rgba(255, 193, 7, 0.3);">
                     <div class="modal-header" style="border-color: #333; background: #222;">
                         <h5 class="modal-title text-warning">
                             <i class="fas fa-clock me-2"></i>

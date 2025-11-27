@@ -726,6 +726,8 @@ async function saveSecuritySettings() {
 
     const timeoutValue = parseInt(inactivityTimeoutEl.value) || 0;
 
+    console.log('💾 Saving security settings:', { inactivity_timeout: timeoutValue });
+
     const formData = {
         inactivity_timeout: timeoutValue.toString()
     };
@@ -738,8 +740,11 @@ async function saveSecuritySettings() {
         });
 
         const result = await response.json();
+        console.log('💾 Save response:', result);
+
         if (result.success) {
             showSuccess('Security settings saved successfully');
+            console.log('✓ Setting saved to database, re-initializing monitor with', timeoutValue, 'minutes');
 
             // Reinitialize inactivity monitor with new timeout
             if (typeof initializeInactivityMonitor === 'function') {
@@ -756,9 +761,11 @@ async function saveSecuritySettings() {
                 }
             }
         } else {
+            console.error('❌ Save failed:', result.message);
             showError(result.message || 'Failed to save security settings');
         }
     } catch (error) {
+        console.error('❌ Save error:', error);
         showError('Failed to save security settings');
     }
 }
