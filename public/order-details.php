@@ -520,7 +520,8 @@ if (!$orderId) {
     <!-- Order Details JS -->
     <script>
         const IS_DEVELOPMENT = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
-        const BASE_PATH = window.location.pathname.includes('/core1/') ? '/core1' : '';
+        // Auto-detect base path: use /core1 for production, empty for local
+        const BASE_PATH = IS_DEVELOPMENT ? '' : '/core1';
         const API_BASE = BASE_PATH + '/backend/api';
         const customerId = <?php echo json_encode($customerId); ?>;
         const customerEmail = <?php echo json_encode($customerEmail); ?>;
