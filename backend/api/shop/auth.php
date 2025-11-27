@@ -170,7 +170,6 @@ function registerCustomer($data, $customerModel) {
     // Send verification email
     try {
         require_once __DIR__ . '/../../utils/Email.php';
-        require_once __DIR__ . '/../config/env.php';
         $email = new Email();
 
         // Build verification URL pointing to public page
@@ -357,7 +356,6 @@ function forgotPassword($data, $customerModel) {
 
             // Send reset email
             require_once __DIR__ . '/../../utils/Email.php';
-            require_once __DIR__ . '/../config/env.php';
             $emailService = new Email();
 
             // Use configured APP_URL instead of building dynamically

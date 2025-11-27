@@ -88,7 +88,6 @@ try {
     // Send reset email - ALWAYS show debug info for troubleshooting
     try {
         require_once __DIR__ . '/../../utils/Email.php';
-        require_once __DIR__ . '/../config/env.php';
         $emailService = new Email();
 
         // Debug: Get email settings
