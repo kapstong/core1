@@ -94,7 +94,7 @@ try {
             // APPROVE ORDER
             approveOrder($db, $orderId, $order, $orderItems, $currentUser);
             $message = 'Order approved successfully';
-            $newStatus = 'success';
+            $newStatus = 'completed';
         } else {
             // REJECT ORDER
             rejectOrder($db, $orderId, $order, $orderItems, $currentUser, $reason);
@@ -115,7 +115,7 @@ try {
             ];
 
             if ($action === 'approve') {
-                @$email->sendOrderStatusUpdate($order, $customerData, 'pending', 'success');
+                @$email->sendOrderStatusUpdate($order, $customerData, 'pending', 'completed');
             } else {
                 // Send rejection email
                 @sendRejectionEmail($email, $customerData, $order, $reason);
@@ -177,9 +177,9 @@ function getOrderItems($db, $orderId) {
  * Approve order - Reduce stock, update status to success, create sales entry
  */
 function approveOrder($db, $orderId, $order, $orderItems, $currentUser) {
-    // 1. Update order status to 'success'
+    // 1. Update order status to 'completed'
     $updateQuery = "UPDATE customer_orders
-                    SET status = 'success',
+                    SET status = 'completed',
                         updated_at = NOW()
                     WHERE id = :order_id";
 
