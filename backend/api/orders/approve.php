@@ -204,6 +204,13 @@ function approveOrder($db, $orderId, $order, $orderItems, $currentUser) {
         $invUpdateStmt->bindValue(':product_id', $productId, PDO::PARAM_INT);
         $invUpdateStmt->execute();
     }
+
+    // 3. Create sales entry for Sales History
+    try {
+        $saleId = createSalesEntry($db, $order, $orderItems, $currentUser);
+    } catch (Throwable $e) {
+        error_log('Failed to create sales entry (non-critical): ' . $e->getMessage());
+    }
 }
 
 /**
@@ -254,34 +261,48 @@ function rejectOrder($db, $orderId, $order, $orderItems, $currentUser, $reason) 
 }
 
 /**
- * Create sales entry for approved order
+ * Create sales entry for approved order - integrates with Sales History
  */
-function createSalesEntry($db, $orderId, $order, $orderItems, $currentUser) {
-    // Check if sales table exists and create entry
-    // This integrates approved online orders with the POS sales history
-
+function createSalesEntry($db, $order, $orderItems, $currentUser) {
+    // Insert into sales table
     $saleQuery = "INSERT INTO sales (
-                    sale_date, customer_id, total_amount,
-                    payment_method, payment_status, created_by, notes
+                    sale_date, customer_id, total_amount, tax_amount,
+                    payment_method, created_by
                  ) VALUES (
-                    NOW(), :customer_id, :total_amount,
-                    :payment_method, :payment_status, :created_by, :notes
+                    NOW(), :customer_id, :total_amount, :tax_amount,
+                    :payment_method, :created_by
                  )";
 
-    try {
-        $stmt = $db->prepare($saleQuery);
-        $stmt->bindValue(':customer_id', $order['customer_id'], PDO::PARAM_INT);
-        $stmt->bindValue(':total_amount', $order['total_amount']);
-        $stmt->bindValue(':payment_method', $order['payment_method'] ?? 'pending');
-        $stmt->bindValue(':payment_status', $order['payment_status'] ?? 'pending');
-        $stmt->bindValue(':created_by', $currentUser['id'], PDO::PARAM_INT);
-        $notes = 'Online Customer Order #' . $order['order_number'] . ' - Approved by ' . $currentUser['full_name'];
-        $stmt->bindValue(':notes', $notes);
-        $stmt->execute();
-    } catch (PDOException $e) {
-        // If sales table doesn't match schema or doesn't exist, skip (non-critical)
-        error_log('Failed to create sales entry: ' . $e->getMessage());
+    $stmt = $db->prepare($saleQuery);
+    $stmt->bindValue(':customer_id', $order['customer_id'], PDO::PARAM_INT);
+    $stmt->bindValue(':total_amount', $order['total_amount']);
+    $stmt->bindValue(':tax_amount', $order['tax_amount'] ?? 0);
+    $stmt->bindValue(':payment_method', $order['payment_method'] ?? 'cash');
+    $stmt->bindValue(':created_by', $currentUser['id'], PDO::PARAM_INT);
+    $stmt->execute();
+
+    $saleId = $db->lastInsertId();
+
+    // Insert sale items
+    $itemQuery = "INSERT INTO sale_items (
+                    sale_id, product_id, quantity, unit_price, total_price
+                 ) VALUES (
+                    :sale_id, :product_id, :quantity, :unit_price, :total_price
+                 )";
+
+    $itemStmt = $db->prepare($itemQuery);
+
+    foreach ($orderItems as $item) {
+        $itemStmt->bindValue(':sale_id', $saleId, PDO::PARAM_INT);
+        $itemStmt->bindValue(':product_id', $item['product_id'], PDO::PARAM_INT);
+        $itemStmt->bindValue(':quantity', $item['quantity'], PDO::PARAM_INT);
+        $itemStmt->bindValue(':unit_price', $item['unit_price']);
+        $totalPrice = $item['quantity'] * $item['unit_price'];
+        $itemStmt->bindValue(':total_price', $totalPrice);
+        $itemStmt->execute();
     }
+
+    return $saleId;
 }
 
 /**
