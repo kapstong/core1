@@ -34,8 +34,8 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
 }
 
 try {
-    // Require staff authentication
-    Auth::requireRole(['admin', 'inventory_manager', 'staff']);
+    // Require staff authentication (ONLY staff members can approve/reject orders)
+    Auth::requireRole(['staff']);
     $currentUser = Auth::user();
 
     // Get request data
