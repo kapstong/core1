@@ -751,7 +751,7 @@ if (!in_array($user['role'], $allowedRoles)) {
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 
     <!-- Pending Orders JavaScript -->
-    <script src="assets/js/pos-pending-orders.js"></script>
+    <script src="assets/js/pos-pending-orders.js?v=<?php echo time(); ?>"></script>
 
     <!-- POS JavaScript -->
     <script>
