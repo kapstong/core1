@@ -60,7 +60,7 @@ if (!in_array($user['role'], $allowedRoles)) {
             background: var(--bg-card);
             border: 1px solid var(--border-color);
             border-radius: 0.5rem;
-            height: calc(100vh - 300px);
+            height: calc(100vh - 200px);
             overflow: hidden;
         }
 
