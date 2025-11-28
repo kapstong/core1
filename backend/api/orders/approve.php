@@ -204,13 +204,14 @@ function approveOrder($db, $orderId, $order, $orderItems, $currentUser) {
 
         // Update inventory: reduce quantity_on_hand and quantity_reserved
         $updateInvQuery = "UPDATE inventory
-                          SET quantity_on_hand = quantity_on_hand - :quantity,
-                              quantity_reserved = GREATEST(0, quantity_reserved - :quantity)
+                          SET quantity_on_hand = quantity_on_hand - :quantity_hand,
+                              quantity_reserved = GREATEST(0, quantity_reserved - :quantity_reserved)
                           WHERE product_id = :product_id";
 
         try {
             $invUpdateStmt = $db->prepare($updateInvQuery);
-            $invUpdateStmt->bindValue(':quantity', $quantity, PDO::PARAM_INT);
+            $invUpdateStmt->bindValue(':quantity_hand', $quantity, PDO::PARAM_INT);
+            $invUpdateStmt->bindValue(':quantity_reserved', $quantity, PDO::PARAM_INT);
             $invUpdateStmt->bindValue(':product_id', $productId, PDO::PARAM_INT);
             $invUpdateResult = $invUpdateStmt->execute();
             error_log("Inventory update executed successfully. Result: " . (int)$invUpdateResult);
@@ -251,11 +252,11 @@ function rejectOrder($db, $orderId, $order, $orderItems, $currentUser, $reason) 
 
         // Release reservation: decrease quantity_reserved
         $updateInvQuery = "UPDATE inventory
-                          SET quantity_reserved = GREATEST(0, quantity_reserved - :quantity)
+                          SET quantity_reserved = GREATEST(0, quantity_reserved - :quantity_reserved)
                           WHERE product_id = :product_id";
 
         $invUpdateStmt = $db->prepare($updateInvQuery);
-        $invUpdateStmt->bindValue(':quantity', $quantity, PDO::PARAM_INT);
+        $invUpdateStmt->bindValue(':quantity_reserved', $quantity, PDO::PARAM_INT);
         $invUpdateStmt->bindValue(':product_id', $productId, PDO::PARAM_INT);
         $invUpdateStmt->execute();
     }
