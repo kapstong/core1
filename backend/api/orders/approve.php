@@ -115,12 +115,13 @@ try {
             ];
 
             if ($action === 'approve') {
-                @$email->sendOrderStatusUpdate($order, $customerData, 'pending', 'confirmed');
+                $email->sendOrderStatusUpdate($order, $customerData, 'pending', 'confirmed');
             } else {
                 // Send rejection email
-                @sendRejectionEmail($email, $customerData, $order, $reason);
+                sendRejectionEmail($email, $customerData, $order, $reason);
             }
-        } catch (Exception $e) {
+        } catch (Throwable $e) {
+            // Email sending is optional - log error but don't fail the request
             error_log('Failed to send email notification: ' . $e->getMessage());
         }
 
@@ -234,12 +235,20 @@ function approveOrder($db, $orderId, $order, $orderItems, $currentUser) {
         $movementStmt->execute();
     }
 
-    // 3. Create sales entry (integrate with Sales History)
-    createSalesEntry($db, $orderId, $order, $orderItems, $currentUser);
+    // 3. Create sales entry (integrate with Sales History) - Optional, skip if fails
+    try {
+        createSalesEntry($db, $orderId, $order, $orderItems, $currentUser);
+    } catch (Throwable $e) {
+        error_log('Failed to create sales entry (non-critical): ' . $e->getMessage());
+    }
 
-    // 4. Log activity
-    logActivity($db, $currentUser['id'], 'order_approved', 'customer_orders', $orderId,
-                "Order #{$order['order_number']} approved by {$currentUser['full_name']}");
+    // 4. Log activity - Optional, skip if fails
+    try {
+        logActivity($db, $currentUser['id'], 'order_approved', 'customer_orders', $orderId,
+                    "Order #{$order['order_number']} approved by {$currentUser['full_name']}");
+    } catch (Throwable $e) {
+        error_log('Failed to log activity (non-critical): ' . $e->getMessage());
+    }
 }
 
 /**
@@ -274,12 +283,16 @@ function rejectOrder($db, $orderId, $order, $orderItems, $currentUser, $reason) 
         $invUpdateStmt->execute();
     }
 
-    // 3. Log activity
-    $logMessage = "Order #{$order['order_number']} rejected by {$currentUser['full_name']}";
-    if ($reason) {
-        $logMessage .= " - Reason: $reason";
+    // 3. Log activity - Optional, skip if fails
+    try {
+        $logMessage = "Order #{$order['order_number']} rejected by {$currentUser['full_name']}";
+        if ($reason) {
+            $logMessage .= " - Reason: $reason";
+        }
+        logActivity($db, $currentUser['id'], 'order_rejected', 'customer_orders', $orderId, $logMessage);
+    } catch (Throwable $e) {
+        error_log('Failed to log activity (non-critical): ' . $e->getMessage());
     }
-    logActivity($db, $currentUser['id'], 'order_rejected', 'customer_orders', $orderId, $logMessage);
 }
 
 /**
