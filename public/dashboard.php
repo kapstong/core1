@@ -890,6 +890,7 @@
                     {
                         section: 'Sales',
                         items: [
+                            { icon: 'fa-cash-register', label: 'POS & Orders', page: 'pos' },
                             { icon: 'fa-receipt', label: 'Sales History', page: 'sales' }
                         ]
                     },
@@ -1270,6 +1271,10 @@
                     case 'home':
                         await loadHomePage();
                         break;
+                    case 'pos':
+                        // Redirect to POS page
+                        window.location.href = 'pos.php';
+                        return;
                     case 'products':
                         await loadProductsPage();
                         break;
