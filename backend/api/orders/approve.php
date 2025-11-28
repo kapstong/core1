@@ -235,20 +235,26 @@ function approveOrder($db, $orderId, $order, $orderItems, $currentUser) {
         $movementStmt->execute();
     }
 
-    // 3. Create sales entry (integrate with Sales History) - Optional, skip if fails
+    // 3. Create sales entry (integrate with Sales History) - DISABLED for now
+    // TODO: Re-enable once sales table schema is verified
+    /*
     try {
         createSalesEntry($db, $orderId, $order, $orderItems, $currentUser);
     } catch (Throwable $e) {
         error_log('Failed to create sales entry (non-critical): ' . $e->getMessage());
     }
+    */
 
-    // 4. Log activity - Optional, skip if fails
+    // 4. Log activity - DISABLED for now
+    // TODO: Re-enable once activity_logs table schema is verified
+    /*
     try {
         logActivity($db, $currentUser['id'], 'order_approved', 'customer_orders', $orderId,
                     "Order #{$order['order_number']} approved by {$currentUser['full_name']}");
     } catch (Throwable $e) {
         error_log('Failed to log activity (non-critical): ' . $e->getMessage());
     }
+    */
 }
 
 /**
@@ -283,7 +289,9 @@ function rejectOrder($db, $orderId, $order, $orderItems, $currentUser, $reason) 
         $invUpdateStmt->execute();
     }
 
-    // 3. Log activity - Optional, skip if fails
+    // 3. Log activity - DISABLED for now
+    // TODO: Re-enable once activity_logs table schema is verified
+    /*
     try {
         $logMessage = "Order #{$order['order_number']} rejected by {$currentUser['full_name']}";
         if ($reason) {
@@ -293,6 +301,7 @@ function rejectOrder($db, $orderId, $order, $orderItems, $currentUser, $reason) 
     } catch (Throwable $e) {
         error_log('Failed to log activity (non-critical): ' . $e->getMessage());
     }
+    */
 }
 
 /**
