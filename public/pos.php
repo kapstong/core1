@@ -902,72 +902,79 @@ if (!in_array($user['role'], $allowedRoles)) {
                 loading.classList.add('d-none');
 
                 if (data.success && data.data.products && data.data.products.length > 0) {
+                    const html = [];
                     if (currentView === 'grid') {
                         container.className = 'row g-2';
-                                container.innerHTML = data.data.products.map(p => `
-                            <div class="col-md-6 col-lg-4">
-                                <div class="card h-100 product-card" data-product="${btoa(JSON.stringify(p))}" onclick="addToCartFromCard(this)">
-                                    <div class="card-body p-2">
-                                        <div class="product-image-container mb-2">
-                                            ${p.image_url ?
-                                                `<img src="${p.image_url}" alt="${p.name}" class="product-image">` :
-                                                `<div class="product-image-fallback"><i class="fas fa-microchip fa-2x"></i></div>`
-                                            }
-                                        </div>
-                                        <h6 class="product-title mb-1" style="font-size: 0.9rem; line-height: 1.2;">${p.name}</h6>
-                                        <div class="d-flex justify-content-between align-items-center">
-                                            <small class="text-muted">${p.sku}</small>
-                                            <strong style="color: var(--accent); font-size: 0.9rem;">₱${parseFloat(p.selling_price).toLocaleString()}</strong>
-                                        </div>
-                                        <div class="mt-1">
-                                            <small class="${(p.quantity_available || 0) > 0 ? 'text-success' : 'text-danger'}">
-                                                <i class="fas fa-${(p.quantity_available || 0) > 0 ? 'check' : 'times'}-circle me-1"></i>
-                                                ${(p.quantity_available || 0) > 0 ? `${p.quantity_available} in stock` : 'Out of stock'}
-                                            </small>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                        `).join('');
+                        for (const p of data.data.products) {
+                            const imgHtml = p.image_url
+                                ? '<img src="' + p.image_url + '" alt="' + p.name.replace(/"/g, '"') + '" class="product-image">'
+                                : '<div class="product-image-fallback"><i class="fas fa-microchip fa-2x"></i></div>';
+
+                            const stockText = (p.quantity_available || 0) > 0
+                                ? ((p.quantity_available || 0) + ' in stock')
+                                : 'Out of stock';
+
+                            const stockClass = (p.quantity_available || 0) > 0 ? 'text-success' : 'text-danger';
+                            const stockIcon = (p.quantity_available || 0) > 0 ? 'check' : 'times';
+
+                            html.push(
+                                '<div class="col-md-6 col-lg-4">' +
+                                    '<div class="card h-100 product-card" data-product="' + btoa(JSON.stringify(p)) + '" onclick="addToCartFromCard(this)">' +
+                                        '<div class="card-body p-2">' +
+                                            '<div class="product-image-container mb-2">' + imgHtml + '</div>' +
+                                            '<h6 class="product-title mb-1" style="font-size: 0.9rem; line-height: 1.2;">' + p.name + '</h6>' +
+                                            '<div class="d-flex justify-content-between align-items-center">' +
+                                                '<small class="text-muted">' + p.sku + '</small>' +
+                                                '<strong style="color: var(--accent); font-size: 0.9rem;">₱' + parseFloat(p.selling_price).toLocaleString() + '</strong>' +
+                                            '</div>' +
+                                            '<div class="mt-1">' +
+                                                '<small class="' + stockClass + '">' +
+                                                    '<i class="fas fa-' + stockIcon + '-circle me-1"></i>' + stockText +
+                                                '</small>' +
+                                            '</div>' +
+                                        '</div>' +
+                                    '</div>' +
+                                '</div>'
+                            );
+                        }
+                        container.innerHTML = html.join('');
                     } else {
                         // List view
                         container.className = '';
-                        container.innerHTML = `
-                            <div class="table-responsive">
-                                <table class="table table-sm">
-                                    <thead>
-                                        <tr>
-                                            <th>SKU</th>
-                                            <th>Product</th>
-                                            <th>Category</th>
-                                            <th>Price</th>
-                                            <th>Stock</th>
-                                            <th>Action</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        ${data.data.products.map(p => `
-                                            <tr style="cursor: pointer;" data-product="${btoa(JSON.stringify(p))}" onclick="addToCartFromCard(this)">
-                                                <td><code>${p.sku}</code></td>
-                                                <td><strong>${p.name}</strong></td>
-                                                <td>${p.category_name || '-'}</td>
-                                                <td><strong style="color: var(--accent);">₱${parseFloat(p.selling_price).toLocaleString()}</strong></td>
-                                                <td>
-                                                    <span class="${(p.quantity_available || 0) > 0 ? 'text-success' : 'text-danger'}">
-                                                        ${p.quantity_available || 0}
-                                                    </span>
-                                                </td>
-                                                <td>
-                                                    <button class="btn btn-sm btn-accent" onclick="event.stopPropagation(); const row = this.closest('tr'); if (row) addToCartFromCard(row);">
-                                                        <i class="fas fa-plus"></i> Add
-                                                    </button>
-                                                </td>
-                                            </tr>
-                                        `).join('')}
-                                    </tbody>
-                                </table>
-                            </div>
-                        `;
+                        container.innerHTML =
+                            '<div class="table-responsive">' +
+                                '<table class="table table-sm">' +
+                                    '<thead>' +
+                                        '<tr>' +
+                                            '<th>SKU</th>' +
+                                            '<th>Product</th>' +
+                                            '<th>Category</th>' +
+                                            '<th>Price</th>' +
+                                            '<th>Stock</th>' +
+                                            '<th>Action</th>' +
+                                        '</tr>' +
+                                    '</thead>' +
+                                    '<tbody>';
+
+                        for (const p of data.data.products) {
+                            const stockClass = (p.quantity_available || 0) > 0 ? 'text-success' : 'text-danger';
+                            const stockText = p.quantity_available || 0;
+
+                            container.innerHTML +=
+                                '<tr style="cursor: pointer;" data-product="' + btoa(JSON.stringify(p)) + '" onclick="addToCartFromCard(this)">' +
+                                    '<td><code>' + p.sku + '</code></td>' +
+                                    '<td><strong>' + p.name + '</strong></td>' +
+                                    '<td>' + (p.category_name || '-') + '</td>' +
+                                    '<td><strong style="color: var(--accent);">₱' + parseFloat(p.selling_price).toLocaleString() + '</strong></td>' +
+                                    '<td><span class="' + stockClass + '">' + stockText + '</span></td>' +
+                                    '<td><button class="btn btn-sm btn-accent" onclick="event.stopPropagation(); const row = this.closest(\'tr\'); if (row) addToCartFromCard(row);"><i class="fas fa-plus"></i> Add</button></td>' +
+                                '</tr>';
+                        }
+
+                        container.innerHTML +=
+                                    '</tbody>' +
+                                '</table>' +
+                            '</div>';
                     }
                 } else {
                     noProducts.classList.remove('d-none');
