@@ -1206,7 +1206,7 @@ if (!in_array($user['role'], $allowedRoles)) {
             }
 
             const customerName = document.getElementById('pos-customer-name').value || 'Walk-in Customer';
-            showToast(`Receipt emailed to customer (${customerName})`, 'success');
+            showToast('Receipt emailed to ' + customerName, 'success');
         }
 
         function generateReceiptHTML() {
