@@ -987,7 +987,7 @@ if (!in_array($user['role'], $allowedRoles)) {
     <script>
         // Configuration
         const API_BASE = '../backend/api';
-        const currentUser = <?php echo htmlspecialchars(json_encode($user), ENT_QUOTES); ?>;
+        const currentUser = <?php echo json_encode($user, JSON_HEX_TAG|JSON_HEX_AMP|JSON_HEX_APOS|JSON_HEX_QUOT); ?>;
 
         // POS State
         let posCart = [];
