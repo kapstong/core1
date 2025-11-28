@@ -200,16 +200,26 @@ function approveOrder($db, $orderId, $order, $orderItems, $currentUser) {
         $productId = (int)$item['product_id'];
         $quantity = (int)$item['quantity'];
 
+        error_log("Processing inventory update - Product ID: {$productId}, Quantity: {$quantity}");
+
         // Update inventory: reduce quantity_on_hand and quantity_reserved
         $updateInvQuery = "UPDATE inventory
                           SET quantity_on_hand = quantity_on_hand - :quantity,
                               quantity_reserved = GREATEST(0, quantity_reserved - :quantity)
                           WHERE product_id = :product_id";
 
-        $invUpdateStmt = $db->prepare($updateInvQuery);
-        $invUpdateStmt->bindValue(':quantity', $quantity, PDO::PARAM_INT);
-        $invUpdateStmt->bindValue(':product_id', $productId, PDO::PARAM_INT);
-        $invUpdateStmt->execute();
+        try {
+            $invUpdateStmt = $db->prepare($updateInvQuery);
+            $invUpdateStmt->bindValue(':quantity', $quantity, PDO::PARAM_INT);
+            $invUpdateStmt->bindValue(':product_id', $productId, PDO::PARAM_INT);
+            $invUpdateResult = $invUpdateStmt->execute();
+            error_log("Inventory update executed successfully. Result: " . (int)$invUpdateResult);
+        } catch (PDOException $e) {
+            error_log("Inventory update failed: " . $e->getMessage());
+            error_log("Query: " . $updateInvQuery);
+            error_log("Params - Product ID: {$productId}, Quantity: {$quantity}");
+            throw $e;
+        }
     }
 
     // 3. Create sales entry for Sales History
