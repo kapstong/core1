@@ -3178,3 +3178,20 @@ body * {
         font-size: 20px;
     }
 }
+
+/* Fix for modal table backgrounds */
+#saleDetailsModal .table-responsive {
+    background: transparent !important;
+}
+
+#saleDetailsModal .table {
+    background: transparent !important;
+    color: var(--text-primary);
+}
+
+#saleDetailsModal table td,
+#saleDetailsModal table th {
+    background: transparent !important;
+    color: var(--text-primary);
+}
+
