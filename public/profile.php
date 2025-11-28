@@ -585,7 +585,7 @@ if (MaintenanceMode::handle()) {
         // Load customer profile
         async function loadProfile() {
             try {
-                const response = await fetch(`${API_BASE}/shop/profile.php`, {
+                const response = await fetch(`${API_BASE}/shop/profile.php?t=${Date.now()}`, {
                     credentials: 'same-origin'
                 });
                 const data = await response.json();
@@ -620,9 +620,12 @@ if (MaintenanceMode::handle()) {
                     // Display email verification status
                     displayEmailVerificationStatus(customer.email_verified);
 
-                    // Update stats (placeholder data)
-                    document.getElementById('total-orders').textContent = customer.total_orders || '0';
-                    document.getElementById('total-spent').textContent = '₱' + (parseFloat(customer.total_spent || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
+                    // Update stats with actual data from backend
+                    const totalOrders = parseInt(customer.total_orders || 0);
+                    const totalSpent = parseFloat(customer.total_spent || 0);
+                    
+                    document.getElementById('total-orders').textContent = totalOrders;
+                    document.getElementById('total-spent').textContent = '₱' + totalSpent.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
                     document.getElementById('member-since').textContent = new Date(customer.created_at).getFullYear();
                     document.getElementById('loyalty-points').textContent = customer.loyalty_points || '0';
                 } else {
