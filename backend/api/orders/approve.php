@@ -271,6 +271,19 @@ function createSalesEntry($db, $order, $orderItems, $currentUser) {
     $totalAmount = $order['total_amount'];
     $taxRate = $subtotal > 0 ? ($taxAmount / $subtotal) : 0;
 
+    // Map payment method to sales table enum values
+    $paymentMethodMap = [
+        'cash_on_delivery' => 'cash',
+        'credit_card' => 'card',
+        'debit_card' => 'card',
+        'bank_transfer' => 'bank_transfer',
+        'gcash' => 'digital_wallet',
+        'paymaya' => 'digital_wallet',
+        'paypal' => 'digital_wallet'
+    ];
+    $orderPaymentMethod = strtolower($order['payment_method'] ?? 'cash');
+    $paymentMethod = $paymentMethodMap[$orderPaymentMethod] ?? 'cash';
+
     // Insert into sales table (matching actual table structure)
     $saleQuery = "INSERT INTO sales (
                     invoice_number, cashier_id, customer_name, customer_email, customer_phone,
@@ -293,7 +306,7 @@ function createSalesEntry($db, $order, $orderItems, $currentUser) {
     $stmt->bindValue(':tax_rate', $taxRate);
     $stmt->bindValue(':discount_amount', 0);
     $stmt->bindValue(':total_amount', $totalAmount);
-    $stmt->bindValue(':payment_method', $order['payment_method'] ?? 'cash');
+    $stmt->bindValue(':payment_method', $paymentMethod);
     $stmt->bindValue(':payment_status', 'paid');
     $stmt->bindValue(':notes', 'Customer Order #' . ($order['order_number'] ?? $order['id']));
     $stmt->execute();
