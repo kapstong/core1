@@ -85,6 +85,11 @@ if (!in_array($user['role'], $allowedRoles)) {
             z-index: 3;
             pointer-events: auto;
         }
+
+        .product-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 0.5rem;
             transition: all 0.3s ease;
             cursor: pointer;
             height: 100%;
@@ -94,6 +99,39 @@ if (!in_array($user['role'], $allowedRoles)) {
             border-color: var(--accent);
             transform: translateY(-2px);
             box-shadow: 0 4px 12px rgba(0, 245, 255, 0.1);
+        }
+
+        /* Side-by-side cart and summary within the cart panel */
+        .pos-cart-body {
+            display: flex;
+            gap: 1rem;
+            align-items: flex-start;
+            flex: 1 1 auto;
+            padding: 0 1rem 1rem;
+            overflow: hidden;
+        }
+
+        /* Make cart list expand and scroll, keep summary fixed width */
+        .pos-cart-container {
+            flex: 1 1 auto;
+            overflow-y: auto;
+            padding: 0;
+        }
+
+        .pos-summary {
+            flex: 0 0 320px;
+            background: var(--bg-tertiary);
+            border-top: none;
+            border-left: 1px solid var(--border-color);
+            padding: 1rem;
+            position: relative;
+            z-index: 2;
+            height: auto;
+        }
+
+        @media (max-width: 768px) {
+            .pos-cart-body { flex-direction: column; padding: 1rem; }
+            .pos-summary { flex: 0 0 auto; border-left: none; border-top: 1px solid var(--border-color); }
         }
 
         .product-image {
@@ -523,20 +561,21 @@ if (!in_array($user['role'], $allowedRoles)) {
                                 </div>
                             </div>
 
-                            <!-- Cart Items -->
-                            <div class="pos-cart-container">
-                                <div class="text-center text-muted py-4" id="pos-empty-cart">
-                                    <i class="fas fa-shopping-cart fa-2x mb-2"></i>
-                                    <p>No items in cart</p>
-                                    <small>Search and add products above</small>
+                            <div class="pos-cart-body">
+                                <!-- Cart Items -->
+                                <div class="pos-cart-container">
+                                    <div class="text-center text-muted py-4" id="pos-empty-cart">
+                                        <i class="fas fa-shopping-cart fa-2x mb-2"></i>
+                                        <p>No items in cart</p>
+                                        <small>Search and add products above</small>
+                                    </div>
+                                    <div id="pos-cart-items">
+                                        <!-- Cart items will appear here -->
+                                    </div>
                                 </div>
-                                <div id="pos-cart-items">
-                                    <!-- Cart items will appear here -->
-                                </div>
-                            </div>
 
-                            <!-- Cart Summary & Payment -->
-                            <div class="pos-summary">
+                                <!-- Cart Summary & Payment -->
+                                <div class="pos-summary">
                                 <div class="row g-2 mb-3">
                                     <div class="col-6">
                                         <label class="form-label small mb-1">Subtotal</label>
