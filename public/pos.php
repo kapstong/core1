@@ -45,19 +45,8 @@ if (!in_array($user['role'], $allowedRoles)) {
     <link href="assets/css/main.css" rel="stylesheet">
 
     <style>
-        :root {
-            --bg-primary: #0a0a0a;
-            --bg-secondary: #1a1a1a;
-            --bg-card: #2a2a2a;
-            --bg-tertiary: #3a3a3a;
-            --text-primary: #ffffff;
-            --text-secondary: #cccccc;
-            --border-color: #404040;
-            --accent: #00f5ff;
-            --success: #00ff88;
-            --warning: #ffaa00;
-            --danger: #ff4444;
-        }
+        /* POS page inherits colors from main.css
+           Dashboard color scheme is used for consistency */
 
         body {
             background: var(--bg-primary);
