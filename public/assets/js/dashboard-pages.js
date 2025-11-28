@@ -8268,45 +8268,45 @@ function showSaleDetailsModal(sale) {
 
                         <h6>Items (${(sale.items || []).length} item${(sale.items || []).length !== 1 ? 's' : ''})</h6>
                         <div class="table-responsive">
-                            <table class="table table-sm">
+                            <table class="table table-sm" style="background: transparent; color: var(--text-primary);">
                                 <thead>
-                                    <tr>
-                                        <th>Product</th>
-                                        <th>SKU</th>
-                                        <th>Qty</th>
-                                        <th>Price</th>
-                                        <th>Subtotal</th>
+                                    <tr style="background: transparent; border-color: var(--border-color);">
+                                        <th style="background: transparent; color: var(--text-primary);">Product</th>
+                                        <th style="background: transparent; color: var(--text-primary);">SKU</th>
+                                        <th style="background: transparent; color: var(--text-primary);">Qty</th>
+                                        <th style="background: transparent; color: var(--text-primary);">Price</th>
+                                        <th style="background: transparent; color: var(--text-primary);">Subtotal</th>
                                     </tr>
                                 </thead>
                                 <tbody>
                                     ${(sale.items || []).map(item => `
-                                        <tr>
-                                            <td>${item.product?.name || item.product_name || 'Unknown'}</td>
-                                            <td><code>${item.product?.sku || item.sku || 'N/A'}</code></td>
-                                            <td>${item.quantity}</td>
-                                            <td>${formatCurrency(item.unit_price)}</td>
-                                            <td>${formatCurrency(item.quantity * item.unit_price)}</td>
+                                        <tr style="background: transparent; border-color: var(--border-color);">
+                                            <td style="background: transparent; color: var(--text-primary);">${item.product?.name || item.product_name || 'Unknown'}</td>
+                                            <td style="background: transparent; color: var(--text-primary);"><code>${item.product?.sku || item.sku || 'N/A'}</code></td>
+                                            <td style="background: transparent; color: var(--text-primary);">${item.quantity}</td>
+                                            <td style="background: transparent; color: var(--text-primary);">${formatCurrency(item.unit_price)}</td>
+                                            <td style="background: transparent; color: var(--text-primary);">${formatCurrency(item.quantity * item.unit_price)}</td>
                                         </tr>
                                     `).join('')}
                                 </tbody>
                                 <tfoot>
-                                    <tr style="border-top: 2px solid var(--border-color);">
-                                        <th colspan="3" class="text-end">Subtotal:</th>
-                                        <th colspan="2">${formatCurrency(sale.financials?.subtotal || 0)}</th>
+                                    <tr style="border-top: 2px solid var(--border-color); background: transparent;">
+                                        <th colspan="3" class="text-end" style="background: transparent; color: var(--text-primary);">Subtotal:</th>
+                                        <th colspan="2" style="background: transparent; color: var(--text-primary);">${formatCurrency(sale.financials?.subtotal || 0)}</th>
                                     </tr>
                                     ${(sale.financials?.discount_amount || 0) > 0 ? `
-                                    <tr>
-                                        <th colspan="3" class="text-end">Discount:</th>
-                                        <th colspan="2">-${formatCurrency(sale.financials?.discount_amount || 0)}</th>
+                                    <tr style="background: transparent;">
+                                        <th colspan="3" class="text-end" style="background: transparent; color: var(--text-primary);">Discount:</th>
+                                        <th colspan="2" style="background: transparent; color: var(--text-primary);">-${formatCurrency(sale.financials?.discount_amount || 0)}</th>
                                     </tr>
                                     ` : ''}
-                                    <tr>
-                                        <th colspan="3" class="text-end">Tax (${((sale.financials?.tax_rate || 0.12) * 100).toFixed(0)}%):</th>
-                                        <th colspan="2">${formatCurrency(sale.financials?.tax_amount || 0)}</th>
+                                    <tr style="background: transparent;">
+                                        <th colspan="3" class="text-end" style="background: transparent; color: var(--text-primary);">Tax (${((sale.financials?.tax_rate || 0.12) * 100).toFixed(0)}%):</th>
+                                        <th colspan="2" style="background: transparent; color: var(--text-primary);">${formatCurrency(sale.financials?.tax_amount || 0)}</th>
                                     </tr>
-                                    <tr style="border-top: 2px solid var(--accent); font-size: 1.1em;">
-                                        <th colspan="3" class="text-end">TOTAL:</th>
-                                        <th colspan="2" style="color: var(--accent);">${formatCurrency(sale.financials?.total_amount || sale.total_amount || 0)}</th>
+                                    <tr style="border-top: 2px solid var(--accent); font-size: 1.1em; background: transparent;">
+                                        <th colspan="3" class="text-end" style="background: transparent; color: var(--text-primary);">TOTAL:</th>
+                                        <th colspan="2" style="background: transparent; color: var(--accent);">${formatCurrency(sale.financials?.total_amount || sale.total_amount || 0)}</th>
                                     </tr>
                                 </tfoot>
                             </table>
