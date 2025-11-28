@@ -509,7 +509,7 @@ if (!in_array($user['role'], $allowedRoles)) {
 
                 <div class="row">
                     <!-- Products Panel -->
-                    <div class="col-lg-7">
+                    <div class="col-lg-6">
                         <div class="pos-products-panel">
                             <div class="d-flex justify-content-between align-items-center p-3 border-bottom" style="border-color: var(--border-color) !important;">
                                 <h5 class="mb-0">Products</h5>
@@ -541,7 +541,7 @@ if (!in_array($user['role'], $allowedRoles)) {
                     </div>
 
                     <!-- Cart & Checkout Panel -->
-                    <div class="col-lg-5">
+                    <div class="col-lg-6">
                         <div class="pos-cart-panel">
                             <div class="d-flex justify-content-between align-items-center p-3 border-bottom" style="border-color: var(--border-color) !important;">
                                 <h5 class="mb-0">Current Sale</h5>
