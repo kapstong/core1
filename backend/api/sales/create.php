@@ -206,15 +206,18 @@ try {
                 reference_type, reference_id, performed_by, notes
             )
             SELECT
-                :product_id, 'sale', :quantity_neg, i.quantity_on_hand + :quantity,
-                i.quantity_on_hand, 'SALE', :sale_id, :user_id, :notes
+                :product_id, 'sale', :quantity_neg,
+                i.quantity_on_hand + :quantity,
+                i.quantity_on_hand,
+                'SALE', :sale_id, :user_id, :notes
             FROM inventory i
-            WHERE i.product_id = :product_id
+            WHERE i.product_id = :product_id2
         ";
 
         $stmt = $conn->prepare($movementQuery);
         $stmt->execute([
             ':product_id' => $item['product_id'],
+            ':product_id2' => $item['product_id'],
             ':quantity_neg' => -$item['quantity'],
             ':quantity' => $item['quantity'],
             ':sale_id' => $saleId,
