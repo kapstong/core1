@@ -22,6 +22,7 @@ header('Content-Type: application/json');
 require_once __DIR__ . '/../../config/database.php';
 require_once __DIR__ . '/../../utils/Response.php';
 require_once __DIR__ . '/../../middleware/CORS.php';
+require_once __DIR__ . '/../../middleware/Auth.php';
 require_once __DIR__ . '/../../models/Product.php';
 
 CORS::handle();
@@ -53,20 +54,34 @@ try {
 }
 
 function handleGetRequest($action) {
-    // Check if customer is authenticated
-    if (!isset($_SESSION['customer_id'])) {
+    // Check if user is authenticated (customer or staff)
+    $isStaff = Auth::check() && Auth::user()['role'] === 'staff';
+    $isCustomer = isset($_SESSION['customer_id']);
+
+    if (!$isStaff && !$isCustomer) {
         Response::error('Authentication required', 401);
     }
 
-    $customerId = $_SESSION['customer_id'];
+    // If staff, allow viewing pending orders; if customer, show their orders
+    $customerId = $isCustomer ? $_SESSION['customer_id'] : null;
+
+    // Handle different actions
+    if ($action === '' && isset($_GET['status']) && $_GET['status'] === 'pending' && $isStaff) {
+        // Staff viewing pending orders
+        getPendingOrders();
+        return;
+    }
 
     switch ($action) {
         case 'list':
+            if (!$isCustomer) {
+                Response::error('Customer authentication required', 401);
+            }
             getCustomerOrders($customerId);
             break;
 
         case 'details':
-            getOrderDetails($customerId);
+            getOrderDetails($customerId, $isStaff);
             break;
 
         default:
@@ -196,7 +211,45 @@ function getCustomerOrders($customerId) {
     ]);
 }
 
-function getOrderDetails($customerId) {
+function getPendingOrders() {
+    $db = Database::getInstance()->getConnection();
+
+    // Get all pending customer orders for staff review
+    $stmt = $db->prepare("
+        SELECT
+            co.id,
+            co.order_number,
+            co.status,
+            co.order_date,
+            co.subtotal,
+            co.tax_amount,
+            co.shipping_amount,
+            co.total_amount,
+            co.payment_method,
+            co.payment_status,
+            CONCAT(c.first_name, ' ', c.last_name) as customer_name,
+            c.email,
+            c.phone
+        FROM customer_orders co
+        INNER JOIN customers c ON co.customer_id = c.id
+        WHERE co.status = 'pending'
+        ORDER BY co.order_date DESC
+    ");
+
+    $stmt->execute();
+    $orders = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+    // Get order items count for each order
+    foreach ($orders as &$order) {
+        $countStmt = $db->prepare("SELECT COUNT(*) as items_count FROM customer_order_items WHERE order_id = ?");
+        $countStmt->execute([$order['id']]);
+        $order['items_count'] = $countStmt->fetch(PDO::FETCH_ASSOC)['items_count'];
+    }
+
+    Response::success(['orders' => $orders, 'pagination' => ['total' => count($orders)]]);
+}
+
+function getOrderDetails($customerId, $isStaff = false) {
     $orderId = isset($_GET['id']) ? intval($_GET['id']) : null;
     if (!$orderId) {
         Response::error('id parameter is required', 400);
@@ -204,10 +257,17 @@ function getOrderDetails($customerId) {
 
     $db = Database::getInstance()->getConnection();
 
-    // Get order details
+    // Build query based on user role
+    $whereClause = $isStaff ? "WHERE co.id = ?" : "WHERE co.id = ? AND co.customer_id = ?";
+
+    // Get order details with customer info
     $stmt = $db->prepare("
         SELECT
             co.*,
+            c.first_name,
+            c.last_name,
+            c.email,
+            c.phone,
             ca1.first_name as shipping_first_name,
             ca1.last_name as shipping_last_name,
             ca1.address_line_1 as shipping_address_1,
@@ -227,13 +287,20 @@ function getOrderDetails($customerId) {
             ca2.country as billing_country,
             ca2.phone as billing_phone
         FROM customer_orders co
+        INNER JOIN customers c ON co.customer_id = c.id
         LEFT JOIN customer_addresses ca1 ON co.shipping_address_id = ca1.id
         LEFT JOIN customer_addresses ca2 ON co.billing_address_id = ca2.id
-        WHERE co.id = ? AND co.customer_id = ?
+        {$whereClause}
     ");
 
-    $stmt->execute([$orderId, $customerId]);
+    $params = $isStaff ? [$orderId] : [$orderId, $customerId];
+    $stmt->execute($params);
     $order = $stmt->fetch(PDO::FETCH_ASSOC);
+
+    // Add customer_name field for consistency
+    if ($order && $isStaff) {
+        $order['customer_name'] = $order['first_name'] . ' ' . $order['last_name'];
+    }
 
     if (!$order) {
         Response::error('Order not found', 404);
