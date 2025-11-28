@@ -1275,7 +1275,7 @@ if (!in_array($user['role'], $allowedRoles)) {
                                 <td class="text-end">${subtotal}</td>
                             </tr>
                             <tr>
-                                <td colspan="3" class="text-end">Tax (12%):</td>
+                                <td colspan="3" class="text-end">Tax:</td>
                                 <td class="text-end">${tax}</td>
                             </tr>
                             <tr class="total">
