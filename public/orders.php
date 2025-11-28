@@ -134,7 +134,7 @@ if (!isset($_SESSION['customer_id'])) {
             color: #fbbf24;
         }
 
-        .status-success {
+        .status-completed, .status-success {
             background: rgba(16, 185, 129, 0.2);
             color: #10b981;
         }
