@@ -206,11 +206,9 @@ function approveOrder($db, $orderId, $order, $orderItems, $currentUser) {
     }
 
     // 3. Create sales entry for Sales History
-    try {
-        $saleId = createSalesEntry($db, $order, $orderItems, $currentUser);
-    } catch (Throwable $e) {
-        error_log('Failed to create sales entry (non-critical): ' . $e->getMessage());
-    }
+    // Temporarily removed try-catch to see the actual error
+    $saleId = createSalesEntry($db, $order, $orderItems, $currentUser);
+    error_log('Sales entry created successfully. Sale ID: ' . $saleId);
 }
 
 /**
@@ -264,6 +262,16 @@ function rejectOrder($db, $orderId, $order, $orderItems, $currentUser, $reason) 
  * Create sales entry for approved order - integrates with Sales History
  */
 function createSalesEntry($db, $order, $orderItems, $currentUser) {
+    // Log the data we're about to insert for debugging
+    error_log('Creating sales entry with data: ' . json_encode([
+        'customer_id' => $order['customer_id'],
+        'total_amount' => $order['total_amount'],
+        'tax_amount' => $order['tax_amount'] ?? 0,
+        'payment_method' => $order['payment_method'] ?? 'cash',
+        'created_by' => $currentUser['id'],
+        'items_count' => count($orderItems)
+    ]));
+
     // Insert into sales table
     $saleQuery = "INSERT INTO sales (
                     sale_date, customer_id, total_amount, tax_amount,
