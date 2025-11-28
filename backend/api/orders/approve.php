@@ -266,10 +266,10 @@ function createSalesEntry($db, $order, $orderItems, $currentUser) {
     $invoiceNumber = 'INV-' . date('Ymd') . '-' . strtoupper(substr(uniqid(), -6));
 
     // Calculate amounts
-    $subtotal = $order['subtotal'] ?? ($order['total_amount'] - ($order['tax_amount'] ?? 0));
-    $taxAmount = $order['tax_amount'] ?? 0;
+    $subtotal = $order['subtotal'];
+    $taxAmount = $order['tax_amount'];
     $totalAmount = $order['total_amount'];
-    $taxRate = $subtotal > 0 ? ($taxAmount / $subtotal) : 0;
+    $taxRate = $subtotal > 0 ? ($taxAmount / $subtotal) : 0.12;
 
     // Map payment method to sales table enum values
     $paymentMethodMap = [
@@ -284,50 +284,57 @@ function createSalesEntry($db, $order, $orderItems, $currentUser) {
     $orderPaymentMethod = strtolower($order['payment_method'] ?? 'cash');
     $paymentMethod = $paymentMethodMap[$orderPaymentMethod] ?? 'cash';
 
-    // Insert into sales table (matching actual table structure)
-    $saleQuery = "INSERT INTO sales (
-                    invoice_number, cashier_id, customer_name, customer_email, customer_phone,
-                    subtotal, tax_amount, tax_rate, discount_amount, total_amount,
-                    payment_method, payment_status, notes
-                 ) VALUES (
-                    :invoice_number, :cashier_id, :customer_name, :customer_email, :customer_phone,
-                    :subtotal, :tax_amount, :tax_rate, :discount_amount, :total_amount,
-                    :payment_method, :payment_status, :notes
-                 )";
+    // Customer info
+    $customerName = trim(($order['first_name'] ?? '') . ' ' . ($order['last_name'] ?? ''));
+    $customerEmail = $order['email'] ?? null;
+    $customerPhone = $order['phone'] ?? null;
+
+    // Create sale record - EXACTLY like create.php
+    $saleQuery = "
+        INSERT INTO sales (
+            invoice_number, cashier_id, customer_name, customer_email, customer_phone,
+            subtotal, tax_amount, tax_rate, discount_amount, total_amount,
+            payment_method, payment_status, notes
+        ) VALUES (
+            :invoice_number, :cashier_id, :customer_name, :customer_email, :customer_phone,
+            :subtotal, :tax_amount, :tax_rate, :discount_amount, :total_amount,
+            :payment_method, :payment_status, :notes
+        )
+    ";
 
     $stmt = $db->prepare($saleQuery);
-    $stmt->bindValue(':invoice_number', $invoiceNumber);
-    $stmt->bindValue(':cashier_id', $currentUser['id'], PDO::PARAM_INT);
-    $stmt->bindValue(':customer_name', ($order['first_name'] ?? '') . ' ' . ($order['last_name'] ?? ''));
-    $stmt->bindValue(':customer_email', $order['email'] ?? null);
-    $stmt->bindValue(':customer_phone', $order['phone'] ?? null);
-    $stmt->bindValue(':subtotal', $subtotal);
-    $stmt->bindValue(':tax_amount', $taxAmount);
-    $stmt->bindValue(':tax_rate', $taxRate);
-    $stmt->bindValue(':discount_amount', 0);
-    $stmt->bindValue(':total_amount', $totalAmount);
-    $stmt->bindValue(':payment_method', $paymentMethod);
-    $stmt->bindValue(':payment_status', 'paid');
-    $stmt->bindValue(':notes', 'Customer Order #' . ($order['order_number'] ?? $order['id']));
-    $stmt->execute();
+    $stmt->execute([
+        ':invoice_number' => $invoiceNumber,
+        ':cashier_id' => $currentUser['id'],
+        ':customer_name' => $customerName,
+        ':customer_email' => $customerEmail,
+        ':customer_phone' => $customerPhone,
+        ':subtotal' => $subtotal,
+        ':tax_amount' => $taxAmount,
+        ':tax_rate' => $taxRate,
+        ':discount_amount' => 0,
+        ':total_amount' => $totalAmount,
+        ':payment_method' => $paymentMethod,
+        ':payment_status' => 'paid',
+        ':notes' => 'Customer Order #' . ($order['order_number'] ?? $order['id'])
+    ]);
 
     $saleId = $db->lastInsertId();
 
-    // Insert sale items (only 4 columns: sale_id, product_id, quantity, unit_price)
-    $itemQuery = "INSERT INTO sale_items (
-                    sale_id, product_id, quantity, unit_price
-                 ) VALUES (
-                    :sale_id, :product_id, :quantity, :unit_price
-                 )";
-
-    $itemStmt = $db->prepare($itemQuery);
-
+    // Create sale items
     foreach ($orderItems as $item) {
-        $itemStmt->bindValue(':sale_id', $saleId, PDO::PARAM_INT);
-        $itemStmt->bindValue(':product_id', $item['product_id'], PDO::PARAM_INT);
-        $itemStmt->bindValue(':quantity', $item['quantity'], PDO::PARAM_INT);
-        $itemStmt->bindValue(':unit_price', $item['unit_price']);
-        $itemStmt->execute();
+        $itemQuery = "
+            INSERT INTO sale_items (sale_id, product_id, quantity, unit_price)
+            VALUES (:sale_id, :product_id, :quantity, :unit_price)
+        ";
+
+        $itemStmt = $db->prepare($itemQuery);
+        $itemStmt->execute([
+            ':sale_id' => $saleId,
+            ':product_id' => $item['product_id'],
+            ':quantity' => $item['quantity'],
+            ':unit_price' => $item['unit_price']
+        ]);
     }
 
     error_log('Sales entry created successfully. Sale ID: ' . $saleId . ', Invoice: ' . $invoiceNumber);
