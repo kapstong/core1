@@ -947,7 +947,7 @@ if (!in_array($user['role'], $allowedRoles)) {
                                     </thead>
                                     <tbody>
                                         ${data.data.products.map(p => `
-                                            <tr style="cursor: pointer;" onclick="addToCart(${JSON.stringify(p).replace(/'/g, "\\'")})">
+                                            <tr style="cursor: pointer;" data-product='${JSON.stringify(p)}' onclick="addToCartFromCard(this)">
                                                 <td><code>${p.sku}</code></td>
                                                 <td><strong>${p.name}</strong></td>
                                                 <td>${p.category_name || '-'}</td>
@@ -958,7 +958,7 @@ if (!in_array($user['role'], $allowedRoles)) {
                                                     </span>
                                                 </td>
                                                 <td>
-                                                    <button class="btn btn-sm btn-accent" onclick="event.stopPropagation(); addToCart(${JSON.stringify(p).replace(/'/g, "\\'")})">
+                                                    <button class="btn btn-sm btn-accent" onclick="event.stopPropagation(); addToCartFromCard(this.closest('tr'))">
                                                         <i class="fas fa-plus"></i> Add
                                                     </button>
                                                 </td>
