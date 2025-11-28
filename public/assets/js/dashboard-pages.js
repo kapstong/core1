@@ -8241,107 +8241,114 @@ async function viewSaleDetails(saleId) {
 }
 
 function showSaleDetailsModal(sale) {
-    const modalHTML = `
+        // Build a cleaner, two-column header with summary and actions
+        const items = sale.items || [];
+        const itemRows = items.map(item => `
+                <tr>
+                        <td class="p-3 align-middle text-wrap">${item.product?.name || item.product_name || 'Unknown'}</td>
+                        <td class="p-3 align-middle"><code>${item.product?.sku || item.sku || 'N/A'}</code></td>
+                        <td class="p-3 align-middle text-center">${item.quantity}</td>
+                        <td class="p-3 align-middle text-end">${formatCurrency(item.unit_price || 0)}</td>
+                        <td class="p-3 align-middle text-end">${formatCurrency((item.unit_price || 0) * (item.quantity || 0))}</td>
+                </tr>
+        `).join('');
+
+        const modalHTML = `
         <div class="modal fade" id="saleDetailsModal" tabindex="-1">
-            <div class="modal-dialog modal-lg">
-                <div class="modal-content" style="background: var(--bg-card); color: var(--text-primary);">
-                    <div class="modal-header" style="border-color: var(--border-color);">
-                        <h5 class="modal-title"><i class="fas fa-receipt me-2"></i>Sale Details</h5>
-                        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            <div class="modal-dialog modal-xl modal-dialog-centered">
+                <div class="modal-content sale-details-modal">
+                    <div class="modal-header">
+                        <div>
+                            <h5 class="modal-title mb-0"><i class="fas fa-receipt me-2"></i>Sale Details</h5>
+                            <small class="text-muted">${sale.sale_number || sale.invoice_number} • ${new Date(sale.sale_date).toLocaleString()}</small>
+                        </div>
+                        <div class="ms-auto d-flex gap-2 align-items-center">
+                            <span class="badge badge-sale-type">${sale.sale_type === 'pos' ? 'POS' : 'Online'}</span>
+                            <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Close</button>
+                            <button type="button" class="btn btn-primary btn-sm" onclick="printSaleReceipt(${sale.id})"><i class="fas fa-print me-1"></i> Print</button>
+                        </div>
                     </div>
+
                     <div class="modal-body">
-                        <div class="row mb-4">
-                            <div class="col-md-6">
-                                <h6>Sale Information</h6>
-                                <p><strong>Sale Number:</strong> ${sale.sale_number || sale.invoice_number}</p>
-                                <p><strong>Date:</strong> ${new Date(sale.sale_date).toLocaleString()}</p>
-                                <p><strong>Customer:</strong> ${sale.customer?.name || sale.customer_name || 'Walk-in'}</p>
-                                <p><strong>Cashier:</strong> ${sale.cashier?.name || 'N/A'}</p>
+                        <div class="row gx-4">
+                            <div class="col-lg-7">
+                                <div class="card mb-3" style="background: transparent; border: none;">
+                                    <div class="card-body p-0">
+                                        <h6 class="mb-3">Items <small class="text-muted">(${items.length} item${items.length !== 1 ? 's' : ''})</small></h6>
+                                        <div class="table-responsive">
+                                            <table class="table table-borderless table-sm mb-0">
+                                                <thead>
+                                                    <tr class="table-head-row">
+                                                        <th>Product</th>
+                                                        <th>SKU</th>
+                                                        <th class="text-center">Qty</th>
+                                                        <th class="text-end">Price</th>
+                                                        <th class="text-end">Subtotal</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    ${itemRows}
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
-                            <div class="col-md-6">
-                                <h6>Payment Information</h6>
-                                <p><strong>Method:</strong> ${(sale.payment?.method || sale.payment_method || 'Unknown').toUpperCase()}</p>
-                                <p><strong>Status:</strong> <span class="badge bg-${sale.payment?.status === 'paid' ? 'success' : 'warning'}">${(sale.payment?.status || sale.payment_status || 'Unknown').toUpperCase()}</span></p>
-                                <p><strong>Sale Type:</strong> ${sale.sale_type === 'pos' ? '🏪 POS' : '🌐 Online'}</p>
+
+                            <div class="col-lg-5">
+                                <div class="card" style="background: transparent; border: none;">
+                                    <div class="card-body p-0">
+                                        <h6 class="mb-3">Summary</h6>
+                                        <dl class="row mb-3">
+                                            <dt class="col-6 text-muted">Customer</dt>
+                                            <dd class="col-6">${sale.customer?.name || sale.customer_name || 'Walk-in'}</dd>
+
+                                            <dt class="col-6 text-muted">Cashier</dt>
+                                            <dd class="col-6">${sale.cashier?.name || sale.cashier_name || 'N/A'}</dd>
+
+                                            <dt class="col-6 text-muted">Payment</dt>
+                                            <dd class="col-6">${(sale.payment?.method || sale.payment_method || 'N/A').toUpperCase()}</dd>
+
+                                            <dt class="col-6 text-muted">Status</dt>
+                                            <dd class="col-6"><span class="badge ${sale.payment?.status === 'paid' || sale.payment_status === 'paid' ? 'bg-success' : 'bg-warning'}">${(sale.payment?.status || sale.payment_status || 'Unknown').toUpperCase()}</span></dd>
+                                        </dl>
+
+                                        <div class="financials p-3 mt-2">
+                                            <div class="d-flex justify-content-between text-muted"><small>Subtotal</small><strong>${formatCurrency(sale.financials?.subtotal || 0)}</strong></div>
+                                            ${ (sale.financials?.discount_amount || 0) > 0 ? `<div class="d-flex justify-content-between text-muted"><small>Discount</small><strong>-${formatCurrency(sale.financials?.discount_amount || 0)}</strong></div>` : '' }
+                                            <div class="d-flex justify-content-between text-muted"><small>Tax</small><strong>${formatCurrency(sale.financials?.tax_amount || 0)}</strong></div>
+                                            <hr>
+                                            <div class="d-flex justify-content-between"><strong>Total</strong><strong class="text-accent">${formatCurrency(sale.financials?.total_amount || sale.total_amount || 0)}</strong></div>
+                                        </div>
+
+                                        ${sale.customer?.email || sale.customer_email ? `
+                                            <hr>
+                                            <h6 class="mb-2">Customer Contact</h6>
+                                            <p class="mb-0"><strong>Email:</strong> ${sale.customer?.email || sale.customer_email}</p>
+                                            ${sale.customer?.phone || sale.customer_phone ? `<p><strong>Phone:</strong> ${sale.customer?.phone || sale.customer_phone}</p>` : ''}
+                                        ` : ''}
+                                    </div>
+                                </div>
                             </div>
                         </div>
-
-                        <h6>Items (${(sale.items || []).length} item${(sale.items || []).length !== 1 ? 's' : ''})</h6>
-                        <div class="table-responsive">
-                            <table class="table table-sm" style="background: transparent; color: var(--text-primary);">
-                                <thead>
-                                    <tr style="background: transparent; border-color: var(--border-color);">
-                                        <th style="background: transparent; color: var(--text-primary);">Product</th>
-                                        <th style="background: transparent; color: var(--text-primary);">SKU</th>
-                                        <th style="background: transparent; color: var(--text-primary);">Qty</th>
-                                        <th style="background: transparent; color: var(--text-primary);">Price</th>
-                                        <th style="background: transparent; color: var(--text-primary);">Subtotal</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    ${(sale.items || []).map(item => `
-                                        <tr style="background: transparent; border-color: var(--border-color);">
-                                            <td style="background: transparent; color: var(--text-primary);">${item.product?.name || item.product_name || 'Unknown'}</td>
-                                            <td style="background: transparent; color: var(--text-primary);"><code>${item.product?.sku || item.sku || 'N/A'}</code></td>
-                                            <td style="background: transparent; color: var(--text-primary);">${item.quantity}</td>
-                                            <td style="background: transparent; color: var(--text-primary);">${formatCurrency(item.unit_price)}</td>
-                                            <td style="background: transparent; color: var(--text-primary);">${formatCurrency(item.quantity * item.unit_price)}</td>
-                                        </tr>
-                                    `).join('')}
-                                </tbody>
-                                <tfoot>
-                                    <tr style="border-top: 2px solid var(--border-color); background: transparent;">
-                                        <th colspan="3" class="text-end" style="background: transparent; color: var(--text-primary);">Subtotal:</th>
-                                        <th colspan="2" style="background: transparent; color: var(--text-primary);">${formatCurrency(sale.financials?.subtotal || 0)}</th>
-                                    </tr>
-                                    ${(sale.financials?.discount_amount || 0) > 0 ? `
-                                    <tr style="background: transparent;">
-                                        <th colspan="3" class="text-end" style="background: transparent; color: var(--text-primary);">Discount:</th>
-                                        <th colspan="2" style="background: transparent; color: var(--text-primary);">-${formatCurrency(sale.financials?.discount_amount || 0)}</th>
-                                    </tr>
-                                    ` : ''}
-                                    <tr style="background: transparent;">
-                                        <th colspan="3" class="text-end" style="background: transparent; color: var(--text-primary);">Tax (${((sale.financials?.tax_rate || 0.12) * 100).toFixed(0)}%):</th>
-                                        <th colspan="2" style="background: transparent; color: var(--text-primary);">${formatCurrency(sale.financials?.tax_amount || 0)}</th>
-                                    </tr>
-                                    <tr style="border-top: 2px solid var(--accent); font-size: 1.1em; background: transparent;">
-                                        <th colspan="3" class="text-end" style="background: transparent; color: var(--text-primary);">TOTAL:</th>
-                                        <th colspan="2" style="background: transparent; color: var(--accent);">${formatCurrency(sale.financials?.total_amount || sale.total_amount || 0)}</th>
-                                    </tr>
-                                </tfoot>
-                            </table>
-                        </div>
-
-                        ${sale.customer?.email || sale.customer_email ? `
-                        <hr>
-                        <h6>Customer Contact</h6>
-                        <p><strong>Email:</strong> ${sale.customer?.email || sale.customer_email}</p>
-                        ${sale.customer?.phone || sale.customer_phone ? `<p><strong>Phone:</strong> ${sale.customer?.phone || sale.customer_phone}</p>` : ''}
-                        ` : ''}
-                    </div>
-                    <div class="modal-footer" style="border-color: var(--border-color);">
-                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
-                        <button type="button" class="btn btn-primary" onclick="printSaleReceipt(${sale.id})">
-                            <i class="fas fa-print me-2"></i>Print Receipt
-                        </button>
                     </div>
                 </div>
             </div>
         </div>
-    `;
+        `;
 
-    // Remove existing modal if any
-    const existingModal = document.getElementById('saleDetailsModal');
-    if (existingModal) {
-        existingModal.remove();
-    }
+        // Remove existing modal if any
+        const existingModal = document.getElementById('saleDetailsModal');
+        if (existingModal) existingModal.remove();
 
-    // Add modal to document
-    document.body.insertAdjacentHTML('beforeend', modalHTML);
+        // Append and show
+        document.body.insertAdjacentHTML('beforeend', modalHTML);
+        const modalEl = document.getElementById('saleDetailsModal');
+        const modal = new bootstrap.Modal(modalEl);
+        modal.show();
 
-    // Show modal
-    const modal = new bootstrap.Modal(document.getElementById('saleDetailsModal'));
-    modal.show();
+        // Accessibility: focus first focusable element (Close button)
+        modalEl.querySelector('.btn-outline-secondary')?.focus();
 }
 
 function printSaleReceipt(saleId) {

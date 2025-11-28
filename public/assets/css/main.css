@@ -3195,3 +3195,32 @@ body * {
     color: var(--text-primary);
 }
 
+/* Sale Details modal custom styles */
+.sale-details-modal {
+    background: linear-gradient(180deg, rgba(26,31,58,0.95), rgba(30,36,57,0.95));
+    color: var(--text-primary);
+}
+.sale-details-modal .modal-header {
+    border-bottom: 1px solid rgba(255,255,255,0.04);
+    gap: 1rem;
+    align-items: center;
+}
+.sale-details-modal .table-head-row th {
+    border-bottom: 2px solid rgba(0,200,230,0.12);
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    font-size: 12px;
+}
+.sale-details-modal table td, .sale-details-modal table th {
+    border-top: 1px solid rgba(255,255,255,0.02);
+    color: var(--text-primary);
+}
+.sale-details-modal .badge-sale-type {
+    background: linear-gradient(90deg, var(--accent), var(--accent-dark));
+    color: var(--bg-primary);
+    padding: 0.4rem 0.6rem;
+    border-radius: 999px;
+    font-weight: 700;
+}
+.sale-details-modal .financials { background: rgba(255,255,255,0.02); border-radius: 8px; }
+
