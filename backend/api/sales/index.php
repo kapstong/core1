@@ -41,6 +41,7 @@ try {
             SELECT
                 co.id as id,
                 co.order_number as invoice_number,
+                co.order_number as sale_number,
                 co.customer_id,
                 CONCAT(COALESCE(c.first_name, ''), ' ', COALESCE(c.last_name, '')) as customer_name,
                 c.email as customer_email,
@@ -109,6 +110,7 @@ try {
             SELECT
                 s.id as id,
                 s.invoice_number as invoice_number,
+                s.invoice_number as sale_number,
                 NULL as customer_id,
                 s.customer_name,
                 s.customer_email,
