@@ -1358,10 +1358,17 @@ if (!in_array($user['role'], $allowedRoles)) {
             if (!confirm('Ready to complete this sale?')) return;
 
             const customerName = document.getElementById('pos-customer-name').value.trim() || 'Walk-in Customer';
+            const saleNumber = document.getElementById('pos-sale-number').textContent;
             const subtotal = posCart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
             const tax = subtotal * 0.12; // 12% VAT
             const total = subtotal + tax;
-
+            // Capture items for receipt before clearing the cart
+            const itemsForReceipt = posCart.map(item => ({
+                name: item.name,
+                quantity: item.quantity,
+                price: item.price,
+                total: item.price * item.quantity
+            }));
             const saleData = {
                 customer_name: customerName,
                 items: posCart.map(item => ({
@@ -1400,7 +1407,20 @@ if (!in_array($user['role'], $allowedRoles)) {
                 if (data.success) {
                     showToast('Sale completed successfully! Sale ID: ' + data.data.sale_id, 'success');
 
-                    // Reset POS
+                    // Store the last completed sale data for receipts (use captured items)
+                    lastCompletedSale = {
+                        saleNumber: saleNumber,
+                        customerName: customerName,
+                        date: new Date().toLocaleString(),
+                        items: itemsForReceipt,
+                        subtotal: subtotal,
+                        tax: tax,
+                        total: total,
+                        cashierName: currentUser.full_name || currentUser.username,
+                        saleId: data.data.sale_id
+                    };
+
+                    // Reset POS (after capturing lastCompletedSale)
                     posCart = [];
                     updateCartDisplay();
                     document.getElementById('pos-customer-name').value = '';
@@ -1409,24 +1429,6 @@ if (!in_array($user['role'], $allowedRoles)) {
 
                     // Reload products to update stock
                     loadProducts();
-
-                    // Store the last completed sale data for receipts
-                    lastCompletedSale = {
-                        saleNumber: saleNumber,
-                        customerName: customerName,
-                        date: new Date().toLocaleString(),
-                        items: posCart.map(item => ({
-                            name: item.name,
-                            quantity: item.quantity,
-                            price: item.price,
-                            total: item.price * item.quantity
-                        })),
-                        subtotal: subtotal,
-                        tax: tax,
-                        total: total,
-                        cashierName: currentUser.full_name || currentUser.username,
-                        saleId: data.data.sale_id
-                    };
 
                     // Enable receipt buttons
                     document.getElementById('print-receipt-btn').disabled = false;
@@ -1831,12 +1833,13 @@ if (!in_array($user['role'], $allowedRoles)) {
         }
 
         function printReceipt() {
-            if (posCart.length === 0) {
+            // Allow printing of either current cart OR last completed sale
+            if (posCart.length === 0 && !lastCompletedSale) {
                 showToast('No sale to print', 'warning');
                 return;
             }
 
-            // Generate receipt HTML
+            // Generate receipt HTML (uses lastCompletedSale if present)
             const receiptHTML = generateReceiptHTML();
 
             // Show preview modal
@@ -1981,19 +1984,31 @@ if (!in_array($user['role'], $allowedRoles)) {
         }
 
         function generateReceiptHTML() {
-            const saleNumber = document.getElementById('pos-sale-number').textContent;
-            const customerName = document.getElementById('pos-customer-name').value || 'Walk-in Customer';
-            const date = new Date().toLocaleString();
-            const subtotal = document.getElementById('pos-subtotal').textContent;
-            const tax = document.getElementById('pos-tax').textContent;
-            const total = document.getElementById('pos-total').textContent;
+            // Prefer using the last completed sale data (receipt) when available
+            let saleNumber = document.getElementById('pos-sale-number').textContent;
+            let customerName = document.getElementById('pos-customer-name').value || 'Walk-in Customer';
+            let date = new Date().toLocaleString();
+            let subtotal = document.getElementById('pos-subtotal').textContent;
+            let tax = document.getElementById('pos-tax').textContent;
+            let total = document.getElementById('pos-total').textContent;
+            let items = posCart;
 
-            let itemsHTML = posCart.map(item => `
+            if (lastCompletedSale && lastCompletedSale.items && lastCompletedSale.items.length > 0) {
+                saleNumber = lastCompletedSale.saleNumber || saleNumber;
+                customerName = lastCompletedSale.customerName || customerName;
+                date = lastCompletedSale.date || date;
+                subtotal = '₱' + (lastCompletedSale.subtotal || 0).toLocaleString('en-US', {minimumFractionDigits: 2});
+                tax = '₱' + (lastCompletedSale.tax || 0).toLocaleString('en-US', {minimumFractionDigits: 2});
+                total = '₱' + (lastCompletedSale.total || 0).toLocaleString('en-US', {minimumFractionDigits: 2});
+                items = lastCompletedSale.items;
+            }
+
+            let itemsHTML = (items || []).map(item => `
                 <tr>
                     <td>${item.name}</td>
                     <td class="text-center">${item.quantity}</td>
-                    <td class="text-end">₱${item.price.toLocaleString()}</td>
-                    <td class="text-end">₱${(item.price * item.quantity).toLocaleString()}</td>
+                    <td class="text-end">₱${(item.price || 0).toLocaleString()}</td>
+                    <td class="text-end">₱${((item.total !== undefined ? item.total : (item.price * item.quantity)) || 0).toLocaleString()}</td>
                 </tr>
             `).join('');
 
