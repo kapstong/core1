@@ -345,12 +345,11 @@ function createSalesEntry($db, $order, $orderItems, $currentUser) {
         ";
 
         $itemStmt = $db->prepare($itemQuery);
-        $itemStmt->execute([
-            ':sale_id' => $saleId,
-            ':product_id' => $item['product_id'],
-            ':quantity' => $item['quantity'],
-            ':unit_price' => $item['unit_price']
-        ]);
+        $itemStmt->bindValue(':sale_id', $saleId, PDO::PARAM_INT);
+        $itemStmt->bindValue(':product_id', $item['product_id'], PDO::PARAM_INT);
+        $itemStmt->bindValue(':quantity', $item['quantity'], PDO::PARAM_INT);
+        $itemStmt->bindValue(':unit_price', $item['unit_price']);
+        $itemStmt->execute();
     }
 
     error_log('Sales entry created successfully. Sale ID: ' . $saleId . ', Invoice: ' . $invoiceNumber);
