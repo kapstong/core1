@@ -235,6 +235,7 @@ async function confirmApproveOrder() {
         });
 
         const data = await response.json();
+        console.log('Approve response:', data);
 
         loading.classList.add('d-none');
 
@@ -251,6 +252,7 @@ async function confirmApproveOrder() {
 
             currentOrderId = null;
         } else {
+            console.error('Approval failed:', data);
             if (typeof showToast !== 'undefined') {
                 showToast(data.message || 'Failed to approve order', 'error');
             }
@@ -260,7 +262,7 @@ async function confirmApproveOrder() {
         loading.classList.add('d-none');
         console.error('Error approving order:', error);
         if (typeof showToast !== 'undefined') {
-            showToast('Error approving order', 'error');
+            showToast('Error approving order: ' + error.message, 'error');
         }
     }
 }
