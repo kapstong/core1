@@ -34,9 +34,12 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
 }
 
 try {
+    error_log('=== STARTING ORDER APPROVAL PROCESS ===');
+
     // Require staff authentication (ONLY staff members can approve/reject orders)
     Auth::requireRole(['staff']);
     $currentUser = Auth::user();
+    error_log('User authenticated: ' . json_encode($currentUser));
 
     // Get request data
     $input = json_decode(file_get_contents('php://input'), true);
@@ -44,6 +47,8 @@ try {
     if (!$input) {
         $input = $_POST;
     }
+
+    error_log('Input received: ' . json_encode($input));
 
     // Validate required fields
     if (!isset($input['order_id']) || empty($input['order_id'])) {
@@ -57,6 +62,8 @@ try {
     $orderId = (int)$input['order_id'];
     $action = strtolower(trim($input['action']));
     $reason = isset($input['reason']) ? trim($input['reason']) : null;
+
+    error_log("Order ID: {$orderId}, Action: {$action}, Reason: {$reason}");
 
     // Validate action
     if (!in_array($action, ['approve', 'reject'])) {
