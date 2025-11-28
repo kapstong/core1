@@ -1783,7 +1783,7 @@ if (!in_array($user['role'], $allowedRoles)) {
                             <td>${customer.phone || '-'}</td>
                             <td>${customer.address || '-'}</td>
                             <td>
-                                <button class="btn btn-sm btn-accent" onclick="selectCustomer('${customerName.replace(/'/g, "\\'").replace(/"/g, '\\"')}')">
+                                <button class="btn btn-sm btn-accent" onclick="selectCustomer('${customerName.replace(/&/g, '&').replace(/'/g, "\\'").replace(/"/g, '\\"')}')">
                                     <i class="fas fa-check me-1"></i>Select
                                 </button>
                             </td>
