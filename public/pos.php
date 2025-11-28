@@ -904,9 +904,9 @@ if (!in_array($user['role'], $allowedRoles)) {
                 if (data.success && data.data.products && data.data.products.length > 0) {
                     if (currentView === 'grid') {
                         container.className = 'row g-2';
-                        container.innerHTML = data.data.products.map(p => `
+                                container.innerHTML = data.data.products.map(p => `
                             <div class="col-md-6 col-lg-4">
-                                <div class="card h-100 product-card" data-product='${JSON.stringify(p)}' onclick="addToCartFromCard(this)">
+                                <div class="card h-100 product-card" data-product="${btoa(JSON.stringify(p))}" onclick="addToCartFromCard(this)">
                                     <div class="card-body p-2">
                                         <div class="product-image-container mb-2">
                                             ${p.image_url ?
@@ -947,7 +947,7 @@ if (!in_array($user['role'], $allowedRoles)) {
                                     </thead>
                                     <tbody>
                                         ${data.data.products.map(p => `
-                                            <tr style="cursor: pointer;" data-product='${JSON.stringify(p)}' onclick="addToCartFromCard(this)">
+                                            <tr style="cursor: pointer;" data-product="${btoa(JSON.stringify(p))}" onclick="addToCartFromCard(this)">
                                                 <td><code>${p.sku}</code></td>
                                                 <td><strong>${p.name}</strong></td>
                                                 <td>${p.category_name || '-'}</td>
@@ -958,7 +958,7 @@ if (!in_array($user['role'], $allowedRoles)) {
                                                     </span>
                                                 </td>
                                                 <td>
-                                                    <button class="btn btn-sm btn-accent" onclick="event.stopPropagation(); addToCartFromCard(this.closest('tr'))">
+                                                    <button class="btn btn-sm btn-accent" onclick="event.stopPropagation(); const row = this.closest('tr'); if (row) addToCartFromCard(row);">
                                                         <i class="fas fa-plus"></i> Add
                                                     </button>
                                                 </td>
@@ -1407,7 +1407,9 @@ if (!in_array($user['role'], $allowedRoles)) {
             const productData = cardElement.dataset.product;
             if (productData) {
                 try {
-                    const product = JSON.parse(productData);
+                    // Decode base64 first, then parse as JSON
+                    const decodedData = atob(productData);
+                    const product = JSON.parse(decodedData);
                     addToCart(product);
                 } catch (error) {
                     console.error('Error parsing product data:', error);
