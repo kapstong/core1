@@ -8179,7 +8179,7 @@ function displaySalesHistory(sales) {
                     <small class="text-muted">${new Date(sale.sale_date).toLocaleTimeString()}</small>
                 </td>
                 <td>${sale.customer_name || 'Walk-in'}</td>
-                <td>${sale.item_count || 0} items</td>
+                <td>${sale.items_count || 0} items</td>
                 <td><strong>${formatCurrency(sale.total_amount)}</strong></td>
                 <td><span class="badge bg-info">${sale.payment_method}</span></td>
                 <td>${statusBadge}</td>
