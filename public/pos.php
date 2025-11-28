@@ -54,25 +54,37 @@ if (!in_array($user['role'], $allowedRoles)) {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
         }
 
-        .pos-container {
-            min-height: 100vh;
-            background: var(--bg-primary);
-        }
-
-        .pos-header {
-            background: var(--bg-secondary);
-            border-bottom: 1px solid var(--border-color);
-            padding: 1rem 0;
-        }
-
-        .pos-main {
-            padding: 2rem 0;
-        }
-
-        .product-card {
+        .pos-cart-panel {
+            display: flex;
+            flex-direction: column;
             background: var(--bg-card);
             border: 1px solid var(--border-color);
             border-radius: 0.5rem;
+            height: calc(100vh - 300px);
+            overflow: hidden;
+        }
+
+        .pos-cart-container {
+            flex: 1 1 auto;
+            overflow-y: auto;
+            padding: 1rem;
+        }
+
+        .pos-summary {
+            flex: 0 0 auto;
+            background: var(--bg-tertiary);
+            border-top: 1px solid var(--border-color);
+            padding: 1rem;
+            position: relative;
+            z-index: 2;
+        }
+
+        /* Ensure the complete sale button sits above scrolling content */
+        #complete-sale-btn {
+            position: relative;
+            z-index: 3;
+            pointer-events: auto;
+        }
             transition: all 0.3s ease;
             cursor: pointer;
             height: 100%;
