@@ -722,10 +722,10 @@ class Email {
     }
 
     /**
-     * Send customer purchase confirmation
+     * Send customer purchase confirmation (Order Pending Approval)
      */
     public function sendCustomerPurchaseNotification($customer, $order) {
-        $subject = 'Purchase Confirmed: Order #' . (isset($order['order_number']) ? $order['order_number'] : $order['id']) . ' - ' . $this->fromName;
+        $subject = 'Order Received - Pending Approval: Order #' . (isset($order['order_number']) ? $order['order_number'] : $order['id']) . ' - ' . $this->fromName;
 
         $message = $this->buildCustomerPurchaseNotificationHTML($customer, $order);
 
@@ -906,15 +906,15 @@ class Email {
                 <div class='card'>
                     <div class='header'>
                         <h1 class='logo'>PC Parts Central</h1>
-                        <p style='color: #666; margin: 5px 0;'>Purchase Confirmed!</p>
+                        <p style='color: #666; margin: 5px 0;'>Order Received - Pending Approval</p>
                         <div class='order-number'>
-                            <i class='fas fa-check-circle'></i> Order #{$orderNumber}
+                            <i class='fas fa-clock'></i> Order #{$orderNumber}
                         </div>
                     </div>
 
                     <p style='color: #666; margin-bottom: 20px;'>Hello <strong>{$customer['first_name']}</strong>,</p>
 
-                    <p style='color: #666; line-height: 1.6; margin-bottom: 25px;'>Thank you for your purchase! Your order has been successfully processed and confirmed. We've sent you this confirmation for your records.</p>
+                    <p style='color: #666; line-height: 1.6; margin-bottom: 25px;'>Thank you for your order! Your order has been received and is currently <strong>pending staff review</strong>. You'll receive a confirmation email once our team approves your order.</p>
 
                     <div style='background: rgba(0, 102, 204, 0.05); border-radius: 10px; padding: 20px; margin: 25px 0; border-left: 4px solid #0066cc;'>
                         <h3 style='margin: 0 0 15px 0; color: #333;'>Order Details:</h3>
@@ -940,12 +940,13 @@ class Email {
                         </tbody>
                     </table>
 
-                    <div style='background: rgba(40, 167, 69, 0.1); border-radius: 10px; padding: 20px; margin: 25px 0; border-left: 4px solid #28a745;'>
-                        <h3 style='margin: 0 0 15px 0; color: #333;'><i class='fas fa-shipping-fast'></i> Next Steps:</h3>
+                    <div style='background: rgba(251, 191, 36, 0.1); border-radius: 10px; padding: 20px; margin: 25px 0; border-left: 4px solid #fbbf24;'>
+                        <h3 style='margin: 0 0 15px 0; color: #333;'><i class='fas fa-info-circle'></i> What Happens Next:</h3>
                         <ul style='color: #666; margin: 0; padding-left: 20px;'>
-                            <li>You'll receive shipping updates via email</li>
-                            <li>Track your order in your account dashboard</li>
-                            <li>All items include manufacturer warranty</li>
+                            <li>Our staff will review your order shortly</li>
+                            <li>You'll receive an email once your order is approved</li>
+                            <li>Your order will then be processed and prepared for delivery</li>
+                            <li>Track your order status in your account dashboard</li>
                             <li>Questions? Contact our support team</li>
                         </ul>
                     </div>

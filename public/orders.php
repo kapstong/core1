@@ -134,22 +134,7 @@ if (!isset($_SESSION['customer_id'])) {
             color: #fbbf24;
         }
 
-        .status-confirmed {
-            background: rgba(59, 130, 246, 0.2);
-            color: #3b82f6;
-        }
-
-        .status-processing {
-            background: rgba(139, 92, 246, 0.2);
-            color: #8b5cf6;
-        }
-
-        .status-shipped {
-            background: rgba(16, 185, 129, 0.2);
-            color: #10b981;
-        }
-
-        .status-delivered {
+        .status-success {
             background: rgba(16, 185, 129, 0.2);
             color: #10b981;
         }
@@ -157,6 +142,12 @@ if (!isset($_SESSION['customer_id'])) {
         .status-cancelled {
             background: rgba(239, 68, 68, 0.2);
             color: #ef4444;
+        }
+
+        /* Legacy status styles for backward compatibility */
+        .status-confirmed, .status-processing, .status-shipped, .status-delivered {
+            background: rgba(16, 185, 129, 0.2);
+            color: #10b981;
         }
 
         .order-items {

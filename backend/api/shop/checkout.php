@@ -121,11 +121,9 @@ function processCheckout($customerModel, $customerId, $sessionId) {
         // Update order payment status
         updateOrderPaymentStatus($db, $orderId, 'paid', $checkoutData['payment_method'], $paymentResult);
 
-        // Update inventory (reduce stock, release reservations) and create audit trail
-        updateInventoryStock($db, $cartItems, $orderId, $customerId);
-
-        // Release stock reservations (converting to actual sale)
-        releaseStockReservations($db, $cartItems);
+        // Reserve stock for pending order (stock will be reduced when staff approves)
+        // NOTE: Stock is NOT reduced here - only reserved until staff approval
+        reserveStock($db, $cartItems);
 
         // Clear shopping cart
         $customerModel->clearCart($customerId, $sessionId);
@@ -470,9 +468,10 @@ function processPaymentFallback($amount, $method, $currency) {
 }
 
 function updateOrderPaymentStatus($db, $orderId, $status, $method, $paymentResult = null) {
-    // Simple update without transaction_id to avoid schema issues
+    // Keep order status as 'pending' until staff approves
+    // Payment status is updated, but order status remains 'pending' for staff review
     $query = "UPDATE customer_orders
-              SET payment_status = :status, status = 'confirmed'
+              SET payment_status = :status
               WHERE id = :order_id";
 
     $stmt = $db->prepare($query);
@@ -528,7 +527,28 @@ function updateInventoryStock($db, $cartItems, $orderId = null, $customerId = nu
     }
 }
 
+function reserveStock($db, $cartItems) {
+    // Reserve stock for pending orders (increase quantity_reserved)
+    // Stock will only be reduced from quantity_on_hand when staff approves the order
+    $query = "UPDATE inventory
+              SET quantity_reserved = quantity_reserved + :quantity
+              WHERE product_id = :product_id";
+
+    $stmt = $db->prepare($query);
+
+    foreach ($cartItems as $item) {
+        $quantity = (int)$item['quantity'];
+        $productId = (int)$item['product_id'];
+
+        $stmt->bindValue(':quantity', $quantity, PDO::PARAM_INT);
+        $stmt->bindValue(':product_id', $productId, PDO::PARAM_INT);
+        $stmt->execute();
+    }
+}
+
 function releaseStockReservations($db, $cartItems) {
+    // Release stock reservations (decrease quantity_reserved)
+    // Used when order is rejected/cancelled
     $query = "UPDATE inventory
               SET quantity_reserved = GREATEST(0, quantity_reserved - :quantity)
               WHERE product_id = :product_id";

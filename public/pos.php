@@ -368,6 +368,25 @@ if (!in_array($user['role'], $allowedRoles)) {
         <!-- POS Main Content -->
         <div class="pos-main">
             <div class="container-fluid">
+                <!-- Tab Navigation -->
+                <ul class="nav nav-tabs mb-3" role="tablist" style="border-bottom: 1px solid var(--border-color);">
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link active" id="pos-sales-tab" data-bs-toggle="tab" data-bs-target="#pos-sales-panel" type="button" role="tab">
+                            <i class="fas fa-cash-register me-2"></i>POS Sales
+                        </button>
+                    </li>
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link" id="pending-orders-tab" data-bs-toggle="tab" data-bs-target="#pending-orders-panel" type="button" role="tab" onclick="loadPendingOrders()">
+                            <i class="fas fa-clock me-2"></i>Pending Orders
+                            <span class="badge bg-warning text-dark ms-2" id="pending-orders-count">0</span>
+                        </button>
+                    </li>
+                </ul>
+
+                <!-- Tab Content -->
+                <div class="tab-content">
+                    <!-- POS Sales Tab -->
+                    <div class="tab-pane fade show active" id="pos-sales-panel" role="tabpanel">
                 <!-- POS Toolbar -->
                 <div class="pos-toolbar">
                     <div class="row align-items-center">
@@ -548,6 +567,74 @@ if (!in_array($user['role'], $allowedRoles)) {
                         </div>
                     </div>
                 </div>
+                    </div>
+                    <!-- End POS Sales Tab -->
+
+                    <!-- Pending Orders Tab -->
+                    <div class="tab-pane fade" id="pending-orders-panel" role="tabpanel">
+                        <div class="row">
+                            <div class="col-12">
+                                <div class="card" style="background: var(--bg-card); border: 1px solid var(--border-color);">
+                                    <div class="card-header d-flex justify-content-between align-items-center" style="background: var(--bg-secondary); border-bottom: 1px solid var(--border-color);">
+                                        <h5 class="mb-0">
+                                            <i class="fas fa-clock me-2 text-warning"></i>
+                                            Pending Customer Orders
+                                        </h5>
+                                        <button class="btn btn-sm btn-outline-primary" onclick="loadPendingOrders()">
+                                            <i class="fas fa-sync me-1"></i>Refresh
+                                        </button>
+                                    </div>
+                                    <div class="card-body">
+                                        <div id="pending-orders-loading" class="text-center py-5 d-none">
+                                            <div class="spinner-border text-accent" role="status">
+                                                <span class="visually-hidden">Loading...</span>
+                                            </div>
+                                            <p class="text-muted mt-2">Loading pending orders...</p>
+                                        </div>
+
+                                        <div id="pending-orders-empty" class="text-center py-5 d-none">
+                                            <i class="fas fa-check-circle fa-3x text-success mb-3"></i>
+                                            <h5>No Pending Orders</h5>
+                                            <p class="text-muted">All customer orders have been processed</p>
+                                        </div>
+
+                                        <div id="pending-orders-list" class="row g-3">
+                                            <!-- Pending orders will load here -->
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <!-- End Pending Orders Tab -->
+                </div>
+                <!-- End Tab Content -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Order Details Modal -->
+    <div class="modal fade" id="orderDetailsModal" tabindex="-1">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header" style="border-bottom: 1px solid var(--border-color);">
+                    <h5 class="modal-title">
+                        <i class="fas fa-receipt me-2"></i>Order Details
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body" id="order-details-content">
+                    <!-- Order details will load here -->
+                </div>
+                <div class="modal-footer" style="border-top: 1px solid var(--border-color);">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                    <button type="button" class="btn btn-danger" id="reject-order-btn" onclick="rejectOrder()">
+                        <i class="fas fa-times me-1"></i>Reject Order
+                    </button>
+                    <button type="button" class="btn btn-success" id="approve-order-btn" onclick="approveOrder()">
+                        <i class="fas fa-check me-1"></i>Approve Order
+                    </button>
+                </div>
             </div>
         </div>
     </div>
@@ -564,6 +651,9 @@ if (!in_array($user['role'], $allowedRoles)) {
 
     <!-- Bootstrap JS -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+
+    <!-- Pending Orders JavaScript -->
+    <script src="assets/js/pos-pending-orders.js"></script>
 
     <!-- POS JavaScript -->
     <script>
