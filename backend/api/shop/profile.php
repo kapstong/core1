@@ -63,6 +63,24 @@ function getCustomerProfile($customerModel) {
         Response::error('Customer not found', 404);
     }
 
+    // Calculate customer stats from orders
+    $db = Database::getInstance()->getConnection();
+    
+    $statsQuery = "SELECT 
+                       COUNT(DISTINCT id) as total_orders,
+                       COALESCE(SUM(total_amount), 0) as total_spent
+                   FROM customer_orders
+                   WHERE customer_id = :customer_id AND status IN ('completed', 'shipped', 'delivered')";
+    
+    $statsStmt = $db->prepare($statsQuery);
+    $statsStmt->bindParam(':customer_id', $customer['id'], PDO::PARAM_INT);
+    $statsStmt->execute();
+    $stats = $statsStmt->fetch(PDO::FETCH_ASSOC);
+    
+    // Add stats to customer data
+    $customer['total_orders'] = (int)($stats['total_orders'] ?? 0);
+    $customer['total_spent'] = (float)($stats['total_spent'] ?? 0);
+
     // Return customer data (exclude sensitive fields)
     unset($customer['password_hash']);
     unset($customer['email_verification_token']);

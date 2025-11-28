@@ -622,9 +622,9 @@ if (MaintenanceMode::handle()) {
 
                     // Update stats (placeholder data)
                     document.getElementById('total-orders').textContent = customer.total_orders || '0';
-                    document.getElementById('total-spent').textContent = '₱' + (customer.total_spent || '0');
+                    document.getElementById('total-spent').textContent = '₱' + (parseFloat(customer.total_spent || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
                     document.getElementById('member-since').textContent = new Date(customer.created_at).getFullYear();
-                    document.getElementById('loyalty-points').textContent = '0'; // Placeholder
+                    document.getElementById('loyalty-points').textContent = customer.loyalty_points || '0';
                 } else {
                     showMessage('personal-message', data.message || 'Failed to load profile', 'danger');
                 }
