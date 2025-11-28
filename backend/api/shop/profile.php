@@ -66,7 +66,7 @@ function getCustomerProfile($customerModel) {
     // Calculate customer stats from orders (include all orders, not just completed ones)
     $db = Database::getInstance()->getConnection();
     
-    // First, get all orders to see what statuses exist
+    // Get order statistics for customer
     $statsQuery = "SELECT 
                        COUNT(id) as total_orders,
                        COALESCE(SUM(total_amount), 0) as total_spent
@@ -75,12 +75,20 @@ function getCustomerProfile($customerModel) {
     
     $statsStmt = $db->prepare($statsQuery);
     $statsStmt->bindParam(':customer_id', $customer['id'], PDO::PARAM_INT);
-    $statsStmt->execute();
-    $stats = $statsStmt->fetch(PDO::FETCH_ASSOC);
     
-    // Add stats to customer data
-    $customer['total_orders'] = (int)($stats['total_orders'] ?? 0);
-    $customer['total_spent'] = (float)($stats['total_spent'] ?? 0);
+    if (!$statsStmt->execute()) {
+        // If query fails, set default stats
+        $stats = ['total_orders' => 0, 'total_spent' => 0];
+    } else {
+        $stats = $statsStmt->fetch(PDO::FETCH_ASSOC);
+        if (!$stats) {
+            $stats = ['total_orders' => 0, 'total_spent' => 0];
+        }
+    }
+    
+    // Ensure values are correct type
+    $customer['total_orders'] = (int)$stats['total_orders'];
+    $customer['total_spent'] = (float)$stats['total_spent'];
 
     // Return customer data (exclude sensitive fields)
     unset($customer['password_hash']);
