@@ -906,7 +906,7 @@ if (!in_array($user['role'], $allowedRoles)) {
                         container.className = 'row g-2';
                         container.innerHTML = data.data.products.map(p => `
                             <div class="col-md-6 col-lg-4">
-                                <div class="card h-100 product-card" onclick="addToCart(${JSON.stringify(p).replace(/'/g, "\\'")})">
+                                <div class="card h-100 product-card" data-product='${JSON.stringify(p)}' onclick="addToCartFromCard(this)">
                                     <div class="card-body p-2">
                                         <div class="product-image-container mb-2">
                                             ${p.image_url ?
@@ -1401,6 +1401,38 @@ if (!in_array($user['role'], $allowedRoles)) {
                 </body>
                 </html>
             `;
+        }
+
+        function addToCartFromCard(cardElement) {
+            const productData = cardElement.dataset.product;
+            if (productData) {
+                try {
+                    const product = JSON.parse(productData);
+                    addToCart(product);
+                } catch (error) {
+                    console.error('Error parsing product data:', error);
+                    showToast('Error adding product to cart', 'error');
+                }
+            }
+        }
+
+        function showToast(message, type = 'info') {
+            // Simple toast implementation
+            const toast = document.createElement('div');
+            toast.className = `alert alert-${type === 'error' ? 'danger' : type} alert-dismissible fade show position-fixed`;
+            toast.style.cssText = 'top: 20px; right: 20px; z-index: 9999; min-width: 300px;';
+            toast.innerHTML = `
+                ${message}
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            `;
+            document.body.appendChild(toast);
+
+            // Auto remove after 3 seconds
+            setTimeout(() => {
+                if (toast.parentNode) {
+                    toast.remove();
+                }
+            }, 3000);
         }
 
         function showHelp() {
