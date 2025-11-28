@@ -772,9 +772,10 @@ if (MaintenanceMode::handle()) {
 
                     data.data.products.forEach(product => {
                         const productCard = document.createElement('div');
-                        const stockStatus = (product.quantity_available || 0) > 0 ? 'In Stock' : 'Out of Stock';
-                        const stockClass = (product.quantity_available || 0) > 0 ? 'success' : 'danger';
-                        const stockIcon = (product.quantity_available || 0) > 0 ? 'check-circle' : 'times-circle';
+                        const quantity = product.quantity_available || 0;
+                        const stockStatus = quantity > 0 ? `${quantity} available` : 'Out of Stock';
+                        const stockClass = quantity > 10 ? 'success' : quantity > 0 ? 'warning' : 'danger';
+                        const stockIcon = quantity > 0 ? 'box' : 'times-circle';
 
                         // Auto-detect base path from current URL
                         const isDevEnvironment = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
