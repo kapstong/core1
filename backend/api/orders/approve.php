@@ -290,26 +290,25 @@ function createSalesEntry($db, $orderId, $order, $orderItems, $currentUser) {
     // This integrates approved online orders with the POS sales history
 
     $saleQuery = "INSERT INTO sales (
-                    order_id, sale_date, customer_id, total_amount,
+                    sale_date, customer_id, total_amount,
                     payment_method, payment_status, created_by, notes
                  ) VALUES (
-                    :order_id, NOW(), :customer_id, :total_amount,
+                    NOW(), :customer_id, :total_amount,
                     :payment_method, :payment_status, :created_by, :notes
                  )";
 
     try {
         $stmt = $db->prepare($saleQuery);
-        $stmt->bindValue(':order_id', $orderId, PDO::PARAM_INT);
         $stmt->bindValue(':customer_id', $order['customer_id'], PDO::PARAM_INT);
         $stmt->bindValue(':total_amount', $order['total_amount']);
-        $stmt->bindValue(':payment_method', $order['payment_method']);
-        $stmt->bindValue(':payment_status', $order['payment_status']);
+        $stmt->bindValue(':payment_method', $order['payment_method'] ?? 'pending');
+        $stmt->bindValue(':payment_status', $order['payment_status'] ?? 'pending');
         $stmt->bindValue(':created_by', $currentUser['id'], PDO::PARAM_INT);
-        $notes = 'Online Customer Order - Approved by ' . $currentUser['full_name'];
+        $notes = 'Online Customer Order #' . $order['order_number'] . ' - Approved by ' . $currentUser['full_name'];
         $stmt->bindValue(':notes', $notes);
         $stmt->execute();
     } catch (PDOException $e) {
-        // If sales table doesn't have order_id column or doesn't exist, skip
+        // If sales table doesn't match schema or doesn't exist, skip (non-critical)
         error_log('Failed to create sales entry: ' . $e->getMessage());
     }
 }
