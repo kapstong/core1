@@ -8253,19 +8253,20 @@ function showSaleDetailsModal(sale) {
                         <div class="row mb-4">
                             <div class="col-md-6">
                                 <h6>Sale Information</h6>
-                                <p><strong>Sale Number:</strong> ${sale.sale_number}</p>
+                                <p><strong>Sale Number:</strong> ${sale.sale_number || sale.invoice_number}</p>
                                 <p><strong>Date:</strong> ${new Date(sale.sale_date).toLocaleString()}</p>
-                                <p><strong>Customer:</strong> ${sale.customer_name || 'Walk-in'}</p>
+                                <p><strong>Customer:</strong> ${sale.customer?.name || sale.customer_name || 'Walk-in'}</p>
+                                <p><strong>Cashier:</strong> ${sale.cashier?.name || 'N/A'}</p>
                             </div>
                             <div class="col-md-6">
                                 <h6>Payment Information</h6>
-                                <p><strong>Payment Method:</strong> ${sale.payment_method}</p>
-                                <p><strong>Status:</strong> ${sale.payment_status}</p>
-                                <p><strong>Created By:</strong> ${sale.created_by_name || 'N/A'}</p>
+                                <p><strong>Method:</strong> ${(sale.payment?.method || sale.payment_method || 'Unknown').toUpperCase()}</p>
+                                <p><strong>Status:</strong> <span class="badge bg-${sale.payment?.status === 'paid' ? 'success' : 'warning'}">${(sale.payment?.status || sale.payment_status || 'Unknown').toUpperCase()}</span></p>
+                                <p><strong>Sale Type:</strong> ${sale.sale_type === 'pos' ? '🏪 POS' : '🌐 Online'}</p>
                             </div>
                         </div>
 
-                        <h6>Items</h6>
+                        <h6>Items (${(sale.items || []).length} item${(sale.items || []).length !== 1 ? 's' : ''})</h6>
                         <div class="table-responsive">
                             <table class="table table-sm">
                                 <thead>
@@ -8280,8 +8281,8 @@ function showSaleDetailsModal(sale) {
                                 <tbody>
                                     ${(sale.items || []).map(item => `
                                         <tr>
-                                            <td>${item.product_name}</td>
-                                            <td><code>${item.sku || 'N/A'}</code></td>
+                                            <td>${item.product?.name || item.product_name || 'Unknown'}</td>
+                                            <td><code>${item.product?.sku || item.sku || 'N/A'}</code></td>
                                             <td>${item.quantity}</td>
                                             <td>${formatCurrency(item.unit_price)}</td>
                                             <td>${formatCurrency(item.quantity * item.unit_price)}</td>
@@ -8289,13 +8290,34 @@ function showSaleDetailsModal(sale) {
                                     `).join('')}
                                 </tbody>
                                 <tfoot>
+                                    <tr style="border-top: 2px solid var(--border-color);">
+                                        <th colspan="3" class="text-end">Subtotal:</th>
+                                        <th colspan="2">${formatCurrency(sale.financials?.subtotal || 0)}</th>
+                                    </tr>
+                                    ${(sale.financials?.discount_amount || 0) > 0 ? `
                                     <tr>
-                                        <th colspan="4" class="text-end">Total:</th>
-                                        <th>${formatCurrency(sale.total_amount)}</th>
+                                        <th colspan="3" class="text-end">Discount:</th>
+                                        <th colspan="2">-${formatCurrency(sale.financials?.discount_amount || 0)}</th>
+                                    </tr>
+                                    ` : ''}
+                                    <tr>
+                                        <th colspan="3" class="text-end">Tax (${((sale.financials?.tax_rate || 0.12) * 100).toFixed(0)}%):</th>
+                                        <th colspan="2">${formatCurrency(sale.financials?.tax_amount || 0)}</th>
+                                    </tr>
+                                    <tr style="border-top: 2px solid var(--accent); font-size: 1.1em;">
+                                        <th colspan="3" class="text-end">TOTAL:</th>
+                                        <th colspan="2" style="color: var(--accent);">${formatCurrency(sale.financials?.total_amount || sale.total_amount || 0)}</th>
                                     </tr>
                                 </tfoot>
                             </table>
                         </div>
+
+                        ${sale.customer?.email || sale.customer_email ? `
+                        <hr>
+                        <h6>Customer Contact</h6>
+                        <p><strong>Email:</strong> ${sale.customer?.email || sale.customer_email}</p>
+                        ${sale.customer?.phone || sale.customer_phone ? `<p><strong>Phone:</strong> ${sale.customer?.phone || sale.customer_phone}</p>` : ''}
+                        ` : ''}
                     </div>
                     <div class="modal-footer" style="border-color: var(--border-color);">
                         <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
