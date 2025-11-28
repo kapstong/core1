@@ -647,7 +647,7 @@ if (!in_array($user['role'], $allowedRoles)) {
     <!-- POS JavaScript -->
     <script>
         // Configuration
-        const API_BASE = '<?php echo dirname($_SERVER['PHP_SELF']); ?>/backend/api';
+        const API_BASE = '../backend/api';
         const currentUser = <?php echo json_encode($user); ?>;
 
         // POS State
