@@ -63,14 +63,15 @@ function getCustomerProfile($customerModel) {
         Response::error('Customer not found', 404);
     }
 
-    // Calculate customer stats from orders
+    // Calculate customer stats from orders (include all orders, not just completed ones)
     $db = Database::getInstance()->getConnection();
     
+    // First, get all orders to see what statuses exist
     $statsQuery = "SELECT 
-                       COUNT(DISTINCT id) as total_orders,
+                       COUNT(id) as total_orders,
                        COALESCE(SUM(total_amount), 0) as total_spent
                    FROM customer_orders
-                   WHERE customer_id = :customer_id AND status IN ('completed', 'shipped', 'delivered')";
+                   WHERE customer_id = :customer_id";
     
     $statsStmt = $db->prepare($statsQuery);
     $statsStmt->bindParam(':customer_id', $customer['id'], PDO::PARAM_INT);
