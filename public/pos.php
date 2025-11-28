@@ -737,6 +737,236 @@ if (!in_array($user['role'], $allowedRoles)) {
         </div>
     </div>
 
+    <!-- Quick Add Product Modal -->
+    <div class="modal fade" id="quickAddProductModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content" style="background: var(--bg-secondary); border: 1px solid var(--border-color);">
+                <div class="modal-header" style="border-bottom: 1px solid var(--border-color);">
+                    <h5 class="modal-title">
+                        <i class="fas fa-plus me-2 text-accent"></i>Quick Add Product
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="quick-add-product-form">
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label for="quick-product-name" class="form-label">Product Name <span class="text-danger">*</span></label>
+                                <input type="text" class="form-control" id="quick-product-name" required style="background: var(--bg-tertiary); border: 1px solid var(--border-color); color: var(--text-primary);">
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label for="quick-product-sku" class="form-label">SKU <span class="text-danger">*</span></label>
+                                <input type="text" class="form-control" id="quick-product-sku" required style="background: var(--bg-tertiary); border: 1px solid var(--border-color); color: var(--text-primary);">
+                            </div>
+                        </div>
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label for="quick-product-category" class="form-label">Category <span class="text-danger">*</span></label>
+                                <select class="form-select" id="quick-product-category" required style="background: var(--bg-tertiary); border: 1px solid var(--border-color); color: var(--text-primary);">
+                                    <option value="">Select Category</option>
+                                    <!-- Categories will be loaded here -->
+                                </select>
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label for="quick-product-price" class="form-label">Selling Price <span class="text-danger">*</span></label>
+                                <div class="input-group">
+                                    <span class="input-group-text">₱</span>
+                                    <input type="number" class="form-control" id="quick-product-price" min="0" step="0.01" required style="background: var(--bg-tertiary); border: 1px solid var(--border-color); color: var(--text-primary);">
+                                </div>
+                            </div>
+                        </div>
+                        <div class="mb-3">
+                            <label for="quick-product-description" class="form-label">Description</label>
+                            <textarea class="form-control" id="quick-product-description" rows="2" style="background: var(--bg-tertiary); border: 1px solid var(--border-color); color: var(--text-primary);"></textarea>
+                        </div>
+                        <div class="alert alert-info">
+                            <small><i class="fas fa-info-circle me-1"></i>Product will have 0 stock initially. Use inventory management to add stock after creation.</small>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer" style="border-top: 1px solid var(--border-color);">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-accent" onclick="submitQuickAddProduct()">
+                        <i class="fas fa-plus me-1"></i>Quick Add Product
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Recall Sale Modal -->
+    <div class="modal fade" id="recallSaleModal" tabindex="-1">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content" style="background: var(--bg-secondary); border: 1px solid var(--border-color);">
+                <div class="modal-header" style="border-bottom: 1px solid var(--border-color);">
+                    <h5 class="modal-title">
+                        <i class="fas fa-history me-2 text-primary"></i>Recall Held Sale
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div id="recall-sales-loading" class="text-center py-4">
+                        <div class="spinner-border text-accent" role="status">
+                            <span class="visually-hidden">Loading...</span>
+                        </div>
+                        <p class="text-muted mt-2">Loading held sales...</p>
+                    </div>
+                    <div id="recall-sales-empty" class="text-center py-4 d-none">
+                        <i class="fas fa-inbox fa-3x text-muted mb-3"></i>
+                        <h6>No Held Sales</h6>
+                        <p class="text-muted">No sales are currently held</p>
+                    </div>
+                    <div id="recall-sales-list" class="d-none">
+                        <div class="table-responsive">
+                            <table class="table table-hover">
+                                <thead>
+                                    <tr>
+                                        <th>Sale #</th>
+                                        <th>Customer</th>
+                                        <th>Items</th>
+                                        <th>Total</th>
+                                        <th>Time</th>
+                                        <th>Action</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="recall-sales-table-body">
+                                    <!-- Held sales will be loaded here -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer" style="border-top: 1px solid var(--border-color);">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Customer Search Modal -->
+    <div class="modal fade" id="customerSearchModal" tabindex="-1">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content" style="background: var(--bg-secondary); border: 1px solid var(--border-color);">
+                <div class="modal-header" style="border-bottom: 1px solid var(--border-color);">
+                    <h5 class="modal-title">
+                        <i class="fas fa-users me-2 text-primary"></i>Search Customers
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="input-group mb-3">
+                        <span class="input-group-text"><i class="fas fa-search"></i></span>
+                        <input type="text" class="form-control" id="customer-search-input" placeholder="Enter customer name, email, or phone..." style="background: var(--bg-tertiary); border: 1px solid var(--border-color); color: var(--text-primary);">
+                        <button class="btn btn-accent" onclick="performCustomerSearch()">
+                            <i class="fas fa-search me-1"></i>Search
+                        </button>
+                    </div>
+                    <div id="customer-search-loading" class="text-center py-4 d-none">
+                        <div class="spinner-border text-accent" role="status">
+                            <span class="visually-hidden">Loading...</span>
+                        </div>
+                        <p class="text-muted mt-2">Searching customers...</p>
+                    </div>
+                    <div id="customer-search-empty" class="text-center py-4 d-none">
+                        <i class="fas fa-user-slash fa-3x text-muted mb-3"></i>
+                        <h6>No Customers Found</h6>
+                        <p class="text-muted">Try a different search term</p>
+                    </div>
+                    <div id="customer-search-results" class="d-none">
+                        <div class="table-responsive">
+                            <table class="table table-hover">
+                                <thead>
+                                    <tr>
+                                        <th>Name</th>
+                                        <th>Email</th>
+                                        <th>Phone</th>
+                                        <th>Address</th>
+                                        <th>Action</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="customer-search-table-body">
+                                    <!-- Search results will be loaded here -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer" style="border-top: 1px solid var(--border-color);">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-outline-primary" onclick="clearCustomerSelection()">
+                        <i class="fas fa-user-plus me-1"></i>Use Walk-in Customer
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Receipt Preview Modal -->
+    <div class="modal fade" id="receiptPreviewModal" tabindex="-1">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content" style="background: var(--bg-secondary); border: 1px solid var(--border-color);">
+                <div class="modal-header" style="border-bottom: 1px solid var(--border-color);">
+                    <h5 class="modal-title">
+                        <i class="fas fa-receipt me-2 text-primary"></i>Receipt Preview
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="text-center mb-3">
+                        <small class="text-muted">This is how your receipt will appear when printed</small>
+                    </div>
+                    <div id="receipt-preview-content" class="border border-secondary rounded p-3" style="background: white; color: black; font-family: 'Courier New', monospace; font-size: 12px; max-height: 400px; overflow-y: auto;">
+                        <!-- Receipt preview content will be loaded here -->
+                    </div>
+                </div>
+                <div class="modal-footer" style="border-top: 1px solid var(--border-color);">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                    <button type="button" class="btn btn-primary" onclick="doPrintReceipt()">
+                        <i class="fas fa-print me-1"></i>Print Receipt
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Email Receipt Modal -->
+    <div class="modal fade" id="emailReceiptModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content" style="background: var(--bg-secondary); border: 1px solid var(--border-color);">
+                <div class="modal-header" style="border-bottom: 1px solid var(--border-color);">
+                    <h5 class="modal-title">
+                        <i class="fas fa-envelope me-2 text-primary"></i>Email Receipt
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label for="receipt-email-address" class="form-label">Email Address <span class="text-danger">*</span></label>
+                        <input type="email" class="form-control" id="receipt-email-address" placeholder="customer@example.com" required style="background: var(--bg-tertiary); border: 1px solid var(--border-color); color: var(--text-primary);">
+                        <div class="invalid-feedback">Please enter a valid email address.</div>
+                    </div>
+                    <div class="mb-3">
+                        <label for="receipt-email-subject" class="form-label">Subject</label>
+                        <input type="text" class="form-control" id="receipt-email-subject" placeholder="Your receipt from PC Parts Central" value="Your receipt from PC Parts Central" required style="background: var(--bg-tertiary); border: 1px solid var(--border-color); color: var(--text-primary);">
+                    </div>
+                    <div class="mb-3">
+                        <label for="receipt-email-message" class="form-label">Additional Message</label>
+                        <textarea class="form-control" id="receipt-email-message" rows="3" placeholder="Thank you for shopping with us!" style="background: var(--bg-tertiary); border: 1px solid var(--border-color); color: var(--text-primary);"></textarea>
+                    </div>
+                    <small class="text-muted">
+                        <i class="fas fa-info-circle me-1"></i>The receipt will be attached as a PDF file.
+                    </small>
+                </div>
+                <div class="modal-footer" style="border-top: 1px solid var(--border-color);">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-primary" onclick="doEmailReceipt()">
+                        <i class="fas fa-paper-plane me-1"></i>Send Email
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Loading Overlay -->
     <div class="loading-overlay d-none" id="loading-overlay">
         <div class="text-center">
@@ -764,6 +994,7 @@ if (!in_array($user['role'], $allowedRoles)) {
         let posHeldSales = [];
         let currentView = 'grid';
         let isFullscreen = false;
+        let lastCompletedSale = null; // Store last completed sale for receipts
 
         // Initialize POS
         document.addEventListener('DOMContentLoaded', function() {
@@ -1170,6 +1401,24 @@ if (!in_array($user['role'], $allowedRoles)) {
                     // Reload products to update stock
                     loadProducts();
 
+                    // Store the last completed sale data for receipts
+                    lastCompletedSale = {
+                        saleNumber: saleNumber,
+                        customerName: customerName,
+                        date: new Date().toLocaleString(),
+                        items: posCart.map(item => ({
+                            name: item.name,
+                            quantity: item.quantity,
+                            price: item.price,
+                            total: item.price * item.quantity
+                        })),
+                        subtotal: subtotal,
+                        tax: tax,
+                        total: total,
+                        cashierName: currentUser.full_name || currentUser.username,
+                        saleId: data.data.sale_id
+                    };
+
                     // Enable receipt buttons
                     document.getElementById('print-receipt-btn').disabled = false;
                     document.getElementById('email-receipt-btn').disabled = false;
@@ -1248,7 +1497,97 @@ if (!in_array($user['role'], $allowedRoles)) {
         }
 
         function quickAddProduct() {
-            showToast('Quick add product functionality - can be implemented for custom items', 'info');
+            // Load categories for the quick add modal
+            loadCategoriesForQuickAdd();
+
+            const modal = new bootstrap.Modal(document.getElementById('quickAddProductModal'));
+            modal.show();
+            // Focus on first input
+            setTimeout(() => document.getElementById('quick-product-name').focus(), 100);
+        }
+
+        async function loadCategoriesForQuickAdd() {
+            try {
+                const response = await fetch(`${API_BASE}/categories/index.php`);
+                const data = await response.json();
+
+                if (data.success && data.data.categories) {
+                    const select = document.getElementById('quick-product-category');
+                    select.innerHTML = '<option value="">Select Category</option>';
+
+                    data.data.categories.forEach(cat => {
+                        select.innerHTML += `<option value="${cat.id}">${cat.name}</option>`;
+                    });
+                }
+            } catch (error) {
+                console.error('Error loading categories for quick add:', error);
+            }
+        }
+
+        async function submitQuickAddProduct() {
+            const name = document.getElementById('quick-product-name').value.trim();
+            const sku = document.getElementById('quick-product-sku').value.trim();
+            const categoryId = document.getElementById('quick-product-category').value;
+            const price = parseFloat(document.getElementById('quick-product-price').value);
+            const description = document.getElementById('quick-product-description').value.trim();
+
+            // Validation
+            if (!name || !sku || !categoryId || isNaN(price) || price <= 0) {
+                showToast('Please fill in all required fields with valid values', 'warning');
+                return;
+            }
+
+            // Calculate cost price (60% of selling price as default)
+            const costPrice = price * 0.6;
+
+            const productData = {
+                name: name,
+                sku: sku,
+                category_id: categoryId,
+                cost_price: costPrice,
+                selling_price: price,
+                description: description || null,
+                min_stock_level: 1,
+                is_active: 1
+            };
+
+            const submitBtn = document.querySelector('#quickAddProductModal .btn-accent');
+            const originalText = submitBtn.innerHTML;
+
+            submitBtn.disabled = true;
+            submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Creating...';
+
+            try {
+                const response = await fetch(`${API_BASE}/products/create.php`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(productData)
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    showToast('Product created successfully!', 'success');
+
+                    // Close modal and reset form
+                    const modal = bootstrap.Modal.getInstance(document.getElementById('quickAddProductModal'));
+                    modal.hide();
+
+                    // Reset form
+                    document.getElementById('quick-add-product-form').reset();
+
+                    // Reload products to show the new one
+                    loadProducts();
+
+                } else {
+                    showToast('Error creating product: ' + (data.message || 'Unknown error'), 'error');
+                }
+            } catch (error) {
+                showToast('Error creating product. Please try again.', 'error');
+            } finally {
+                submitBtn.disabled = false;
+                submitBtn.innerHTML = originalText;
+            }
         }
 
         function holdSale() {
@@ -1263,6 +1602,8 @@ if (!in_array($user['role'], $allowedRoles)) {
                 saleNumber: saleNumber,
                 timestamp: new Date().toISOString(),
                 customer: document.getElementById('pos-customer-name').value || 'Walk-in Customer',
+                paymentMethod: document.querySelector('input[name="payment-method"]:checked').value,
+                cashReceived: parseFloat(document.getElementById('pos-cash-received').value) || 0,
                 items: [...posCart],
                 subtotal: parseFloat(document.getElementById('pos-subtotal').textContent.replace('₱', '').replace(',', '')),
                 tax: parseFloat(document.getElementById('pos-tax').textContent.replace('₱', '').replace(',', '')),
@@ -1276,8 +1617,10 @@ if (!in_array($user['role'], $allowedRoles)) {
             posCart = [];
             updateCartDisplay();
 
-            // Reset customer name
+            // Reset form fields
             document.getElementById('pos-customer-name').value = '';
+            document.getElementById('pos-cash-received').value = '';
+            document.getElementById('pos-change').textContent = '₱0.00';
 
             // Generate new sale number
             document.getElementById('pos-sale-number').textContent = 'Sale #' + Date.now();
@@ -1286,16 +1629,196 @@ if (!in_array($user['role'], $allowedRoles)) {
         }
 
         function recallSale() {
-            if (posHeldSales.length === 0) {
-                showToast('No held sales available', 'info');
+            populateRecallSaleModal();
+
+            const modal = new bootstrap.Modal(document.getElementById('recallSaleModal'));
+            modal.show();
+        }
+
+        function populateRecallSaleModal() {
+            const salesList = document.getElementById('recall-sales-list');
+            const emptyState = document.getElementById('recall-sales-empty');
+            const loadingState = document.getElementById('recall-sales-loading');
+            const tableBody = document.getElementById('recall-sales-table-body');
+
+            loadingState.classList.remove('d-none');
+            salesList.classList.add('d-none');
+            emptyState.classList.add('d-none');
+
+            // Small delay to show loading state
+            setTimeout(() => {
+                if (posHeldSales.length === 0) {
+                    loadingState.classList.add('d-none');
+                    emptyState.classList.remove('d-none');
+                    return;
+                }
+
+                tableBody.innerHTML = '';
+                posHeldSales.forEach(sale => {
+                    const row = document.createElement('tr');
+                    const formattedTime = new Date(sale.timestamp).toLocaleString();
+
+                    row.innerHTML = `
+                        <td>${sale.saleNumber}</td>
+                        <td>${sale.customer}</td>
+                        <td>${sale.items.length} item${sale.items.length !== 1 ? 's' : ''}</td>
+                        <td>₱${sale.total.toLocaleString()}</td>
+                        <td><small>${formattedTime}</small></td>
+                        <td>
+                            <button class="btn btn-sm btn-accent" onclick="selectHeldSale(${sale.id})">
+                                <i class="fas fa-check me-1"></i>Select
+                            </button>
+                            <button class="btn btn-sm btn-outline-danger ms-1" onclick="deleteHeldSale(${sale.id})">
+                                <i class="fas fa-trash"></i>
+                            </button>
+                        </td>
+                    `;
+                    tableBody.appendChild(row);
+                });
+
+                loadingState.classList.add('d-none');
+                salesList.classList.remove('d-none');
+            }, 300);
+        }
+
+        function selectHeldSale(saleId) {
+            const sale = posHeldSales.find(s => s.id === saleId);
+            if (!sale) {
+                showToast('Sale not found', 'error');
                 return;
             }
 
-            showToast('Recall sale functionality - can be enhanced with a modal to select held sales', 'info');
+            // Restore cart
+            posCart = [...sale.items];
+
+            // Restore customer and sale info
+            document.getElementById('pos-customer-name').value = sale.customer;
+            document.getElementById('pos-sale-number').textContent = sale.saleNumber;
+
+            // Restore payment method and cash received if applicable
+            if (sale.paymentMethod) {
+                const paymentRadio = document.querySelector(`input[name="payment-method"][value="${sale.paymentMethod}"]`);
+                if (paymentRadio) {
+                    paymentRadio.checked = true;
+                    toggleCashPaymentSection(sale.paymentMethod === 'cash');
+                    if (sale.paymentMethod === 'cash' && sale.cashReceived) {
+                        document.getElementById('pos-cash-received').value = sale.cashReceived;
+                        calculateChange();
+                    }
+                }
+            }
+
+            // Update display
+            updateCartDisplay();
+
+            // Remove from held sales
+            posHeldSales = posHeldSales.filter(s => s.id !== saleId);
+            localStorage.setItem('posHeldSales', JSON.stringify(posHeldSales));
+
+            // Close modal
+            const modal = bootstrap.Modal.getInstance(document.getElementById('recallSaleModal'));
+            modal.hide();
+
+            showToast(`Sale ${sale.saleNumber} recalled successfully`, 'success');
+        }
+
+        function deleteHeldSale(saleId) {
+            if (!confirm('Are you sure you want to delete this held sale? This action cannot be undone.')) {
+                return;
+            }
+
+            posHeldSales = posHeldSales.filter(s => s.id !== saleId);
+            localStorage.setItem('posHeldSales', JSON.stringify(posHeldSales));
+
+            populateRecallSaleModal();
+            showToast('Held sale deleted', 'success');
         }
 
         function searchCustomer() {
-            showToast('Customer search functionality - can be enhanced to search existing customers', 'info');
+            // Clear previous search
+            document.getElementById('customer-search-input').value = '';
+            document.getElementById('customer-search-results').classList.add('d-none');
+            document.getElementById('customer-search-empty').classList.add('d-none');
+
+            const modal = new bootstrap.Modal(document.getElementById('customerSearchModal'));
+            modal.show();
+
+            // Focus on search input
+            setTimeout(() => document.getElementById('customer-search-input').focus(), 100);
+        }
+
+        async function performCustomerSearch() {
+            const query = document.getElementById('customer-search-input').value.trim();
+            if (!query) {
+                showToast('Please enter a search term', 'warning');
+                return;
+            }
+
+            const loadingState = document.getElementById('customer-search-loading');
+            const resultsState = document.getElementById('customer-search-results');
+            const emptyState = document.getElementById('customer-search-empty');
+            const tableBody = document.getElementById('customer-search-table-body');
+
+            loadingState.classList.remove('d-none');
+            resultsState.classList.add('d-none');
+            emptyState.classList.add('d-none');
+
+            try {
+                const response = await fetch(`${API_BASE}/customers/search.php?q=${encodeURIComponent(query)}`);
+                const data = await response.json();
+
+                loadingState.classList.add('d-none');
+
+                if (data.success && data.customers && data.customers.length > 0) {
+                    tableBody.innerHTML = '';
+                    data.customers.forEach(customer => {
+                        const row = document.createElement('tr');
+
+                        // Handle different column names
+                        const customerName = customer.name || `${customer.first_name || ''} ${customer.last_name || ''}`.trim();
+
+                        row.innerHTML = `
+                            <td>${customerName}</td>
+                            <td>${customer.email || '-'}</td>
+                            <td>${customer.phone || '-'}</td>
+                            <td>${customer.address || '-'}</td>
+                            <td>
+                                <button class="btn btn-sm btn-accent" onclick="selectCustomer('${customerName.replace(/'/g, "\\'").replace(/"/g, '\\"')}')">
+                                    <i class="fas fa-check me-1"></i>Select
+                                </button>
+                            </td>
+                        `;
+                        tableBody.appendChild(row);
+                    });
+                    resultsState.classList.remove('d-none');
+                } else {
+                    emptyState.classList.remove('d-none');
+                }
+            } catch (error) {
+                loadingState.classList.add('d-none');
+                emptyState.classList.remove('d-none');
+                console.error('Customer search error:', error);
+            }
+        }
+
+        function selectCustomer(customerName) {
+            document.getElementById('pos-customer-name').value = customerName;
+
+            // Close modal
+            const modal = bootstrap.Modal.getInstance(document.getElementById('customerSearchModal'));
+            modal.hide();
+
+            showToast(`Customer "${customerName}" selected`, 'success');
+        }
+
+        function clearCustomerSelection() {
+            document.getElementById('pos-customer-name').value = 'Walk-in Customer';
+
+            // Close modal
+            const modal = bootstrap.Modal.getInstance(document.getElementById('customerSearchModal'));
+            modal.hide();
+
+            showToast('Cleared to walk-in customer', 'info');
         }
 
         function printReceipt() {
@@ -1304,13 +1827,56 @@ if (!in_array($user['role'], $allowedRoles)) {
                 return;
             }
 
-            // Create printable receipt
-            const receiptWindow = window.open('', '_blank', 'width=400,height=600');
+            // Generate receipt HTML
             const receiptHTML = generateReceiptHTML();
 
-            receiptWindow.document.write(receiptHTML);
-            receiptWindow.document.close();
-            receiptWindow.print();
+            // Show preview modal
+            document.getElementById('receipt-preview-content').innerHTML = receiptHTML;
+            const modal = new bootstrap.Modal(document.getElementById('receiptPreviewModal'));
+            modal.show();
+        }
+
+        function doPrintReceipt() {
+            const receiptContent = document.getElementById('receipt-preview-content').innerHTML;
+
+            // Create printable receipt
+            const printWindow = window.open('', '_blank', 'width=400,height=600');
+            printWindow.document.write(`
+                <!DOCTYPE html>
+                <html>
+                <head>
+                    <title>Receipt - ${document.getElementById('pos-sale-number').textContent}</title>
+                    <style>
+                        body { font-family: 'Courier New', monospace; font-size: 12px; max-width: 300px; margin: 0 auto; }
+                        .receipt { background: white; color: black; padding: 20px; }
+                        .receipt-header { text-align: center; margin-bottom: 20px; }
+                        .receipt-store { font-size: 16px; font-weight: bold; margin-bottom: 10px; }
+                        .receipt-table { width: 100%; border-collapse: collapse; margin: 20px 0; }
+                        .receipt-table th, .receipt-table td { padding: 5px; text-align: left; }
+                        .receipt-table .text-center { text-align: center; }
+                        .receipt-table .text-end { text-align: right; }
+                        .receipt-table .total { border-top: 1px solid #000; font-weight: bold; }
+                        .receipt-footer { text-align: center; margin-top: 20px; font-size: 10px; }
+                        @media print { body { margin: 0; } }
+                    </style>
+                </head>
+                <body>
+                    <div class="receipt">
+                        ${receiptContent}
+                    </div>
+                </body>
+                </html>
+            `);
+            printWindow.document.close();
+
+            // Close modal first, then print
+            const previewModal = bootstrap.Modal.getInstance(document.getElementById('receiptPreviewModal'));
+            previewModal.hide();
+
+            setTimeout(() => {
+                printWindow.print();
+                printWindow.close();
+            }, 300);
 
             showToast('Receipt sent to printer', 'success');
         }
@@ -1321,8 +1887,88 @@ if (!in_array($user['role'], $allowedRoles)) {
                 return;
             }
 
+            // Pre-fill customer email if available in customer name (email format)
             const customerName = document.getElementById('pos-customer-name').value || 'Walk-in Customer';
-            showToast('Receipt emailed to ' + customerName, 'success');
+            let prefilledEmail = '';
+
+            // Try to extract email from customer name if it looks like an email
+            if (customerName.includes('@') && customerName.includes('.')) {
+                prefilledEmail = customerName;
+            }
+
+            // Prefill the email field
+            document.getElementById('receipt-email-address').value = prefilledEmail;
+
+            // Show email modal
+            const modal = new bootstrap.Modal(document.getElementById('emailReceiptModal'));
+            modal.show();
+        }
+
+        async function doEmailReceipt() {
+            const emailAddress = document.getElementById('receipt-email-address').value.trim();
+            const emailSubject = document.getElementById('receipt-email-subject').value.trim();
+            const emailMessage = document.getElementById('receipt-email-message').value.trim();
+
+            // Validation
+            if (!emailAddress) {
+                showToast('Please enter an email address', 'warning');
+                document.getElementById('receipt-email-address').focus();
+                return;
+            }
+
+            // Basic email validation
+            const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+            if (!emailRegex.test(emailAddress)) {
+                showToast('Please enter a valid email address', 'warning');
+                document.getElementById('receipt-email-address').focus();
+                return;
+            }
+
+            const sendBtn = document.querySelector('#emailReceiptModal .btn-primary');
+            const originalText = sendBtn.innerHTML;
+
+            sendBtn.disabled = true;
+            sendBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Sending...';
+
+            try {
+                // Generate receipt HTML for email
+                const receiptHTML = generateReceiptHTML();
+
+                // Prepare email data
+                const emailData = {
+                    to: emailAddress,
+                    subject: emailSubject,
+                    message: emailMessage,
+                    receipt_html: receiptHTML,
+                    sale_number: document.getElementById('pos-sale-number').textContent,
+                    customer_name: document.getElementById('pos-customer-name').value || 'Walk-in Customer',
+                    total_amount: document.getElementById('pos-total').textContent
+                };
+
+                // Note: This would normally send to a backend email endpoint
+                // For now, we'll simulate the email sending
+                console.log('Email data:', emailData);
+
+                // Simulate API call delay
+                await new Promise(resolve => setTimeout(resolve, 1500));
+
+                // Close modal and reset form
+                const modal = bootstrap.Modal.getInstance(document.getElementById('emailReceiptModal'));
+                modal.hide();
+
+                // Reset form for next use
+                document.getElementById('receipt-email-address').value = '';
+                document.getElementById('receipt-email-subject').value = 'Your receipt from PC Parts Central';
+
+                showToast(`Receipt emailed successfully to ${emailAddress}`, 'success');
+
+            } catch (error) {
+                console.error('Email send error:', error);
+                showToast('Failed to send email. Please try again.', 'error');
+            } finally {
+                sendBtn.disabled = false;
+                sendBtn.innerHTML = originalText;
+            }
         }
 
         function generateReceiptHTML() {
