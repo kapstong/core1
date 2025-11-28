@@ -193,16 +193,6 @@ function approveOrder($db, $orderId, $order, $orderItems, $currentUser) {
         $productId = (int)$item['product_id'];
         $quantity = (int)$item['quantity'];
 
-        // Get current inventory levels before update
-        $invQuery = "SELECT quantity_on_hand, quantity_reserved FROM inventory WHERE product_id = :product_id";
-        $invStmt = $db->prepare($invQuery);
-        $invStmt->bindValue(':product_id', $productId, PDO::PARAM_INT);
-        $invStmt->execute();
-        $invData = $invStmt->fetch(PDO::FETCH_ASSOC);
-
-        $quantityBefore = $invData ? $invData['quantity_on_hand'] : 0;
-        $quantityAfter = $quantityBefore - $quantity;
-
         // Update inventory: reduce quantity_on_hand and quantity_reserved
         $updateInvQuery = "UPDATE inventory
                           SET quantity_on_hand = quantity_on_hand - :quantity,
@@ -213,52 +203,7 @@ function approveOrder($db, $orderId, $order, $orderItems, $currentUser) {
         $invUpdateStmt->bindValue(':quantity', $quantity, PDO::PARAM_INT);
         $invUpdateStmt->bindValue(':product_id', $productId, PDO::PARAM_INT);
         $invUpdateStmt->execute();
-
-        // Create stock movement record for audit trail - Optional, skip if fails
-        try {
-            $movementQuery = "INSERT INTO stock_movements (
-                                product_id, movement_type, quantity, quantity_before, quantity_after,
-                                reference_type, reference_id, performed_by, notes
-                             ) VALUES (
-                                :product_id, 'sale', :quantity_neg, :quantity_before, :quantity_after,
-                                'CUSTOMER_ORDER', :order_id, :performed_by, :notes
-                             )";
-
-            $movementStmt = $db->prepare($movementQuery);
-            $movementStmt->bindValue(':product_id', $productId, PDO::PARAM_INT);
-            $movementStmt->bindValue(':quantity_neg', -$quantity, PDO::PARAM_INT);
-            $movementStmt->bindValue(':quantity_before', $quantityBefore, PDO::PARAM_INT);
-            $movementStmt->bindValue(':quantity_after', $quantityAfter, PDO::PARAM_INT);
-            $movementStmt->bindValue(':order_id', $orderId, PDO::PARAM_INT);
-            $movementStmt->bindValue(':performed_by', $currentUser['id'], PDO::PARAM_INT);
-            $notes = 'Customer Order Approved - ' . $item['product_name'];
-            $movementStmt->bindValue(':notes', $notes);
-            $movementStmt->execute();
-        } catch (Throwable $e) {
-            error_log('Failed to create stock movement (non-critical): ' . $e->getMessage());
-        }
     }
-
-    // 3. Create sales entry (integrate with Sales History) - DISABLED for now
-    // TODO: Re-enable once sales table schema is verified
-    /*
-    try {
-        createSalesEntry($db, $orderId, $order, $orderItems, $currentUser);
-    } catch (Throwable $e) {
-        error_log('Failed to create sales entry (non-critical): ' . $e->getMessage());
-    }
-    */
-
-    // 4. Log activity - DISABLED for now
-    // TODO: Re-enable once activity_logs table schema is verified
-    /*
-    try {
-        logActivity($db, $currentUser['id'], 'order_approved', 'customer_orders', $orderId,
-                    "Order #{$order['order_number']} approved by {$currentUser['full_name']}");
-    } catch (Throwable $e) {
-        error_log('Failed to log activity (non-critical): ' . $e->getMessage());
-    }
-    */
 }
 
 /**
