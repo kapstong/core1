@@ -1047,6 +1047,15 @@ if (!in_array($user['role'], $allowedRoles)) {
             // Cash received input
             document.getElementById('pos-cash-received').addEventListener('input', calculateChange);
 
+            // Customer selection buttons (event delegation)
+            document.addEventListener('click', function(e) {
+                if (e.target.classList.contains('select-customer-btn') || e.target.closest('.select-customer-btn')) {
+                    const btn = e.target.classList.contains('select-customer-btn') ? e.target : e.target.closest('.select-customer-btn');
+                    const customerName = btn.getAttribute('data-customer-name');
+                    selectCustomer(customerName);
+                }
+            });
+
             // Keyboard shortcuts
             document.addEventListener('keydown', handleKeyboard);
         }
@@ -1783,7 +1792,7 @@ if (!in_array($user['role'], $allowedRoles)) {
                             <td>${customer.phone || '-'}</td>
                             <td>${customer.address || '-'}</td>
                             <td>
-                                <button class="btn btn-sm btn-accent" onclick="selectCustomer('${customerName.replace(/&/g, '&').replace(/'/g, "\\'").replace(/"/g, '\\"')}')">
+                                <button class="btn btn-sm btn-accent select-customer-btn" data-customer-name="${customerName.replace(/"/g, '"')}">
                                     <i class="fas fa-check me-1"></i>Select
                                 </button>
                             </td>
