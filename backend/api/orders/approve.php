@@ -224,7 +224,7 @@ function rejectOrder($db, $orderId, $order, $orderItems, $currentUser, $reason) 
 
     $stmt = $db->prepare($updateQuery);
     $stmt->bindValue(':order_id', $orderId, PDO::PARAM_INT);
-    $stmt->bindValue(':reason', $reason ?? 'No reason provided');
+    $stmt->bindValue(':reason', $reason ?: 'No reason provided');
     $stmt->execute();
 
     // 2. Release reserved stock for each item
@@ -290,20 +290,9 @@ function createSalesEntry($db, $order, $orderItems, $currentUser) {
     $customerPhone = $order['phone'] ?? null;
 
     // Create sale record - EXACTLY like create.php
-    $saleQuery = "
-        INSERT INTO sales (
-            invoice_number, cashier_id, customer_name, customer_email, customer_phone,
-            subtotal, tax_amount, tax_rate, discount_amount, total_amount,
-            payment_method, payment_status, notes
-        ) VALUES (
-            :invoice_number, :cashier_id, :customer_name, :customer_email, :customer_phone,
-            :subtotal, :tax_amount, :tax_rate, :discount_amount, :total_amount,
-            :payment_method, :payment_status, :notes
-        )
-    ";
+    $saleQuery = "INSERT INTO sales (invoice_number, cashier_id, customer_name, customer_email, customer_phone, subtotal, tax_amount, tax_rate, discount_amount, total_amount, payment_method, payment_status, notes) VALUES (:invoice_number, :cashier_id, :customer_name, :customer_email, :customer_phone, :subtotal, :tax_amount, :tax_rate, :discount_amount, :total_amount, :payment_method, :payment_status, :notes)";
 
-    $stmt = $db->prepare($saleQuery);
-    $stmt->execute([
+    $params = [
         ':invoice_number' => $invoiceNumber,
         ':cashier_id' => $currentUser['id'],
         ':customer_name' => $customerName,
@@ -317,9 +306,36 @@ function createSalesEntry($db, $order, $orderItems, $currentUser) {
         ':payment_method' => $paymentMethod,
         ':payment_status' => 'paid',
         ':notes' => 'Customer Order #' . ($order['order_number'] ?? $order['id'])
-    ]);
+    ];
 
-    $saleId = $db->lastInsertId();
+    try {
+        error_log('About to execute sales INSERT with params: ' . json_encode($params));
+        $stmt = $db->prepare($saleQuery);
+
+        // Bind parameters individually to handle NULL values properly
+        $stmt->bindValue(':invoice_number', $invoiceNumber);
+        $stmt->bindValue(':cashier_id', $currentUser['id'], PDO::PARAM_INT);
+        $stmt->bindValue(':customer_name', $customerName);
+        $stmt->bindValue(':customer_email', $customerEmail);
+        $stmt->bindValue(':customer_phone', $customerPhone);
+        $stmt->bindValue(':subtotal', $subtotal);
+        $stmt->bindValue(':tax_amount', $taxAmount);
+        $stmt->bindValue(':tax_rate', $taxRate);
+        $stmt->bindValue(':discount_amount', 0);
+        $stmt->bindValue(':total_amount', $totalAmount);
+        $stmt->bindValue(':payment_method', $paymentMethod);
+        $stmt->bindValue(':payment_status', 'paid');
+        $stmt->bindValue(':notes', 'Customer Order #' . ($order['order_number'] ?? $order['id']));
+
+        $stmt->execute();
+        $saleId = $db->lastInsertId();
+        error_log('Sales INSERT successful. Sale ID: ' . $saleId);
+    } catch (PDOException $e) {
+        error_log('Sales INSERT failed: ' . $e->getMessage());
+        error_log('Query: ' . $saleQuery);
+        error_log('Params: ' . json_encode($params));
+        throw $e;
+    }
 
     // Create sale items
     foreach ($orderItems as $item) {
