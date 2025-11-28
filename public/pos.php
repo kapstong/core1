@@ -117,6 +117,30 @@ if (!in_array($user['role'], $allowedRoles)) {
             font-weight: 600;
         }
 
+        /* Tab Navigation Styling */
+        .nav-tabs .nav-link {
+            background: transparent;
+            border: 1px solid transparent;
+            color: var(--text-secondary);
+            transition: all 0.3s ease;
+        }
+
+        .nav-tabs .nav-link:hover {
+            color: var(--accent);
+            border-color: transparent;
+            background: rgba(0, 245, 255, 0.05);
+        }
+
+        .nav-tabs .nav-link.active {
+            background: var(--bg-secondary);
+            border-color: var(--border-color) var(--border-color) transparent;
+            color: var(--accent);
+        }
+
+        .tab-content {
+            background: transparent;
+        }
+
         .btn-accent:hover {
             background: #00e0e6;
             color: var(--bg-primary);

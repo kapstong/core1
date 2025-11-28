@@ -220,6 +220,7 @@ function getPendingOrders() {
             co.id,
             co.order_number,
             co.status,
+            co.created_at,
             co.order_date,
             co.subtotal,
             co.tax_amount,
@@ -233,7 +234,7 @@ function getPendingOrders() {
         FROM customer_orders co
         INNER JOIN customers c ON co.customer_id = c.id
         WHERE co.status = 'pending'
-        ORDER BY co.order_date DESC
+        ORDER BY co.created_at DESC
     ");
 
     $stmt->execute();

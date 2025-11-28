@@ -41,7 +41,7 @@ async function loadPendingOrders() {
                             </div>
                             <p class="card-text small text-muted mb-2">
                                 <i class="fas fa-calendar me-1"></i>
-                                ${new Date(order.order_date).toLocaleDateString('en-US', {
+                                ${new Date(order.created_at || order.order_date).toLocaleDateString('en-US', {
                                     month: 'short',
                                     day: 'numeric',
                                     year: 'numeric',
@@ -96,8 +96,8 @@ async function viewOrderDetails(orderId) {
         const response = await fetch(`../backend/api/shop/orders.php?action=details&id=${orderId}`);
         const data = await response.json();
 
-        if (data.success && data.data) {
-            const order = data.data;
+        if (data.success && data.data && data.data.order) {
+            const order = data.data.order;
 
             // Build items HTML
             const itemsHTML = order.items && order.items.length > 0
@@ -116,7 +116,7 @@ async function viewOrderDetails(orderId) {
                     <div class="col-md-6">
                         <h6 class="text-accent">Order Information</h6>
                         <p class="mb-1"><strong>Order Number:</strong> ${order.order_number}</p>
-                        <p class="mb-1"><strong>Order Date:</strong> ${new Date(order.order_date).toLocaleString('en-US')}</p>
+                        <p class="mb-1"><strong>Order Date:</strong> ${new Date(order.created_at || order.order_date).toLocaleString('en-US')}</p>
                         <p class="mb-1"><strong>Status:</strong> <span class="badge bg-warning text-dark">${order.status}</span></p>
                         <p class="mb-1"><strong>Payment Method:</strong> ${order.payment_method || 'N/A'}</p>
                         <p class="mb-1"><strong>Payment Status:</strong> ${order.payment_status || 'N/A'}</p>
@@ -125,7 +125,7 @@ async function viewOrderDetails(orderId) {
                         <h6 class="text-accent">Customer Information</h6>
                         <p class="mb-1"><strong>Name:</strong> ${order.customer_name || (order.first_name + ' ' + order.last_name) || 'N/A'}</p>
                         <p class="mb-1"><strong>Email:</strong> ${order.email || 'N/A'}</p>
-                        <p class="mb-1"><strong>Phone:</strong> ${order.shipping_phone || order.phone || 'N/A'}</p>
+                        <p class="mb-1"><strong>Phone:</strong> ${order.shipping_address?.phone || order.phone || 'N/A'}</p>
                     </div>
                 </div>
 
@@ -133,19 +133,23 @@ async function viewOrderDetails(orderId) {
                     <div class="col-md-6">
                         <h6 class="text-accent">Shipping Address</h6>
                         <address class="small">
-                            ${order.shipping_address_1 || 'N/A'}<br>
-                            ${order.shipping_address_2 ? order.shipping_address_2 + '<br>' : ''}
-                            ${order.shipping_city || ''}, ${order.shipping_state || ''} ${order.shipping_postal || ''}<br>
-                            ${order.shipping_country || ''}
+                            ${order.shipping_address?.first_name || ''} ${order.shipping_address?.last_name || ''}<br>
+                            ${order.shipping_address?.address_line_1 || 'N/A'}<br>
+                            ${order.shipping_address?.address_line_2 ? order.shipping_address.address_line_2 + '<br>' : ''}
+                            ${order.shipping_address?.city || ''}, ${order.shipping_address?.state || ''} ${order.shipping_address?.postal_code || ''}<br>
+                            ${order.shipping_address?.country || ''}<br>
+                            ${order.shipping_address?.phone ? 'Phone: ' + order.shipping_address.phone : ''}
                         </address>
                     </div>
                     <div class="col-md-6">
                         <h6 class="text-accent">Billing Address</h6>
                         <address class="small">
-                            ${order.billing_address_1 || 'N/A'}<br>
-                            ${order.billing_address_2 ? order.billing_address_2 + '<br>' : ''}
-                            ${order.billing_city || ''}, ${order.billing_state || ''} ${order.billing_postal || ''}<br>
-                            ${order.billing_country || ''}
+                            ${order.billing_address?.first_name || ''} ${order.billing_address?.last_name || ''}<br>
+                            ${order.billing_address?.address_line_1 || 'N/A'}<br>
+                            ${order.billing_address?.address_line_2 ? order.billing_address.address_line_2 + '<br>' : ''}
+                            ${order.billing_address?.city || ''}, ${order.billing_address?.state || ''} ${order.billing_address?.postal_code || ''}<br>
+                            ${order.billing_address?.country || ''}<br>
+                            ${order.billing_address?.phone ? 'Phone: ' + order.billing_address.phone : ''}
                         </address>
                     </div>
                 </div>
