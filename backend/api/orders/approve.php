@@ -72,8 +72,11 @@ try {
         $order = getOrderDetails($db, $orderId);
 
         if (!$order) {
+            error_log('Order not found: ' . $orderId);
             throw new Exception('Order not found');
         }
+
+        error_log('Processing order: ' . json_encode($order));
 
         // Check if order is pending
         if ($order['status'] !== 'pending') {
@@ -136,6 +139,7 @@ try {
 
 } catch (Exception $e) {
     error_log('Order approval API error: ' . $e->getMessage());
+    error_log('Stack trace: ' . $e->getTraceAsString());
     Response::error($e->getMessage(), 500);
 }
 

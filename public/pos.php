@@ -141,6 +141,21 @@ if (!in_array($user['role'], $allowedRoles)) {
             background: transparent;
         }
 
+        /* Modal Styling */
+        .modal-content {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            color: var(--text-primary);
+        }
+
+        .modal-header, .modal-footer {
+            border-color: var(--border-color);
+        }
+
+        .btn-close {
+            filter: invert(1);
+        }
+
         .btn-accent:hover {
             background: #00e0e6;
             color: var(--bg-primary);
@@ -641,11 +656,81 @@ if (!in_array($user['role'], $allowedRoles)) {
                 </div>
                 <div class="modal-footer" style="border-top: 1px solid var(--border-color);">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
-                    <button type="button" class="btn btn-danger" id="reject-order-btn" onclick="rejectOrder()">
+                    <button type="button" class="btn btn-danger" id="reject-order-btn" onclick="showRejectModal()">
                         <i class="fas fa-times me-1"></i>Reject Order
                     </button>
-                    <button type="button" class="btn btn-success" id="approve-order-btn" onclick="approveOrder()">
+                    <button type="button" class="btn btn-success" id="approve-order-btn" onclick="showApproveModal()">
                         <i class="fas fa-check me-1"></i>Approve Order
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Approve Confirmation Modal -->
+    <div class="modal fade" id="approveConfirmModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content" style="background: var(--bg-secondary); border: 1px solid var(--border-color);">
+                <div class="modal-header" style="border-bottom: 1px solid var(--border-color);">
+                    <h5 class="modal-title text-success">
+                        <i class="fas fa-check-circle me-2"></i>Approve Order
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <p>Are you sure you want to <strong class="text-success">APPROVE</strong> this order?</p>
+                    <div class="alert alert-warning">
+                        <i class="fas fa-exclamation-triangle me-2"></i>
+                        This action will:
+                        <ul class="mb-0 mt-2">
+                            <li>Reduce stock quantities</li>
+                            <li>Process the order for delivery</li>
+                            <li>Create a sales entry</li>
+                            <li>Send confirmation email to customer</li>
+                        </ul>
+                    </div>
+                </div>
+                <div class="modal-footer" style="border-top: 1px solid var(--border-color);">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-success" onclick="confirmApproveOrder()">
+                        <i class="fas fa-check me-1"></i>Yes, Approve Order
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Reject Confirmation Modal -->
+    <div class="modal fade" id="rejectConfirmModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content" style="background: var(--bg-secondary); border: 1px solid var(--border-color);">
+                <div class="modal-header" style="border-bottom: 1px solid var(--border-color);">
+                    <h5 class="modal-title text-danger">
+                        <i class="fas fa-times-circle me-2"></i>Reject Order
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <p>Are you sure you want to <strong class="text-danger">REJECT</strong> this order?</p>
+                    <div class="alert alert-danger">
+                        <i class="fas fa-exclamation-triangle me-2"></i>
+                        This action cannot be undone and will:
+                        <ul class="mb-0 mt-2">
+                            <li>Release reserved stock</li>
+                            <li>Cancel the order</li>
+                            <li>Send rejection email to customer</li>
+                        </ul>
+                    </div>
+                    <div class="mb-3">
+                        <label for="rejection-reason" class="form-label">Rejection Reason <span class="text-danger">*</span></label>
+                        <textarea class="form-control" id="rejection-reason" rows="3" placeholder="Please provide a reason for rejecting this order..." required style="background: var(--bg-tertiary); border: 1px solid var(--border-color); color: var(--text-primary);"></textarea>
+                        <div class="invalid-feedback">Please provide a reason for rejection.</div>
+                    </div>
+                </div>
+                <div class="modal-footer" style="border-top: 1px solid var(--border-color);">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-danger" onclick="confirmRejectOrder()">
+                        <i class="fas fa-times me-1"></i>Yes, Reject Order
                     </button>
                 </div>
             </div>

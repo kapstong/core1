@@ -202,7 +202,7 @@ async function viewOrderDetails(orderId) {
     }
 }
 
-async function approveOrder() {
+function showApproveModal() {
     if (!currentOrderId) {
         if (typeof showToast !== 'undefined') {
             showToast('No order selected', 'error');
@@ -210,9 +210,14 @@ async function approveOrder() {
         return;
     }
 
-    if (!confirm('Are you sure you want to APPROVE this order? Stock will be reduced and the order will be processed.')) {
-        return;
-    }
+    const modal = new bootstrap.Modal(document.getElementById('approveConfirmModal'));
+    modal.show();
+}
+
+async function confirmApproveOrder() {
+    // Close confirmation modal
+    const confirmModal = bootstrap.Modal.getInstance(document.getElementById('approveConfirmModal'));
+    confirmModal.hide();
 
     const loading = document.getElementById('loading-overlay');
     loading.classList.remove('d-none');
@@ -238,7 +243,7 @@ async function approveOrder() {
                 showToast('Order approved successfully!', 'success');
             }
 
-            // Close modal
+            // Close order details modal
             bootstrap.Modal.getInstance(document.getElementById('orderDetailsModal')).hide();
 
             // Reload pending orders
@@ -260,7 +265,7 @@ async function approveOrder() {
     }
 }
 
-async function rejectOrder() {
+function showRejectModal() {
     if (!currentOrderId) {
         if (typeof showToast !== 'undefined') {
             showToast('No order selected', 'error');
@@ -268,18 +273,28 @@ async function rejectOrder() {
         return;
     }
 
-    const reason = prompt('Please provide a reason for rejection:');
+    // Clear previous reason
+    document.getElementById('rejection-reason').value = '';
+    document.getElementById('rejection-reason').classList.remove('is-invalid');
 
-    if (!reason || reason.trim() === '') {
-        if (typeof showToast !== 'undefined') {
-            showToast('Rejection reason is required', 'warning');
-        }
+    const modal = new bootstrap.Modal(document.getElementById('rejectConfirmModal'));
+    modal.show();
+}
+
+async function confirmRejectOrder() {
+    const reasonInput = document.getElementById('rejection-reason');
+    const reason = reasonInput.value.trim();
+
+    if (!reason) {
+        reasonInput.classList.add('is-invalid');
         return;
     }
 
-    if (!confirm('Are you sure you want to REJECT this order? This action cannot be undone.')) {
-        return;
-    }
+    reasonInput.classList.remove('is-invalid');
+
+    // Close confirmation modal
+    const confirmModal = bootstrap.Modal.getInstance(document.getElementById('rejectConfirmModal'));
+    confirmModal.hide();
 
     const loading = document.getElementById('loading-overlay');
     loading.classList.remove('d-none');
@@ -293,7 +308,7 @@ async function rejectOrder() {
             body: JSON.stringify({
                 order_id: currentOrderId,
                 action: 'reject',
-                reason: reason.trim()
+                reason: reason
             })
         });
 
@@ -306,7 +321,7 @@ async function rejectOrder() {
                 showToast('Order rejected successfully', 'success');
             }
 
-            // Close modal
+            // Close order details modal
             bootstrap.Modal.getInstance(document.getElementById('orderDetailsModal')).hide();
 
             // Reload pending orders
