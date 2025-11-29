@@ -45,119 +45,181 @@ if (!in_array($user['role'], $allowedRoles)) {
     <link href="assets/css/main.css" rel="stylesheet">
 
     <style>
-        /* POS page inherits colors from main.css
-           Dashboard color scheme is used for consistency */
-
         body {
             background: var(--bg-primary);
             color: var(--text-primary);
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
         }
 
-        .pos-cart-panel {
+        .pos-container {
+            height: 100vh;
             display: flex;
             flex-direction: column;
-            background: var(--bg-card);
-            border: 1px solid var(--border-color);
-            border-radius: 0.5rem;
-            height: calc(100vh - 200px);
-            overflow: hidden;
         }
 
-        .pos-cart-container {
-            flex: 1 1 auto;
+        .pos-header {
+            background: var(--bg-secondary);
+            border-bottom: 1px solid var(--border-color);
+            padding: 1rem;
+            flex-shrink: 0;
+        }
+
+        .pos-main {
+            flex: 1;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .pos-content {
+            flex: 1;
             overflow-y: auto;
             padding: 1rem;
         }
 
-        .pos-summary {
-            flex: 0 0 auto;
-            background: var(--bg-tertiary);
-            border-top: 1px solid var(--border-color);
+        .pos-toolbar {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 0.5rem;
             padding: 1rem;
-            position: relative;
-            z-index: 2;
+            margin-bottom: 1rem;
         }
 
-        /* Ensure the complete sale button sits above scrolling content */
-        #complete-sale-btn {
-            position: relative;
-            z-index: 3;
-            pointer-events: auto;
+        .pos-layout {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1rem;
+            height: calc(100% - 100px);
         }
 
-        .product-card {
+        .pos-panel {
             background: var(--bg-card);
             border: 1px solid var(--border-color);
             border-radius: 0.5rem;
-            transition: all 0.3s ease;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .pos-panel-header {
+            background: var(--bg-secondary);
+            border-bottom: 1px solid var(--border-color);
+            padding: 1rem;
+            flex-shrink: 0;
+        }
+
+        .pos-panel-body {
+            flex: 1;
+            overflow-y: auto;
+            padding: 1rem;
+        }
+
+        .product-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+            gap: 0.75rem;
+        }
+
+        .product-card {
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border-color);
+            border-radius: 0.375rem;
             cursor: pointer;
-            height: 100%;
+            transition: all 0.2s;
+            overflow: hidden;
         }
 
         .product-card:hover {
             border-color: var(--accent);
+            box-shadow: 0 2px 8px rgba(0, 245, 255, 0.2);
             transform: translateY(-2px);
-            box-shadow: 0 4px 12px rgba(0, 245, 255, 0.1);
         }
 
-        /* Side-by-side cart and summary within the cart panel */
-        .pos-cart-body {
-            display: flex;
-            gap: 1rem;
-            align-items: flex-start;
-            flex: 1 1 auto;
-            padding: 0 1rem 1rem;
-            overflow: hidden;
-        }
-
-        /* Make cart list expand and scroll, keep summary fixed width */
-        .pos-cart-container {
-            flex: 1 1 auto;
-            overflow-y: auto;
-            padding: 0;
-        }
-
-        .pos-summary {
-            flex: 0 0 320px;
-            background: var(--bg-tertiary);
-            border-top: none;
-            border-left: 1px solid var(--border-color);
-            padding: 1rem;
-            position: relative;
-            z-index: 2;
-            height: auto;
-        }
-
-        @media (max-width: 768px) {
-            .pos-cart-body { flex-direction: column; padding: 1rem; }
-            .pos-summary { flex: 0 0 auto; border-left: none; border-top: 1px solid var(--border-color); }
-        }
-
-        .product-image {
+        .product-card-img {
             width: 100%;
-            height: 120px;
+            height: 100px;
             object-fit: cover;
-            border-radius: 0.375rem 0.375rem 0 0;
+            background: var(--bg-card);
         }
 
-        .product-image-fallback {
-            width: 100%;
-            height: 120px;
-            background: var(--bg-tertiary);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            border-radius: 0.375rem 0.375rem 0 0;
+        .product-card-body {
+            padding: 0.5rem;
+        }
+
+        .product-card-title {
+            font-size: 0.75rem;
+            font-weight: 600;
+            margin-bottom: 0.25rem;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .product-card-price {
+            font-size: 0.875rem;
+            color: var(--accent);
+            font-weight: 600;
+        }
+
+        .product-card-stock {
+            font-size: 0.7rem;
             color: var(--text-secondary);
         }
 
         .cart-item {
             background: rgba(0, 245, 255, 0.05);
             border: 1px solid var(--border-color);
-            border-radius: 0.5rem;
+            border-radius: 0.375rem;
             padding: 0.75rem;
             margin-bottom: 0.5rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .cart-item-info {
+            flex: 1;
+        }
+
+        .cart-item-name {
+            font-weight: 600;
+            font-size: 0.9rem;
+        }
+
+        .cart-item-price {
+            font-size: 0.75rem;
+            color: var(--text-secondary);
+        }
+
+        .cart-item-controls {
+            display: flex;
+            gap: 0.25rem;
+            align-items: center;
+        }
+
+        .cart-summary {
+            background: var(--bg-tertiary);
+            border-top: 1px solid var(--border-color);
+            padding: 1rem;
+            border-radius: 0.375rem;
+        }
+
+        .summary-row {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 0.5rem;
+            font-size: 0.9rem;
+        }
+
+        .summary-total {
+            display: flex;
+            justify-content: space-between;
+            font-size: 1.1rem;
+            font-weight: 600;
+            color: var(--accent);
+            margin-top: 1rem;
+            padding-top: 1rem;
+            border-top: 1px solid var(--border-color);
         }
 
         .btn-accent {
@@ -167,31 +229,24 @@ if (!in_array($user['role'], $allowedRoles)) {
             font-weight: 600;
         }
 
-        /* Tab Navigation Styling */
-        .nav-tabs .nav-link {
-            background: transparent;
-            border: 1px solid transparent;
-            color: var(--text-secondary);
-            transition: all 0.3s ease;
+        .btn-accent:hover {
+            background: #00e0e6;
+            color: var(--bg-primary);
         }
 
-        .nav-tabs .nav-link:hover {
-            color: var(--accent);
-            border-color: transparent;
-            background: rgba(0, 245, 255, 0.05);
+        .form-control, .form-select {
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border-color);
+            color: var(--text-primary);
         }
 
-        .nav-tabs .nav-link.active {
-            background: var(--bg-secondary);
-            border-color: var(--border-color) var(--border-color) transparent;
-            color: var(--accent);
+        .form-control:focus, .form-select:focus {
+            background: var(--bg-tertiary);
+            border-color: var(--accent);
+            color: var(--text-primary);
+            box-shadow: 0 0 0 0.2rem rgba(0, 245, 255, 0.25);
         }
 
-        .tab-content {
-            background: transparent;
-        }
-
-        /* Modal Styling */
         .modal-content {
             background: var(--bg-secondary);
             border: 1px solid var(--border-color);
@@ -206,119 +261,32 @@ if (!in_array($user['role'], $allowedRoles)) {
             filter: invert(1);
         }
 
-        .btn-accent:hover {
-            background: #00e0e6;
-            color: var(--bg-primary);
+        .nav-tabs .nav-link {
+            color: var(--text-secondary);
+            border: 1px solid transparent;
         }
 
-        .form-control {
-            background: var(--bg-tertiary);
-            border: 1px solid var(--border-color);
-            color: var(--text-primary);
+        .nav-tabs .nav-link.active {
+            background: var(--bg-card);
+            border-color: var(--border-color) var(--border-color) transparent;
+            color: var(--accent);
         }
 
-        .form-control:focus {
-            background: var(--bg-tertiary);
-            border-color: var(--accent);
-            color: var(--text-primary);
-            box-shadow: 0 0 0 0.2rem rgba(0, 245, 255, 0.25);
-        }
-
-        .form-control::placeholder {
+        .empty-state {
+            text-align: center;
+            padding: 2rem;
             color: var(--text-secondary);
         }
 
-        .modal-content {
-            background: var(--bg-card);
-            border: 1px solid var(--border-color);
-            color: var(--text-primary);
+        .empty-state-icon {
+            font-size: 2rem;
+            margin-bottom: 1rem;
+            opacity: 0.5;
         }
 
-        .btn-close {
-            filter: invert(1);
-        }
-
-        .btn-close:focus {
-            box-shadow: 0 0 0 0.2rem rgba(0, 245, 255, 0.25);
-        }
-
-        .badge-success {
-            background: var(--success);
-            color: var(--bg-primary);
-        }
-
-        .badge-danger {
-            background: var(--danger);
-            color: white;
-        }
-
-        .badge-warning {
-            background: var(--warning);
-            color: var(--bg-primary);
-        }
-
-        .badge-primary {
-            background: var(--accent);
-            color: var(--bg-primary);
-        }
-
-        .text-accent {
-            color: var(--accent) !important;
-        }
-
-        .text-success {
-            color: var(--success) !important;
-        }
-
-        .text-danger {
-            color: var(--danger) !important;
-        }
-
-        .text-warning {
-            color: var(--warning) !important;
-        }
-
-        /* POS specific styles */
-        .pos-toolbar {
-            background: var(--bg-secondary);
-            border: 1px solid var(--border-color);
-            border-radius: 0.5rem;
-            padding: 1rem;
-            margin-bottom: 1.5rem;
-        }
-
-        .pos-products-panel {
-            background: var(--bg-card);
-            border: 1px solid var(--border-color);
-            border-radius: 0.5rem;
-            height: calc(100vh - 300px);
-            overflow: hidden;
-        }
-
-        .pos-cart-panel {
-            background: var(--bg-card);
-            border: 1px solid var(--border-color);
-            border-radius: 0.5rem;
-            height: calc(100vh - 300px);
-            overflow: hidden;
-        }
-
-        .pos-products-container {
-            height: calc(100% - 60px);
-            overflow-y: auto;
-            padding: 1rem;
-        }
-
-        .pos-cart-container {
-            height: calc(100% - 200px);
-            overflow-y: auto;
-            padding: 1rem;
-        }
-
-        .pos-summary {
-            background: var(--bg-tertiary);
-            border-top: 1px solid var(--border-color);
-            padding: 1rem;
+        .loading-spinner {
+            text-align: center;
+            padding: 2rem;
         }
 
         .fullscreen-mode {
@@ -335,50 +303,6 @@ if (!in_array($user['role'], $allowedRoles)) {
             display: none;
         }
 
-        .fullscreen-mode .pos-main {
-            padding: 0;
-        }
-
-        /* Receipt styles */
-        .receipt {
-            font-family: 'Courier New', monospace;
-            font-size: 12px;
-            max-width: 300px;
-            margin: 0 auto;
-            background: white;
-            color: black;
-            padding: 20px;
-        }
-
-        .receipt-header {
-            text-align: center;
-            margin-bottom: 20px;
-        }
-
-        .receipt-store {
-            font-size: 16px;
-            font-weight: bold;
-            margin-bottom: 10px;
-        }
-
-        .receipt-table {
-            width: 100%;
-            border-collapse: collapse;
-            margin: 20px 0;
-        }
-
-        .receipt-table th,
-        .receipt-table td {
-            padding: 5px;
-            text-align: left;
-        }
-
-        .receipt-total {
-            border-top: 1px solid #000;
-            font-weight: bold;
-        }
-
-        /* Loading spinner */
         .loading-overlay {
             position: fixed;
             top: 0;
@@ -392,626 +316,266 @@ if (!in_array($user['role'], $allowedRoles)) {
             z-index: 9999;
         }
 
-        .spinner-border {
-            width: 3rem;
-            height: 3rem;
+        .pending-order-card {
+            background: rgba(255, 200, 50, 0.1);
+            border: 2px solid var(--warning);
+            border-radius: 0.5rem;
+            padding: 1rem;
+            cursor: pointer;
+            transition: all 0.2s;
+            margin-bottom: 1rem;
         }
 
-        /* Responsive adjustments */
-        @media (max-width: 768px) {
-            .pos-products-panel,
-            .pos-cart-panel {
-                height: calc(100vh - 400px);
-            }
+        .pending-order-card:hover {
+            border-color: var(--accent);
+            box-shadow: 0 4px 12px rgba(0, 245, 255, 0.2);
+        }
 
-            .pos-products-container,
-            .pos-cart-container {
-                padding: 0.5rem;
+        @media (max-width: 1024px) {
+            .pos-layout {
+                grid-template-columns: 1fr;
             }
         }
     </style>
 </head>
 <body>
-    <div class="container-fluid pos-container">
-        <!-- POS Header -->
+    <div class="pos-container">
+        <!-- Header -->
         <div class="pos-header">
-            <div class="container">
-                <div class="d-flex justify-content-between align-items-center">
-                    <div>
-                        <h1 class="h3 mb-0">
-                            <i class="fas fa-cash-register me-2 text-accent"></i>
-                            Point of Sale
-                        </h1>
-                        <p class="text-muted mb-0">Process customer transactions efficiently</p>
-                    </div>
-                    <div class="d-flex gap-2 align-items-center">
-                        <span class="badge bg-primary" id="pos-sale-number">Sale #<?php echo time(); ?></span>
-                        <span class="text-muted small" id="pos-time"><?php echo date('h:i:s A'); ?></span>
-                        <div class="btn-group">
-                            <button class="btn btn-outline-primary btn-sm" onclick="toggleFullscreen()" title="Toggle Fullscreen">
-                                <i class="fas fa-expand"></i>
-                            </button>
-                            <button class="btn btn-outline-info btn-sm" onclick="showHelp()" title="POS Help">
-                                <i class="fas fa-question-circle"></i>
-                            </button>
-                            <a href="dashboard.php" class="btn btn-outline-secondary btn-sm" title="Back to Dashboard">
-                                <i class="fas fa-arrow-left"></i>
-                            </a>
-                        </div>
-                    </div>
+            <div class="d-flex justify-content-between align-items-center">
+                <div>
+                    <h3 class="mb-0">
+                        <i class="fas fa-cash-register me-2 text-accent"></i>Point of Sale
+                    </h3>
+                    <small class="text-muted">Sale #<span id="sale-number"><?php echo time(); ?></span></small>
+                </div>
+                <div class="d-flex gap-2 align-items-center">
+                    <span class="text-muted small" id="current-time"><?php echo date('h:i:s A'); ?></span>
+                    <span class="badge bg-primary"><?php echo htmlspecialchars($user['full_name'] ?? $user['username']); ?></span>
+                    <button class="btn btn-outline-secondary btn-sm" onclick="toggleFullscreen()" title="Fullscreen">
+                        <i class="fas fa-expand"></i>
+                    </button>
+                    <a href="dashboard.php" class="btn btn-outline-secondary btn-sm">
+                        <i class="fas fa-arrow-left"></i>
+                    </a>
                 </div>
             </div>
         </div>
 
-        <!-- POS Main Content -->
+        <!-- Main Content -->
         <div class="pos-main">
-            <div class="container-fluid">
-                <!-- Tab Navigation -->
-                <ul class="nav nav-tabs mb-3" role="tablist" style="border-bottom: 1px solid var(--border-color);">
-                    <li class="nav-item" role="presentation">
-                        <button class="nav-link active" id="pos-sales-tab" data-bs-toggle="tab" data-bs-target="#pos-sales-panel" type="button" role="tab">
-                            <i class="fas fa-cash-register me-2"></i>POS Sales
-                        </button>
-                    </li>
-                    <li class="nav-item" role="presentation">
-                        <button class="nav-link" id="pending-orders-tab" data-bs-toggle="tab" data-bs-target="#pending-orders-panel" type="button" role="tab">
-                            <i class="fas fa-clock me-2"></i>Pending Orders
-                            <span class="badge bg-warning text-dark ms-2" id="pending-orders-count">0</span>
-                        </button>
-                    </li>
-                </ul>
+            <!-- Tabs -->
+            <ul class="nav nav-tabs" role="tablist" style="margin: 1rem 1rem 0; border-bottom: 1px solid var(--border-color);">
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link active" id="pos-sales-tab" data-bs-toggle="tab" data-bs-target="#pos-sales" type="button" role="tab">
+                        <i class="fas fa-shopping-cart me-2"></i>POS Sales
+                    </button>
+                </li>
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link" id="pending-orders-tab" data-bs-toggle="tab" data-bs-target="#pending-orders" type="button" role="tab">
+                        <i class="fas fa-clock me-2"></i>Pending Orders <span class="badge bg-warning text-dark ms-2" id="order-count">0</span>
+                    </button>
+                </li>
+            </ul>
 
-                <!-- Tab Content -->
-                <div class="tab-content">
-                    <!-- POS Sales Tab -->
-                    <div class="tab-pane fade show active" id="pos-sales-panel" role="tabpanel">
-                <!-- POS Toolbar -->
-                <div class="pos-toolbar">
-                    <div class="row align-items-center">
-                        <div class="col-md-3">
-                            <div class="input-group">
-                                <span class="input-group-text"><i class="fas fa-search"></i></span>
-                                <input type="text" class="form-control" id="pos-search" placeholder="Search products..." autocomplete="off">
+            <!-- Content -->
+            <div class="pos-content tab-content">
+                <!-- POS Sales Tab -->
+                <div class="tab-pane fade show active" id="pos-sales" role="tabpanel">
+                    <!-- Toolbar -->
+                    <div class="pos-toolbar">
+                        <div class="row g-2 align-items-end">
+                            <div class="col-md-3">
+                                <label class="form-label small mb-1">Search Products</label>
+                                <input type="text" class="form-control form-control-sm" id="search-input" placeholder="Search by name or SKU...">
                             </div>
-                        </div>
-                        <div class="col-md-2">
-                            <select class="form-select" id="pos-category-filter">
-                                <option value="">All Categories</option>
-                                <!-- Categories will be loaded here -->
-                            </select>
-                        </div>
-                        <div class="col-md-2">
-                            <div class="input-group">
-                                <span class="input-group-text"><i class="fas fa-barcode"></i></span>
-                                <input type="text" class="form-control" id="pos-barcode" placeholder="Scan barcode" autocomplete="off">
+                            <div class="col-md-2">
+                                <label class="form-label small mb-1">Category</label>
+                                <select class="form-select form-select-sm" id="category-filter">
+                                    <option value="">All Categories</option>
+                                </select>
                             </div>
-                        </div>
-                        <div class="col-md-3">
-                            <div class="d-flex gap-2">
-                                <button class="btn btn-outline-success btn-sm" onclick="quickAddProduct()" title="Quick Add Product">
-                                    <i class="fas fa-plus"></i> Quick Add
-                                </button>
-                                <button class="btn btn-outline-warning btn-sm" onclick="holdSale()" title="Hold Current Sale">
-                                    <i class="fas fa-pause"></i> Hold
-                                </button>
-                                <button class="btn btn-outline-info btn-sm" onclick="recallSale()" title="Recall Held Sale">
-                                    <i class="fas fa-play"></i> Recall
-                                </button>
+                            <div class="col-md-2">
+                                <label class="form-label small mb-1">Barcode</label>
+                                <input type="text" class="form-control form-control-sm" id="barcode-input" placeholder="Scan barcode...">
                             </div>
-                        </div>
-                        <div class="col-md-2 text-end">
-                            <div class="d-flex align-items-center justify-content-end gap-2">
-                                <span class="text-muted small">Staff: <?php echo htmlspecialchars($user['full_name'] ?? $user['username']); ?></span>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="row">
-                    <!-- Products Panel -->
-                    <div class="col-lg-6">
-                        <div class="pos-products-panel">
-                            <div class="d-flex justify-content-between align-items-center p-3 border-bottom" style="border-color: var(--border-color) !important;">
-                                <h5 class="mb-0">Products</h5>
-                                <div class="btn-group btn-group-sm">
-                                    <button class="btn btn-outline-secondary active" onclick="setView('grid')" id="grid-view">
-                                        <i class="fas fa-th"></i>
+                            <div class="col-md-5">
+                                <div class="btn-group w-100" role="group">
+                                    <button class="btn btn-sm btn-outline-success" onclick="quickAddProduct()" title="Quick Add">
+                                        <i class="fas fa-plus me-1"></i>Quick Add
                                     </button>
-                                    <button class="btn btn-outline-secondary" onclick="setView('list')" id="list-view">
-                                        <i class="fas fa-list"></i>
+                                    <button class="btn btn-sm btn-outline-warning" onclick="holdSale()" title="Hold Sale">
+                                        <i class="fas fa-pause me-1"></i>Hold
                                     </button>
-                                </div>
-                            </div>
-                            <div class="pos-products-container">
-                                <div id="pos-products" class="row g-2">
-                                    <!-- Products will load here -->
-                                </div>
-                                <div id="pos-loading" class="text-center py-5 d-none">
-                                    <div class="spinner-border text-accent" role="status">
-                                        <span class="visually-hidden">Loading...</span>
-                                    </div>
-                                    <p class="text-muted mt-2">Loading products...</p>
-                                </div>
-                                <div id="pos-no-products" class="text-center py-5 d-none">
-                                    <i class="fas fa-box-open fa-3x text-muted mb-3"></i>
-                                    <p class="text-muted">No products found</p>
+                                    <button class="btn btn-sm btn-outline-info" onclick="recallSale()" title="Recall Sale">
+                                        <i class="fas fa-redo me-1"></i>Recall
+                                    </button>
+                                    <button class="btn btn-sm btn-outline-secondary" onclick="toggleFullscreen()" title="Fullscreen">
+                                        <i class="fas fa-expand me-1"></i>Full
+                                    </button>
                                 </div>
                             </div>
                         </div>
                     </div>
 
-                    <!-- Cart & Checkout Panel -->
-                    <div class="col-lg-6">
-                        <div class="pos-cart-panel">
-                            <div class="d-flex justify-content-between align-items-center p-3 border-bottom" style="border-color: var(--border-color) !important;">
-                                <h5 class="mb-0">Current Sale</h5>
-                                <button class="btn btn-sm btn-outline-danger" onclick="clearCart()" title="Clear Cart">
-                                    <i class="fas fa-trash"></i>
-                                </button>
+                    <!-- Products and Cart -->
+                    <div class="pos-layout">
+                        <!-- Products Panel -->
+                        <div class="pos-panel">
+                            <div class="pos-panel-header">
+                                <h6 class="mb-0">Available Products</h6>
                             </div>
-
-                            <!-- Customer Info -->
-                            <div class="p-3 border-bottom" style="border-color: var(--border-color) !important;">
-                                <div class="input-group input-group-sm">
-                                    <span class="input-group-text"><i class="fas fa-user"></i></span>
-                                    <input type="text" class="form-control" id="pos-customer-name" placeholder="Walk-in Customer" autocomplete="off">
-                                    <button class="btn btn-outline-secondary" onclick="searchCustomer()" title="Search Customer">
-                                        <i class="fas fa-search"></i>
-                                    </button>
+                            <div class="pos-panel-body">
+                                <div class="loading-spinner" id="loading-products">
+                                    <div class="spinner-border text-accent" role="status"></div>
+                                </div>
+                                <div class="product-grid" id="products-container"></div>
+                                <div class="empty-state d-none" id="no-products">
+                                    <div class="empty-state-icon"><i class="fas fa-box-open"></i></div>
+                                    <p>No products found</p>
                                 </div>
                             </div>
+                        </div>
 
-                            <div class="pos-cart-body">
-                                <!-- Cart Items -->
-                                <div class="pos-cart-container">
-                                    <div class="text-center text-muted py-4" id="pos-empty-cart">
-                                        <i class="fas fa-shopping-cart fa-2x mb-2"></i>
-                                        <p>No items in cart</p>
-                                        <small>Search and add products above</small>
-                                    </div>
-                                    <div id="pos-cart-items">
-                                        <!-- Cart items will appear here -->
-                                    </div>
+                        <!-- Cart Panel -->
+                        <div class="pos-panel">
+                            <div class="pos-panel-header">
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <h6 class="mb-0">Shopping Cart</h6>
+                                    <button class="btn btn-sm btn-outline-danger" onclick="clearCart()"><i class="fas fa-trash"></i></button>
                                 </div>
-
-                                <!-- Cart Summary & Payment -->
-                                <div class="pos-summary">
-                                <div class="row g-2 mb-3">
-                                    <div class="col-6">
-                                        <label class="form-label small mb-1">Subtotal</label>
-                                        <div class="fw-bold" id="pos-subtotal">₱0.00</div>
-                                    </div>
-                                    <div class="col-6">
-                                        <label class="form-label small mb-1">Tax (12%)</label>
-                                        <div class="fw-bold" id="pos-tax">₱0.00</div>
-                                    </div>
-                                </div>
-
-                                <div class="d-flex justify-content-between align-items-center mb-3">
-                                    <h4 class="mb-0">TOTAL:</h4>
-                                    <h4 class="mb-0 text-accent" id="pos-total">₱0.00</h4>
-                                </div>
-
-                                <!-- Payment Method -->
+                            </div>
+                            <div class="pos-panel-body">
                                 <div class="mb-3">
-                                    <label class="form-label small mb-2">Payment Method</label>
-                                    <div class="btn-group w-100" role="group">
-                                        <input type="radio" class="btn-check" name="payment-method" id="payment-cash" value="cash" checked>
-                                        <label class="btn btn-outline-primary btn-sm" for="payment-cash">
-                                            <i class="fas fa-money-bill-wave me-1"></i>Cash
-                                        </label>
-                                        <input type="radio" class="btn-check" name="payment-method" id="payment-card" value="card">
-                                        <label class="btn btn-outline-primary btn-sm" for="payment-card">
-                                            <i class="fas fa-credit-card me-1"></i>Card
-                                        </label>
-                                        <input type="radio" class="btn-check" name="payment-method" id="payment-transfer" value="bank_transfer">
-                                        <label class="btn btn-outline-primary btn-sm" for="payment-transfer">
-                                            <i class="fas fa-university me-1"></i>Transfer
-                                        </label>
-                                    </div>
-                                </div>
-
-                                <!-- Cash Received (for cash payments) -->
-                                <div id="cash-payment-section" class="mb-3">
-                                    <label class="form-label small mb-1">Cash Received</label>
+                                    <label class="form-label small mb-1">Customer</label>
                                     <div class="input-group input-group-sm">
-                                        <span class="input-group-text">₱</span>
-                                        <input type="number" class="form-control" id="pos-cash-received" placeholder="0.00" step="0.01" min="0">
-                                    </div>
-                                    <div class="d-flex justify-content-between mt-1">
-                                        <small class="text-muted">Change:</small>
-                                        <small class="fw-bold text-success" id="pos-change">₱0.00</small>
-                                    </div>
-                                </div>
-
-                                <!-- Action Buttons -->
-                                <div class="d-grid gap-2">
-                                    <button class="btn btn-accent btn-lg" onclick="completeSale()" id="complete-sale-btn">
-                                        <i class="fas fa-check me-2"></i>Complete Sale (F12)
-                                    </button>
-                                    <div class="row g-1">
-                                        <div class="col-6">
-                                            <button class="btn btn-outline-secondary btn-sm w-100" onclick="printReceipt()" disabled id="print-receipt-btn">
-                                                <i class="fas fa-print me-1"></i>Print Receipt
-                                            </button>
-                                        </div>
-                                        <div class="col-6">
-                                            <button class="btn btn-outline-info btn-sm w-100" onclick="emailReceipt()" disabled id="email-receipt-btn">
-                                                <i class="fas fa-envelope me-1"></i>Email Receipt
-                                            </button>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-                    </div>
-                    <!-- End POS Sales Tab -->
-
-                    <!-- Pending Orders Tab -->
-                    <div class="tab-pane fade" id="pending-orders-panel" role="tabpanel">
-                        <div class="row">
-                            <div class="col-12">
-                                <div class="card" style="background: var(--bg-card); border: 1px solid var(--border-color);">
-                                    <div class="card-header d-flex justify-content-between align-items-center" style="background: var(--bg-secondary); border-bottom: 1px solid var(--border-color);">
-                                        <h5 class="mb-0">
-                                            <i class="fas fa-clock me-2 text-warning"></i>
-                                            Pending Customer Orders
-                                        </h5>
-                                        <button class="btn btn-sm btn-outline-primary" onclick="loadPendingOrders()">
-                                            <i class="fas fa-sync me-1"></i>Refresh
+                                        <input type="text" class="form-control" id="customer-name" placeholder="Walk-in Customer">
+                                        <button class="btn btn-outline-secondary" onclick="searchCustomer()" type="button">
+                                            <i class="fas fa-search"></i>
                                         </button>
                                     </div>
-                                    <div class="card-body">
-                                        <div id="pending-orders-loading" class="text-center py-5 d-none">
-                                            <div class="spinner-border text-accent" role="status">
-                                                <span class="visually-hidden">Loading...</span>
+                                </div>
+
+                                <div id="cart-items" class="mb-3"></div>
+
+                                <div class="empty-state d-none" id="empty-cart">
+                                    <div class="empty-state-icon"><i class="fas fa-shopping-cart"></i></div>
+                                    <p>Cart is empty</p>
+                                </div>
+
+                                <div class="cart-summary">
+                                    <div class="summary-row">
+                                        <span>Subtotal:</span>
+                                        <strong id="subtotal">₱0.00</strong>
+                                    </div>
+                                    <div class="summary-row">
+                                        <span>Tax (12%):</span>
+                                        <strong id="tax">₱0.00</strong>
+                                    </div>
+                                    <div class="summary-total">
+                                        <span>TOTAL:</span>
+                                        <span id="total">₱0.00</span>
+                                    </div>
+
+                                    <div class="mt-3">
+                                        <label class="form-label small mb-1">Payment Method</label>
+                                        <div class="btn-group w-100" role="group">
+                                            <input type="radio" class="btn-check" name="payment" id="payment-cash" value="cash" checked>
+                                            <label class="btn btn-outline-primary btn-sm" for="payment-cash">Cash</label>
+                                            <input type="radio" class="btn-check" name="payment" id="payment-card" value="card">
+                                            <label class="btn btn-outline-primary btn-sm" for="payment-card">Card</label>
+                                            <input type="radio" class="btn-check" name="payment" id="payment-transfer" value="transfer">
+                                            <label class="btn btn-outline-primary btn-sm" for="payment-transfer">Transfer</label>
+                                        </div>
+                                    </div>
+
+                                    <div class="mt-3 d-none" id="cash-section">
+                                        <label class="form-label small mb-1">Cash Received</label>
+                                        <input type="number" class="form-control form-control-sm" id="cash-received" placeholder="0.00" step="0.01" min="0">
+                                        <div class="text-end mt-1">
+                                            <small class="text-success">Change: <strong id="change">₱0.00</strong></small>
+                                        </div>
+                                    </div>
+
+                                    <div class="d-grid gap-2 mt-3">
+                                        <button class="btn btn-accent btn-lg" onclick="completeSale()" id="complete-btn">
+                                            <i class="fas fa-check me-2"></i>Complete Sale
+                                        </button>
+                                        <div class="row g-1">
+                                            <div class="col-6">
+                                                <button class="btn btn-outline-secondary btn-sm w-100" onclick="printReceipt()" id="print-btn" disabled>
+                                                    <i class="fas fa-print me-1"></i>Print
+                                                </button>
                                             </div>
-                                            <p class="text-muted mt-2">Loading pending orders...</p>
-                                        </div>
-
-                                        <div id="pending-orders-empty" class="text-center py-5 d-none">
-                                            <i class="fas fa-check-circle fa-3x text-success mb-3"></i>
-                                            <h5>No Pending Orders</h5>
-                                            <p class="text-muted">All customer orders have been processed</p>
-                                        </div>
-
-                                        <div id="pending-orders-list" class="row g-3">
-                                            <!-- Pending orders will load here -->
+                                            <div class="col-6">
+                                                <button class="btn btn-outline-info btn-sm w-100" onclick="emailReceipt()" id="email-btn" disabled>
+                                                    <i class="fas fa-envelope me-1"></i>Email
+                                                </button>
+                                            </div>
                                         </div>
                                     </div>
                                 </div>
                             </div>
                         </div>
                     </div>
-                    <!-- End Pending Orders Tab -->
                 </div>
-                <!-- End Tab Content -->
+
+                <!-- Pending Orders Tab -->
+                <div class="tab-pane fade" id="pending-orders" role="tabpanel">
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                        <h5 class="mb-0">Pending Customer Orders</h5>
+                        <button class="btn btn-sm btn-outline-primary" onclick="loadPendingOrders()">
+                            <i class="fas fa-sync me-1"></i>Refresh
+                        </button>
+                    </div>
+                    <div id="pending-loading" class="loading-spinner">
+                        <div class="spinner-border text-accent"></div>
+                    </div>
+                    <div id="pending-list"></div>
+                    <div class="empty-state d-none" id="pending-empty">
+                        <div class="empty-state-icon"><i class="fas fa-check-circle text-success"></i></div>
+                        <p>No pending orders</p>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
 
     <!-- Order Details Modal -->
-    <div class="modal fade" id="orderDetailsModal" tabindex="-1">
+    <div class="modal fade" id="orderModal" tabindex="-1">
         <div class="modal-dialog modal-lg">
             <div class="modal-content">
-                <div class="modal-header" style="border-bottom: 1px solid var(--border-color);">
-                    <h5 class="modal-title">
-                        <i class="fas fa-receipt me-2"></i>Order Details
-                    </h5>
+                <div class="modal-header">
+                    <h5 class="modal-title">Order Details</h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                 </div>
-                <div class="modal-body" id="order-details-content">
-                    <!-- Order details will load here -->
-                </div>
-                <div class="modal-footer" style="border-top: 1px solid var(--border-color);">
+                <div class="modal-body" id="order-details"></div>
+                <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
-                    <button type="button" class="btn btn-danger" id="reject-order-btn" onclick="showRejectModal()">
-                        <i class="fas fa-times me-1"></i>Reject Order
+                    <button type="button" class="btn btn-danger" onclick="rejectOrder()">
+                        <i class="fas fa-times me-1"></i>Reject
                     </button>
-                    <button type="button" class="btn btn-success" id="approve-order-btn" onclick="showApproveModal()">
-                        <i class="fas fa-check me-1"></i>Approve Order
-                    </button>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- Approve Confirmation Modal -->
-    <div class="modal fade" id="approveConfirmModal" tabindex="-1">
-        <div class="modal-dialog">
-            <div class="modal-content" style="background: var(--bg-secondary); border: 1px solid var(--border-color);">
-                <div class="modal-header" style="border-bottom: 1px solid var(--border-color);">
-                    <h5 class="modal-title text-success">
-                        <i class="fas fa-check-circle me-2"></i>Approve Order
-                    </h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                </div>
-                <div class="modal-body">
-                    <p>Are you sure you want to <strong class="text-success">APPROVE</strong> this order?</p>
-                    <div class="alert alert-warning">
-                        <i class="fas fa-exclamation-triangle me-2"></i>
-                        This action will:
-                        <ul class="mb-0 mt-2">
-                            <li>Reduce stock quantities</li>
-                            <li>Process the order for delivery</li>
-                            <li>Create a sales entry</li>
-                            <li>Send confirmation email to customer</li>
-                        </ul>
-                    </div>
-                </div>
-                <div class="modal-footer" style="border-top: 1px solid var(--border-color);">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                    <button type="button" class="btn btn-success" onclick="confirmApproveOrder()">
-                        <i class="fas fa-check me-1"></i>Yes, Approve Order
+                    <button type="button" class="btn btn-success" onclick="approveOrder()">
+                        <i class="fas fa-check me-1"></i>Approve
                     </button>
                 </div>
             </div>
         </div>
     </div>
 
-    <!-- Reject Confirmation Modal -->
-    <div class="modal fade" id="rejectConfirmModal" tabindex="-1">
-        <div class="modal-dialog">
-            <div class="modal-content" style="background: var(--bg-secondary); border: 1px solid var(--border-color);">
-                <div class="modal-header" style="border-bottom: 1px solid var(--border-color);">
-                    <h5 class="modal-title text-danger">
-                        <i class="fas fa-times-circle me-2"></i>Reject Order
-                    </h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                </div>
-                <div class="modal-body">
-                    <p>Are you sure you want to <strong class="text-danger">REJECT</strong> this order?</p>
-                    <div class="alert alert-danger">
-                        <i class="fas fa-exclamation-triangle me-2"></i>
-                        This action cannot be undone and will:
-                        <ul class="mb-0 mt-2">
-                            <li>Release reserved stock</li>
-                            <li>Cancel the order</li>
-                            <li>Send rejection email to customer</li>
-                        </ul>
-                    </div>
-                    <div class="mb-3">
-                        <label for="rejection-reason" class="form-label">Rejection Reason <span class="text-danger">*</span></label>
-                        <textarea class="form-control" id="rejection-reason" rows="3" placeholder="Please provide a reason for rejecting this order..." required style="background: var(--bg-tertiary); border: 1px solid var(--border-color); color: var(--text-primary);"></textarea>
-                        <div class="invalid-feedback">Please provide a reason for rejection.</div>
-                    </div>
-                </div>
-                <div class="modal-footer" style="border-top: 1px solid var(--border-color);">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                    <button type="button" class="btn btn-danger" onclick="confirmRejectOrder()">
-                        <i class="fas fa-times me-1"></i>Yes, Reject Order
-                    </button>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- Quick Add Product Modal -->
-    <div class="modal fade" id="quickAddProductModal" tabindex="-1">
-        <div class="modal-dialog">
-            <div class="modal-content" style="background: var(--bg-secondary); border: 1px solid var(--border-color);">
-                <div class="modal-header" style="border-bottom: 1px solid var(--border-color);">
-                    <h5 class="modal-title">
-                        <i class="fas fa-plus me-2 text-accent"></i>Quick Add Product
-                    </h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                </div>
-                <div class="modal-body">
-                    <form id="quick-add-product-form">
-                        <div class="row">
-                            <div class="col-md-6 mb-3">
-                                <label for="quick-product-name" class="form-label">Product Name <span class="text-danger">*</span></label>
-                                <input type="text" class="form-control" id="quick-product-name" required style="background: var(--bg-tertiary); border: 1px solid var(--border-color); color: var(--text-primary);">
-                            </div>
-                            <div class="col-md-6 mb-3">
-                                <label for="quick-product-sku" class="form-label">SKU <span class="text-danger">*</span></label>
-                                <input type="text" class="form-control" id="quick-product-sku" required style="background: var(--bg-tertiary); border: 1px solid var(--border-color); color: var(--text-primary);">
-                            </div>
-                        </div>
-                        <div class="row">
-                            <div class="col-md-6 mb-3">
-                                <label for="quick-product-category" class="form-label">Category <span class="text-danger">*</span></label>
-                                <select class="form-select" id="quick-product-category" required style="background: var(--bg-tertiary); border: 1px solid var(--border-color); color: var(--text-primary);">
-                                    <option value="">Select Category</option>
-                                    <!-- Categories will be loaded here -->
-                                </select>
-                            </div>
-                            <div class="col-md-6 mb-3">
-                                <label for="quick-product-price" class="form-label">Selling Price <span class="text-danger">*</span></label>
-                                <div class="input-group">
-                                    <span class="input-group-text">₱</span>
-                                    <input type="number" class="form-control" id="quick-product-price" min="0" step="0.01" required style="background: var(--bg-tertiary); border: 1px solid var(--border-color); color: var(--text-primary);">
-                                </div>
-                            </div>
-                        </div>
-                        <div class="mb-3">
-                            <label for="quick-product-description" class="form-label">Description</label>
-                            <textarea class="form-control" id="quick-product-description" rows="2" style="background: var(--bg-tertiary); border: 1px solid var(--border-color); color: var(--text-primary);"></textarea>
-                        </div>
-                        <div class="alert alert-info">
-                            <small><i class="fas fa-info-circle me-1"></i>Product will have 0 stock initially. Use inventory management to add stock after creation.</small>
-                        </div>
-                    </form>
-                </div>
-                <div class="modal-footer" style="border-top: 1px solid var(--border-color);">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                    <button type="button" class="btn btn-accent" onclick="submitQuickAddProduct()">
-                        <i class="fas fa-plus me-1"></i>Quick Add Product
-                    </button>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- Recall Sale Modal -->
-    <div class="modal fade" id="recallSaleModal" tabindex="-1">
+    <!-- Receipt Modal -->
+    <div class="modal fade" id="receiptModal" tabindex="-1">
         <div class="modal-dialog modal-lg">
-            <div class="modal-content" style="background: var(--bg-secondary); border: 1px solid var(--border-color);">
-                <div class="modal-header" style="border-bottom: 1px solid var(--border-color);">
-                    <h5 class="modal-title">
-                        <i class="fas fa-history me-2 text-primary"></i>Recall Held Sale
-                    </h5>
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Receipt Preview</h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                 </div>
-                <div class="modal-body">
-                    <div id="recall-sales-loading" class="text-center py-4">
-                        <div class="spinner-border text-accent" role="status">
-                            <span class="visually-hidden">Loading...</span>
-                        </div>
-                        <p class="text-muted mt-2">Loading held sales...</p>
-                    </div>
-                    <div id="recall-sales-empty" class="text-center py-4 d-none">
-                        <i class="fas fa-inbox fa-3x text-muted mb-3"></i>
-                        <h6>No Held Sales</h6>
-                        <p class="text-muted">No sales are currently held</p>
-                    </div>
-                    <div id="recall-sales-list" class="d-none">
-                        <div class="table-responsive">
-                            <table class="table table-hover">
-                                <thead>
-                                    <tr>
-                                        <th>Sale #</th>
-                                        <th>Customer</th>
-                                        <th>Items</th>
-                                        <th>Total</th>
-                                        <th>Time</th>
-                                        <th>Action</th>
-                                    </tr>
-                                </thead>
-                                <tbody id="recall-sales-table-body">
-                                    <!-- Held sales will be loaded here -->
-                                </tbody>
-                            </table>
-                        </div>
-                    </div>
-                </div>
-                <div class="modal-footer" style="border-top: 1px solid var(--border-color);">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- Customer Search Modal -->
-    <div class="modal fade" id="customerSearchModal" tabindex="-1">
-        <div class="modal-dialog modal-lg">
-            <div class="modal-content" style="background: var(--bg-secondary); border: 1px solid var(--border-color);">
-                <div class="modal-header" style="border-bottom: 1px solid var(--border-color);">
-                    <h5 class="modal-title">
-                        <i class="fas fa-users me-2 text-primary"></i>Search Customers
-                    </h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                </div>
-                <div class="modal-body">
-                    <div class="input-group mb-3">
-                        <span class="input-group-text"><i class="fas fa-search"></i></span>
-                        <input type="text" class="form-control" id="customer-search-input" placeholder="Enter customer name, email, or phone..." style="background: var(--bg-tertiary); border: 1px solid var(--border-color); color: var(--text-primary);">
-                        <button class="btn btn-accent" onclick="performCustomerSearch()">
-                            <i class="fas fa-search me-1"></i>Search
-                        </button>
-                    </div>
-                    <div id="customer-search-loading" class="text-center py-4 d-none">
-                        <div class="spinner-border text-accent" role="status">
-                            <span class="visually-hidden">Loading...</span>
-                        </div>
-                        <p class="text-muted mt-2">Searching customers...</p>
-                    </div>
-                    <div id="customer-search-empty" class="text-center py-4 d-none">
-                        <i class="fas fa-user-slash fa-3x text-muted mb-3"></i>
-                        <h6>No Customers Found</h6>
-                        <p class="text-muted">Try a different search term</p>
-                    </div>
-                    <div id="customer-search-results" class="d-none">
-                        <div class="table-responsive">
-                            <table class="table table-hover">
-                                <thead>
-                                    <tr>
-                                        <th>Name</th>
-                                        <th>Email</th>
-                                        <th>Phone</th>
-                                        <th>Address</th>
-                                        <th>Action</th>
-                                    </tr>
-                                </thead>
-                                <tbody id="customer-search-table-body">
-                                    <!-- Search results will be loaded here -->
-                                </tbody>
-                            </table>
-                        </div>
-                    </div>
-                </div>
-                <div class="modal-footer" style="border-top: 1px solid var(--border-color);">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                    <button type="button" class="btn btn-outline-primary" onclick="clearCustomerSelection()">
-                        <i class="fas fa-user-plus me-1"></i>Use Walk-in Customer
-                    </button>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- Receipt Preview Modal -->
-    <div class="modal fade" id="receiptPreviewModal" tabindex="-1">
-        <div class="modal-dialog modal-lg">
-            <div class="modal-content" style="background: var(--bg-secondary); border: 1px solid var(--border-color);">
-                <div class="modal-header" style="border-bottom: 1px solid var(--border-color);">
-                    <h5 class="modal-title">
-                        <i class="fas fa-receipt me-2 text-primary"></i>Receipt Preview
-                    </h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                </div>
-                <div class="modal-body">
-                    <div class="text-center mb-3">
-                        <small class="text-muted">This is how your receipt will appear when printed</small>
-                    </div>
-                    <div id="receipt-preview-content" class="border border-secondary rounded p-3" style="background: white; color: black; font-family: 'Courier New', monospace; font-size: 12px; max-height: 400px; overflow-y: auto;">
-                        <!-- Receipt preview content will be loaded here -->
-                    </div>
-                </div>
-                <div class="modal-footer" style="border-top: 1px solid var(--border-color);">
+                <div class="modal-body" id="receipt-content" style="background: white; color: black; font-family: monospace; font-size: 12px; max-height: 400px; overflow-y: auto;"></div>
+                <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
-                    <button type="button" class="btn btn-primary" onclick="doPrintReceipt()">
-                        <i class="fas fa-print me-1"></i>Print Receipt
-                    </button>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- Email Receipt Modal -->
-    <div class="modal fade" id="emailReceiptModal" tabindex="-1">
-        <div class="modal-dialog">
-            <div class="modal-content" style="background: var(--bg-secondary); border: 1px solid var(--border-color);">
-                <div class="modal-header" style="border-bottom: 1px solid var(--border-color);">
-                    <h5 class="modal-title">
-                        <i class="fas fa-envelope me-2 text-primary"></i>Email Receipt
-                    </h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                </div>
-                <div class="modal-body">
-                    <div class="mb-3">
-                        <label for="receipt-email-address" class="form-label">Email Address <span class="text-danger">*</span></label>
-                        <input type="email" class="form-control" id="receipt-email-address" placeholder="customer@example.com" required style="background: var(--bg-tertiary); border: 1px solid var(--border-color); color: var(--text-primary);">
-                        <div class="invalid-feedback">Please enter a valid email address.</div>
-                    </div>
-                    <div class="mb-3">
-                        <label for="receipt-email-subject" class="form-label">Subject</label>
-                        <input type="text" class="form-control" id="receipt-email-subject" placeholder="Your receipt from PC Parts Central" value="Your receipt from PC Parts Central" required style="background: var(--bg-tertiary); border: 1px solid var(--border-color); color: var(--text-primary);">
-                    </div>
-                    <div class="mb-3">
-                        <label for="receipt-email-message" class="form-label">Additional Message</label>
-                        <textarea class="form-control" id="receipt-email-message" rows="3" placeholder="Thank you for shopping with us!" style="background: var(--bg-tertiary); border: 1px solid var(--border-color); color: var(--text-primary);"></textarea>
-                    </div>
-                    <small class="text-muted">
-                        <i class="fas fa-info-circle me-1"></i>The receipt will be attached as a PDF file.
-                    </small>
-                </div>
-                <div class="modal-footer" style="border-top: 1px solid var(--border-color);">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                    <button type="button" class="btn btn-primary" onclick="doEmailReceipt()">
-                        <i class="fas fa-paper-plane me-1"></i>Send Email
+                    <button type="button" class="btn btn-primary" onclick="doPrint()">
+                        <i class="fas fa-print me-1"></i>Print
                     </button>
                 </div>
             </div>
@@ -1021,9 +585,7 @@ if (!in_array($user['role'], $allowedRoles)) {
     <!-- Loading Overlay -->
     <div class="loading-overlay d-none" id="loading-overlay">
         <div class="text-center">
-            <div class="spinner-border text-accent" role="status">
-                <span class="visually-hidden">Loading...</span>
-            </div>
+            <div class="spinner-border text-accent" role="status"></div>
             <p class="text-white mt-2">Processing...</p>
         </div>
     </div>
@@ -1031,1388 +593,471 @@ if (!in_array($user['role'], $allowedRoles)) {
     <!-- Bootstrap JS -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 
-    <!-- Pending Orders JavaScript -->
-    <script src="assets/js/pos-pending-orders-new.js?v=<?php echo time(); ?>"></script>
-
     <!-- POS JavaScript -->
     <script>
-        // Configuration
         const API_BASE = '../backend/api';
         const currentUser = <?php echo json_encode($user, JSON_HEX_TAG|JSON_HEX_AMP|JSON_HEX_APOS|JSON_HEX_QUOT); ?>;
 
-        // POS State
-        let posCart = [];
-        let posHeldSales = [];
-        let currentView = 'grid';
-        let isFullscreen = false;
-        let lastCompletedSale = null; // Store last completed sale for receipts
+        let cart = [];
+        let heldSales = [];
+        let lastOrder = null;
+        let currentOrderId = null;
 
-        // Initialize POS
+        // Initialize
         document.addEventListener('DOMContentLoaded', function() {
-            initializePOS();
             loadCategories();
             loadProducts();
             setupEventListeners();
-
-            // Initialize pending orders functionality if available
-            if (typeof initializePendingOrders !== 'undefined') {
-                initializePendingOrders();
-            }
-
-            // Update clock
-            setInterval(() => {
-                document.getElementById('pos-time').textContent = new Date().toLocaleTimeString();
-            }, 1000);
+            updateClock();
+            setInterval(updateClock, 1000);
+            heldSales = JSON.parse(localStorage.getItem('heldSales') || '[]');
         });
 
-        function initializePOS() {
-            posCart = [];
-            posHeldSales = JSON.parse(localStorage.getItem('posHeldSales') || '[]');
-            updateCartDisplay();
-        }
-
         function setupEventListeners() {
-            // Search input
-            document.getElementById('pos-search').addEventListener('input', (e) => {
-                loadProducts(e.target.value, document.getElementById('pos-category-filter').value);
-            });
-
-            // Category filter
-            document.getElementById('pos-category-filter').addEventListener('change', (e) => {
-                loadProducts(document.getElementById('pos-search').value, e.target.value);
-            });
-
-            // Tab change handler for pending orders
-            const pendingOrdersTab = document.getElementById('pending-orders-tab');
-            if (pendingOrdersTab) {
-                pendingOrdersTab.addEventListener('shown.bs.tab', function() {
-                    loadPendingOrders();
-                });
-            }
-
-            // Barcode scanner
-            document.getElementById('pos-barcode').addEventListener('keypress', (e) => {
+            document.getElementById('search-input').addEventListener('input', (e) => loadProducts(e.target.value));
+            document.getElementById('category-filter').addEventListener('change', (e) => loadProducts('', e.target.value));
+            document.getElementById('barcode-input').addEventListener('keypress', (e) => {
                 if (e.key === 'Enter') {
-                    const barcode = e.target.value.trim();
-                    if (barcode) {
-                        scanBarcode(barcode);
-                        e.target.value = '';
-                    }
+                    scanBarcode(e.target.value.trim());
+                    e.target.value = '';
                 }
             });
 
-            // Payment method change
-            document.querySelectorAll('input[name="payment-method"]').forEach(radio => {
-                radio.addEventListener('change', (e) => {
-                    toggleCashPaymentSection(e.target.value === 'cash');
+            document.querySelectorAll('input[name="payment"]').forEach(r => {
+                r.addEventListener('change', (e) => {
+                    document.getElementById('cash-section').classList.toggle('d-none', e.target.value !== 'cash');
                 });
             });
 
-            // Cash received input
-            document.getElementById('pos-cash-received').addEventListener('input', calculateChange);
+            document.getElementById('cash-received').addEventListener('input', calculateChange);
+            document.getElementById('pending-orders-tab').addEventListener('shown.bs.tab', loadPendingOrders);
 
-            // Customer selection buttons (event delegation)
-            document.addEventListener('click', function(e) {
-                if (e.target.classList.contains('select-customer-btn') || e.target.closest('.select-customer-btn')) {
-                    const btn = e.target.classList.contains('select-customer-btn') ? e.target : e.target.closest('.select-customer-btn');
-                    const customerName = btn.getAttribute('data-customer-name');
-                    selectCustomer(customerName);
-                }
+            document.addEventListener('keydown', (e) => {
+                if (e.target.id === 'barcode-input') return;
+                if (e.key === 'F11') { e.preventDefault(); toggleFullscreen(); }
+                if (e.key === 'F12') { e.preventDefault(); completeSale(); }
             });
-
-            // Keyboard shortcuts
-            document.addEventListener('keydown', handleKeyboard);
         }
 
-        function handleKeyboard(e) {
-            // Ignore if user is typing in an input
-            if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') {
-                if (e.target.id === 'pos-barcode' && e.key === 'Enter') return;
-                return;
-            }
-
-            switch(e.key.toLowerCase()) {
-                case 'f11':
-                    e.preventDefault();
-                    toggleFullscreen();
-                    break;
-                case 'f12':
-                    e.preventDefault();
-                    if (posCart.length > 0) completeSale();
-                    break;
-                case 'escape':
-                    if (isFullscreen) {
-                        toggleFullscreen();
-                    }
-                    break;
-                case 'f1':
-                    e.preventDefault();
-                    document.getElementById('pos-search').focus();
-                    break;
-                case 'f2':
-                    e.preventDefault();
-                    document.getElementById('pos-barcode').focus();
-                    break;
-                case 'f3':
-                    e.preventDefault();
-                    clearCart();
-                    break;
-                case 'f4':
-                    e.preventDefault();
-                    holdSale();
-                    break;
-                case 'f5':
-                    e.preventDefault();
-                    recallSale();
-                    break;
-            }
+        function updateClock() {
+            document.getElementById('current-time').textContent = new Date().toLocaleTimeString();
         }
 
         async function loadCategories() {
             try {
-                const response = await fetch(`${API_BASE}/categories/index.php`);
-                const data = await response.json();
-
+                const res = await fetch(`${API_BASE}/categories/index.php`);
+                const data = await res.json();
                 if (data.success && data.data.categories) {
-                    const select = document.getElementById('pos-category-filter');
-                    select.innerHTML = '<option value="">All Categories</option>';
-
+                    const select = document.getElementById('category-filter');
                     data.data.categories.forEach(cat => {
                         select.innerHTML += `<option value="${cat.id}">${cat.name}</option>`;
                     });
                 }
-            } catch (error) {
-                console.error('Error loading categories:', error);
-            }
+            } catch (e) { console.error(e); }
         }
 
-        async function loadProducts(search = '', categoryId = '') {
-            const loading = document.getElementById('pos-loading');
-            const container = document.getElementById('pos-products');
-            const noProducts = document.getElementById('pos-no-products');
+        async function loadProducts(search = '', category = '') {
+            const container = document.getElementById('products-container');
+            const loading = document.getElementById('loading-products');
+            const empty = document.getElementById('no-products');
 
-            loading.classList.remove('d-none');
             container.innerHTML = '';
-            noProducts.classList.add('d-none');
+            loading.classList.remove('d-none');
+            empty.classList.add('d-none');
 
             try {
                 let url = `${API_BASE}/products/index.php?is_active=1&limit=50`;
                 if (search) url += `&search=${encodeURIComponent(search)}`;
-                if (categoryId) url += `&category_id=${categoryId}`;
+                if (category) url += `&category_id=${category}`;
 
-                const response = await fetch(url);
-                const data = await response.json();
+                const res = await fetch(url);
+                const data = await res.json();
 
                 loading.classList.add('d-none');
 
-                if (data.success && data.data.products && data.data.products.length > 0) {
-                    const html = [];
-                    if (currentView === 'grid') {
-                        container.className = 'row g-2';
-                        for (const p of data.data.products) {
-                            const imgHtml = p.image_url
-                                ? '<img src="' + p.image_url + '" alt="' + p.name.replace(/"/g, '"') + '" class="product-image">'
-                                : '<div class="product-image-fallback"><i class="fas fa-microchip fa-2x"></i></div>';
-
-                            const stockText = (p.quantity_available || 0) > 0
-                                ? ((p.quantity_available || 0) + ' in stock')
-                                : 'Out of stock';
-
-                            const stockClass = (p.quantity_available || 0) > 0 ? 'text-success' : 'text-danger';
-                            const stockIcon = (p.quantity_available || 0) > 0 ? 'check' : 'times';
-
-                            html.push(
-                                '<div class="col-md-6 col-lg-4">' +
-                                    '<div class="card h-100 product-card" data-product="' + btoa(JSON.stringify(p)) + '" onclick="addToCartFromCard(this)">' +
-                                        '<div class="card-body p-2">' +
-                                            '<div class="product-image-container mb-2">' + imgHtml + '</div>' +
-                                            '<h6 class="product-title mb-1" style="font-size: 0.9rem; line-height: 1.2;">' + p.name + '</h6>' +
-                                            '<div class="d-flex justify-content-between align-items-center">' +
-                                                '<small class="text-muted">' + p.sku + '</small>' +
-                                                '<strong style="color: var(--accent); font-size: 0.9rem;">₱' + parseFloat(p.selling_price).toLocaleString() + '</strong>' +
-                                            '</div>' +
-                                            '<div class="mt-1">' +
-                                                '<small class="' + stockClass + '">' +
-                                                    '<i class="fas fa-' + stockIcon + '-circle me-1"></i>' + stockText +
-                                                '</small>' +
-                                            '</div>' +
-                                        '</div>' +
-                                    '</div>' +
-                                '</div>'
-                            );
-                        }
-                        container.innerHTML = html.join('');
-                    } else {
-                        // List view
-                        container.className = '';
-                        container.innerHTML =
-                            '<div class="table-responsive">' +
-                                '<table class="table table-sm">' +
-                                    '<thead>' +
-                                        '<tr>' +
-                                            '<th>SKU</th>' +
-                                            '<th>Product</th>' +
-                                            '<th>Category</th>' +
-                                            '<th>Price</th>' +
-                                            '<th>Stock</th>' +
-                                            '<th>Action</th>' +
-                                        '</tr>' +
-                                    '</thead>' +
-                                    '<tbody>';
-
-                        for (const p of data.data.products) {
-                            const stockClass = (p.quantity_available || 0) > 0 ? 'text-success' : 'text-danger';
-                            const stockText = p.quantity_available || 0;
-
-                            container.innerHTML +=
-                                '<tr style="cursor: pointer;" data-product="' + btoa(JSON.stringify(p)) + '" onclick="addToCartFromCard(this)">' +
-                                    '<td><code>' + p.sku + '</code></td>' +
-                                    '<td><strong>' + p.name + '</strong></td>' +
-                                    '<td>' + (p.category_name || '-') + '</td>' +
-                                    '<td><strong style="color: var(--accent);">₱' + parseFloat(p.selling_price).toLocaleString() + '</strong></td>' +
-                                    '<td><span class="' + stockClass + '">' + stockText + '</span></td>' +
-                                    '<td><button class="btn btn-sm btn-accent" onclick="event.stopPropagation(); const row = this.closest(\'tr\'); if (row) addToCartFromCard(row);"><i class="fas fa-plus"></i> Add</button></td>' +
-                                '</tr>';
-                        }
-
-                        container.innerHTML +=
-                                    '</tbody>' +
-                                '</table>' +
-                            '</div>';
-                    }
+                if (data.success && data.data.products?.length > 0) {
+                    data.data.products.forEach(p => {
+                        const html = `
+                            <div class="product-card" onclick="addToCart({id: ${p.id}, name: '${p.name.replace(/'/g, "\\'")}', sku: '${p.sku}', price: ${p.selling_price}, max: ${p.quantity_available || 0}})">
+                                ${p.image_url ? `<img src="${p.image_url}" class="product-card-img">` : `<div class="product-card-img bg-secondary"></div>`}
+                                <div class="product-card-body">
+                                    <div class="product-card-title">${p.name}</div>
+                                    <div class="product-card-price">₱${parseFloat(p.selling_price).toLocaleString()}</div>
+                                    <div class="product-card-stock">${p.quantity_available || 0} stock</div>
+                                </div>
+                            </div>
+                        `;
+                        container.innerHTML += html;
+                    });
                 } else {
-                    noProducts.classList.remove('d-none');
+                    empty.classList.remove('d-none');
                 }
-            } catch (error) {
-                console.error('Error loading products:', error);
-                loading.classList.add('d-none');
-                noProducts.classList.remove('d-none');
+            } catch (e) {
+                console.error(e);
+                empty.classList.remove('d-none');
             }
         }
 
         function addToCart(product) {
-            if ((product.quantity_available || 0) <= 0) {
-                showToast('Product is out of stock!', 'warning');
+            if (product.max <= 0) {
+                showToast('Out of stock', 'warning');
                 return;
             }
 
-            const existing = posCart.find(item => item.id === product.id);
+            const existing = cart.find(i => i.id === product.id);
             if (existing) {
-                if (existing.quantity >= product.quantity_available) {
-                    showToast('Cannot add more than available stock!', 'warning');
+                if (existing.qty >= product.max) {
+                    showToast('Cannot exceed stock', 'warning');
                     return;
                 }
-                existing.quantity++;
+                existing.qty++;
             } else {
-                posCart.push({
-                    id: product.id,
-                    sku: product.sku,
-                    name: product.name,
-                    price: parseFloat(product.selling_price),
-                    quantity: 1,
-                    max_quantity: product.quantity_available
-                });
+                cart.push({ ...product, qty: 1 });
             }
 
-            updateCartDisplay();
+            updateCart();
             showToast(`Added ${product.name}`, 'success');
         }
 
-        function updateCartDisplay() {
-            const container = document.getElementById('pos-cart-items');
-            const emptyCart = document.getElementById('pos-empty-cart');
+        function removeFromCart(id) {
+            cart = cart.filter(i => i.id !== id);
+            updateCart();
+        }
 
-            if (posCart.length === 0) {
+        function updateQuantity(id, delta) {
+            const item = cart.find(i => i.id === id);
+            if (!item) return;
+            item.qty += delta;
+            if (item.qty <= 0) removeFromCart(id);
+            else updateCart();
+        }
+
+        function updateCart() {
+            const container = document.getElementById('cart-items');
+            const empty = document.getElementById('empty-cart');
+            const completeBtn = document.getElementById('complete-btn');
+
+            if (cart.length === 0) {
                 container.innerHTML = '';
-                emptyCart.classList.remove('d-none');
-                document.getElementById('pos-subtotal').textContent = '₱0.00';
-                document.getElementById('pos-tax').textContent = '₱0.00';
-                document.getElementById('pos-total').textContent = '₱0.00';
-                document.getElementById('print-receipt-btn').disabled = true;
-                document.getElementById('email-receipt-btn').disabled = true;
-                return;
+                empty.classList.remove('d-none');
+                completeBtn.disabled = true;
+                document.getElementById('print-btn').disabled = true;
+                document.getElementById('email-btn').disabled = true;
+            } else {
+                empty.classList.add('d-none');
+                completeBtn.disabled = false;
+
+                container.innerHTML = cart.map(item => `
+                    <div class="cart-item">
+                        <div class="cart-item-info">
+                            <div class="cart-item-name">${item.name}</div>
+                            <div class="cart-item-price">₱${item.price.toLocaleString()} × ${item.qty}</div>
+                        </div>
+                        <div class="cart-item-controls">
+                            <button class="btn btn-sm btn-outline-primary" onclick="updateQuantity(${item.id}, -1)">−</button>
+                            <span class="px-2">${item.qty}</span>
+                            <button class="btn btn-sm btn-outline-primary" onclick="updateQuantity(${item.id}, 1)">+</button>
+                            <button class="btn btn-sm btn-outline-danger ms-2" onclick="removeFromCart(${item.id})">×</button>
+                        </div>
+                    </div>
+                `).join('');
             }
 
-            emptyCart.classList.add('d-none');
-
-            container.innerHTML = posCart.map(item => `
-                <div class="cart-item d-flex justify-content-between align-items-center">
-                    <div class="flex-grow-1">
-                        <strong>${item.name}</strong>
-                        <br><small class="text-muted">₱${item.price.toLocaleString()} × ${item.quantity}</small>
-                    </div>
-                    <div class="text-end">
-                        <div class="btn-group btn-group-sm mb-1">
-                            <button class="btn btn-sm btn-outline-primary" onclick="changeQuantity('${item.id}', -1)">-</button>
-                            <button class="btn btn-sm btn-outline-primary" disabled>${item.quantity}</button>
-                            <button class="btn btn-sm btn-outline-primary" onclick="changeQuantity('${item.id}', 1)">+</button>
-                        </div>
-                        <br>
-                        <strong style="color: var(--accent);">₱${(item.price * item.quantity).toLocaleString()}</strong>
-                        <button class="btn btn-sm btn-outline-danger ms-2" onclick="removeFromCart('${item.id}')">×</button>
-                    </div>
-                </div>
-            `).join('');
-
-            const subtotal = posCart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
-            const tax = subtotal * 0.12; // 12% VAT
+            const subtotal = cart.reduce((s, i) => s + (i.price * i.qty), 0);
+            const tax = subtotal * 0.12;
             const total = subtotal + tax;
 
-            document.getElementById('pos-subtotal').textContent = '₱' + subtotal.toLocaleString('en-US', {minimumFractionDigits: 2});
-            document.getElementById('pos-tax').textContent = '₱' + tax.toLocaleString('en-US', {minimumFractionDigits: 2});
-            document.getElementById('pos-total').textContent = '₱' + total.toLocaleString('en-US', {minimumFractionDigits: 2});
-
-            // Enable receipt buttons
-            document.getElementById('print-receipt-btn').disabled = false;
-            document.getElementById('email-receipt-btn').disabled = false;
+            document.getElementById('subtotal').textContent = '₱' + subtotal.toLocaleString('en-US', {minimumFractionDigits: 2});
+            document.getElementById('tax').textContent = '₱' + tax.toLocaleString('en-US', {minimumFractionDigits: 2});
+            document.getElementById('total').textContent = '₱' + total.toLocaleString('en-US', {minimumFractionDigits: 2});
         }
 
-        function changeQuantity(productId, delta) {
-            const item = posCart.find(i => i.id === productId);
-            if (!item) return;
+        function calculateChange() {
+            const received = parseFloat(document.getElementById('cash-received').value) || 0;
+            const total = parseFloat(document.getElementById('total').textContent.replace(/[^0-9.]/g, '')) || 0;
+            const change = Math.max(0, received - total);
+            document.getElementById('change').textContent = '₱' + change.toLocaleString('en-US', {minimumFractionDigits: 2});
+        }
 
-            item.quantity += delta;
-
-            if (item.quantity <= 0) {
-                removeFromCart(productId);
-                return;
+        async function scanBarcode(barcode) {
+            try {
+                const res = await fetch(`${API_BASE}/products/index.php?sku=${barcode}`);
+                const data = await res.json();
+                if (data.success && data.data.products?.[0]) {
+                    addToCart({
+                        id: data.data.products[0].id,
+                        name: data.data.products[0].name,
+                        sku: data.data.products[0].sku,
+                        price: data.data.products[0].selling_price,
+                        max: data.data.products[0].quantity_available || 0
+                    });
+                } else {
+                    showToast('Product not found', 'warning');
+                }
+            } catch (e) {
+                showToast('Barcode scan error', 'error');
             }
-
-            if (item.quantity > item.max_quantity) {
-                showToast('Cannot exceed available stock!', 'warning');
-                item.quantity = item.max_quantity;
-            }
-
-            updateCartDisplay();
-        }
-
-        function removeFromCart(productId) {
-            posCart = posCart.filter(item => item.id !== productId);
-            updateCartDisplay();
-        }
-
-        async function clearCart() {
-            if (posCart.length === 0) return;
-            if (!confirm('This will remove all items from the cart.')) return;
-            posCart = [];
-            updateCartDisplay();
         }
 
         async function completeSale() {
-            if (posCart.length === 0) {
-                showToast('Cart is empty!', 'warning');
+            if (cart.length === 0) {
+                showToast('Cart is empty', 'warning');
                 return;
             }
 
-            // Get payment method
-            const paymentMethod = document.querySelector('input[name="payment-method"]:checked').value;
-
-            // Validate cash payment if selected
-            if (paymentMethod === 'cash') {
-                const cashReceived = parseFloat(document.getElementById('pos-cash-received').value) || 0;
-                const total = parseFloat(document.getElementById('pos-total').textContent.replace('₱', '').replace(',', '')) || 0;
-
-                if (cashReceived < total) {
-                    showToast('Cash received is less than total amount!', 'warning');
-                    document.getElementById('pos-cash-received').focus();
+            const payment = document.querySelector('input[name="payment"]:checked').value;
+            if (payment === 'cash') {
+                const received = parseFloat(document.getElementById('cash-received').value) || 0;
+                const total = parseFloat(document.getElementById('total').textContent.replace(/[^0-9.]/g, '')) || 0;
+                if (received < total) {
+                    showToast('Insufficient cash', 'warning');
                     return;
                 }
             }
 
-            if (!confirm('Ready to complete this sale?')) return;
+            if (!confirm('Complete this sale?')) return;
 
-            const customerName = document.getElementById('pos-customer-name').value.trim() || 'Walk-in Customer';
-            const saleNumber = document.getElementById('pos-sale-number').textContent;
-            const subtotal = posCart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
-            const tax = subtotal * 0.12; // 12% VAT
+            const subtotal = cart.reduce((s, i) => s + (i.price * i.qty), 0);
+            const tax = subtotal * 0.12;
             const total = subtotal + tax;
-            // Capture items for receipt before clearing the cart
-            const itemsForReceipt = posCart.map(item => ({
-                name: item.name,
-                quantity: item.quantity,
-                price: item.price,
-                total: item.price * item.quantity
-            }));
+
             const saleData = {
-                customer_name: customerName,
-                items: posCart.map(item => ({
-                    product_id: item.id,
-                    quantity: item.quantity,
-                    unit_price: item.price,
-                    subtotal: item.price * item.quantity
-                })),
-                subtotal: subtotal,
-                tax_amount: tax,
-                total_amount: total,
-                payment_method: paymentMethod,
-                payment_details: paymentMethod === 'cash' ? {
-                    cash_received: parseFloat(document.getElementById('pos-cash-received').value),
-                    change_given: parseFloat(document.getElementById('pos-change').textContent.replace('₱', '').replace(',', ''))
+                customer_name: document.getElementById('customer-name').value || 'Walk-in',
+                items: cart.map(i => ({ product_id: i.id, quantity: i.qty, unit_price: i.price })),
+                subtotal, tax_amount: tax, total_amount: total,
+                payment_method: payment,
+                payment_details: payment === 'cash' ? {
+                    cash_received: parseFloat(document.getElementById('cash-received').value),
+                    change_given: parseFloat(document.getElementById('change').textContent.replace(/[^0-9.]/g, ''))
                 } : null
             };
 
-            const loading = document.getElementById('loading-overlay');
-            const completeBtn = document.getElementById('complete-sale-btn');
-            const originalText = completeBtn.innerHTML;
-
-            loading.classList.remove('d-none');
-            completeBtn.disabled = true;
-            completeBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Processing...';
+            const overlay = document.getElementById('loading-overlay');
+            overlay.classList.remove('d-none');
 
             try {
-                const response = await fetch(`${API_BASE}/sales/create.php`, {
+                const res = await fetch(`${API_BASE}/sales/create.php`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(saleData)
                 });
 
-                const data = await response.json();
+                const data = await res.json();
 
                 if (data.success) {
-                    showToast('Sale completed successfully! Sale ID: ' + data.data.sale_id, 'success');
-
-                    // Store the last completed sale data for receipts (use captured items)
-                    lastCompletedSale = {
-                        saleNumber: saleNumber,
-                        customerName: customerName,
-                        date: new Date().toLocaleString(),
-                        items: itemsForReceipt,
-                        subtotal: subtotal,
-                        tax: tax,
-                        total: total,
-                        cashierName: currentUser.full_name || currentUser.username,
-                        saleId: data.data.sale_id
-                    };
-
-                    // Reset POS (after capturing lastCompletedSale)
-                    posCart = [];
-                    updateCartDisplay();
-                    document.getElementById('pos-customer-name').value = '';
-                    document.getElementById('pos-cash-received').value = '';
-                    document.getElementById('pos-sale-number').textContent = 'Sale #' + Date.now();
-
-                    // Reload products to update stock
+                    lastOrder = { ...saleData, id: data.data.sale_id, date: new Date().toLocaleString() };
+                    cart = [];
+                    updateCart();
+                    document.getElementById('customer-name').value = '';
+                    document.getElementById('cash-received').value = '';
+                    document.getElementById('change').textContent = '₱0.00';
+                    document.getElementById('sale-number').textContent = Date.now();
+                    document.getElementById('print-btn').disabled = false;
+                    document.getElementById('email-btn').disabled = false;
+                    showToast('Sale completed!', 'success');
                     loadProducts();
-
-                    // Enable receipt buttons
-                    document.getElementById('print-receipt-btn').disabled = false;
-                    document.getElementById('email-receipt-btn').disabled = false;
                 } else {
-                    showToast('Error completing sale: ' + data.message, 'error');
+                    showToast('Error: ' + data.message, 'error');
                 }
-            } catch (error) {
-                showToast('Error completing sale. Please try again.', 'error');
+            } catch (e) {
+                showToast('Sale error', 'error');
             } finally {
-                loading.classList.add('d-none');
-                completeBtn.disabled = false;
-                completeBtn.innerHTML = originalText;
+                overlay.classList.add('d-none');
             }
         }
 
-        function toggleCashPaymentSection(show) {
-            const section = document.getElementById('cash-payment-section');
-            if (show) {
-                section.style.display = 'block';
-                document.getElementById('pos-cash-received').focus();
-            } else {
-                section.style.display = 'none';
-                document.getElementById('pos-cash-received').value = '';
-                document.getElementById('pos-change').textContent = '₱0.00';
-            }
-        }
-
-        function calculateChange() {
-            const cashReceived = parseFloat(document.getElementById('pos-cash-received').value) || 0;
-            const total = parseFloat(document.getElementById('pos-total').textContent.replace('₱', '').replace(',', '')) || 0;
-            const change = Math.max(0, cashReceived - total);
-
-            document.getElementById('pos-change').textContent = '₱' + change.toLocaleString('en-US', {minimumFractionDigits: 2});
-        }
-
-        async function scanBarcode(barcode) {
-            try {
-                const response = await fetch(`${API_BASE}/products/index.php?sku=${encodeURIComponent(barcode)}`);
-                const data = await response.json();
-
-                if (data.success && data.data.products && data.data.products.length > 0) {
-                    const product = data.data.products[0];
-                    addToCart(product);
-                    showToast(`Added ${product.name}`, 'success');
-                } else {
-                    showToast('Product not found', 'warning');
-                }
-            } catch (error) {
-                console.error('Barcode scan error:', error);
-                showToast('Error scanning barcode', 'error');
-            }
-        }
-
-        function setView(view) {
-            currentView = view;
-
-            // Update button states
-            document.getElementById('grid-view').classList.toggle('active', view === 'grid');
-            document.getElementById('list-view').classList.toggle('active', view === 'list');
-
-            // Reload products with new view
-            loadProducts(document.getElementById('pos-search').value, document.getElementById('pos-category-filter').value);
-        }
-
-        function toggleFullscreen() {
-            const container = document.querySelector('.pos-container');
-            isFullscreen = !isFullscreen;
-
-            if (isFullscreen) {
-                container.classList.add('fullscreen-mode');
-                showToast('POS Fullscreen Mode - Press ESC to exit', 'info');
-            } else {
-                container.classList.remove('fullscreen-mode');
-                showToast('Exited fullscreen mode', 'info');
-            }
-        }
-
-        function quickAddProduct() {
-            // Load categories for the quick add modal
-            loadCategoriesForQuickAdd();
-
-            const modal = new bootstrap.Modal(document.getElementById('quickAddProductModal'));
-            modal.show();
-            // Focus on first input
-            setTimeout(() => document.getElementById('quick-product-name').focus(), 100);
-        }
-
-        async function loadCategoriesForQuickAdd() {
-            try {
-                const response = await fetch(`${API_BASE}/categories/index.php`);
-                const data = await response.json();
-
-                if (data.success && data.data.categories) {
-                    const select = document.getElementById('quick-product-category');
-                    select.innerHTML = '<option value="">Select Category</option>';
-
-                    data.data.categories.forEach(cat => {
-                        select.innerHTML += `<option value="${cat.id}">${cat.name}</option>`;
-                    });
-                }
-            } catch (error) {
-                console.error('Error loading categories for quick add:', error);
-            }
-        }
-
-        async function submitQuickAddProduct() {
-            const name = document.getElementById('quick-product-name').value.trim();
-            const sku = document.getElementById('quick-product-sku').value.trim();
-            const categoryId = document.getElementById('quick-product-category').value;
-            const price = parseFloat(document.getElementById('quick-product-price').value);
-            const description = document.getElementById('quick-product-description').value.trim();
-
-            // Validation
-            if (!name || !sku || !categoryId || isNaN(price) || price <= 0) {
-                showToast('Please fill in all required fields with valid values', 'warning');
-                return;
-            }
-
-            // Calculate cost price (60% of selling price as default)
-            const costPrice = price * 0.6;
-
-            const productData = {
-                name: name,
-                sku: sku,
-                category_id: categoryId,
-                cost_price: costPrice,
-                selling_price: price,
-                description: description || null,
-                min_stock_level: 1,
-                is_active: 1
-            };
-
-            const submitBtn = document.querySelector('#quickAddProductModal .btn-accent');
-            const originalText = submitBtn.innerHTML;
-
-            submitBtn.disabled = true;
-            submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Creating...';
-
-            try {
-                const response = await fetch(`${API_BASE}/products/create.php`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(productData)
-                });
-
-                const data = await response.json();
-
-                if (data.success) {
-                    showToast('Product created successfully!', 'success');
-
-                    // Close modal and reset form
-                    const modal = bootstrap.Modal.getInstance(document.getElementById('quickAddProductModal'));
-                    modal.hide();
-
-                    // Reset form
-                    document.getElementById('quick-add-product-form').reset();
-
-                    // Reload products to show the new one
-                    loadProducts();
-
-                } else {
-                    showToast('Error creating product: ' + (data.message || 'Unknown error'), 'error');
-                }
-            } catch (error) {
-                showToast('Error creating product. Please try again.', 'error');
-            } finally {
-                submitBtn.disabled = false;
-                submitBtn.innerHTML = originalText;
-            }
+        function clearCart() {
+            if (cart.length === 0) return;
+            if (!confirm('Clear cart?')) return;
+            cart = [];
+            updateCart();
         }
 
         function holdSale() {
-            if (posCart.length === 0) {
-                showToast('Cart is empty - nothing to hold', 'warning');
+            if (cart.length === 0) {
+                showToast('Nothing to hold', 'warning');
                 return;
             }
 
-            const saleNumber = document.getElementById('pos-sale-number').textContent;
-            const heldSale = {
+            heldSales.push({
                 id: Date.now(),
-                saleNumber: saleNumber,
-                timestamp: new Date().toISOString(),
-                customer: document.getElementById('pos-customer-name').value || 'Walk-in Customer',
-                paymentMethod: document.querySelector('input[name="payment-method"]:checked').value,
-                cashReceived: parseFloat(document.getElementById('pos-cash-received').value) || 0,
-                items: [...posCart],
-                subtotal: parseFloat(document.getElementById('pos-subtotal').textContent.replace('₱', '').replace(',', '')),
-                tax: parseFloat(document.getElementById('pos-tax').textContent.replace('₱', '').replace(',', '')),
-                total: parseFloat(document.getElementById('pos-total').textContent.replace('₱', '').replace(',', ''))
-            };
+                customer: document.getElementById('customer-name').value || 'Walk-in',
+                items: [...cart],
+                subtotal: parseFloat(document.getElementById('subtotal').textContent.replace(/[^0-9.]/g, '')),
+                tax: parseFloat(document.getElementById('tax').textContent.replace(/[^0-9.]/g, '')),
+                total: parseFloat(document.getElementById('total').textContent.replace(/[^0-9.]/g, ''))
+            });
 
-            posHeldSales.push(heldSale);
-            localStorage.setItem('posHeldSales', JSON.stringify(posHeldSales));
-
-            // Clear current cart
-            posCart = [];
-            updateCartDisplay();
-
-            // Reset form fields
-            document.getElementById('pos-customer-name').value = '';
-            document.getElementById('pos-cash-received').value = '';
-            document.getElementById('pos-change').textContent = '₱0.00';
-
-            // Generate new sale number
-            document.getElementById('pos-sale-number').textContent = 'Sale #' + Date.now();
-
-            showToast(`Sale ${saleNumber} held successfully`, 'success');
+            localStorage.setItem('heldSales', JSON.stringify(heldSales));
+            cart = [];
+            updateCart();
+            document.getElementById('customer-name').value = '';
+            showToast('Sale held', 'success');
         }
 
         function recallSale() {
-            populateRecallSaleModal();
-
-            const modal = new bootstrap.Modal(document.getElementById('recallSaleModal'));
-            modal.show();
-        }
-
-        function populateRecallSaleModal() {
-            const salesList = document.getElementById('recall-sales-list');
-            const emptyState = document.getElementById('recall-sales-empty');
-            const loadingState = document.getElementById('recall-sales-loading');
-            const tableBody = document.getElementById('recall-sales-table-body');
-
-            loadingState.classList.remove('d-none');
-            salesList.classList.add('d-none');
-            emptyState.classList.add('d-none');
-
-            // Small delay to show loading state
-            setTimeout(() => {
-                if (posHeldSales.length === 0) {
-                    loadingState.classList.add('d-none');
-                    emptyState.classList.remove('d-none');
-                    return;
-                }
-
-                tableBody.innerHTML = '';
-                posHeldSales.forEach(sale => {
-                    const row = document.createElement('tr');
-                    const formattedTime = new Date(sale.timestamp).toLocaleString();
-
-                    row.innerHTML = `
-                        <td>${sale.saleNumber}</td>
-                        <td>${sale.customer}</td>
-                        <td>${sale.items.length} item${sale.items.length !== 1 ? 's' : ''}</td>
-                        <td>₱${sale.total.toLocaleString()}</td>
-                        <td><small>${formattedTime}</small></td>
-                        <td>
-                            <button class="btn btn-sm btn-accent" onclick="selectHeldSale(${sale.id})">
-                                <i class="fas fa-check me-1"></i>Select
-                            </button>
-                            <button class="btn btn-sm btn-outline-danger ms-1" onclick="deleteHeldSale(${sale.id})">
-                                <i class="fas fa-trash"></i>
-                            </button>
-                        </td>
-                    `;
-                    tableBody.appendChild(row);
-                });
-
-                loadingState.classList.add('d-none');
-                salesList.classList.remove('d-none');
-            }, 300);
-        }
-
-        function selectHeldSale(saleId) {
-            const sale = posHeldSales.find(s => s.id === saleId);
-            if (!sale) {
-                showToast('Sale not found', 'error');
+            if (heldSales.length === 0) {
+                showToast('No held sales', 'info');
                 return;
             }
 
-            // Restore cart
-            posCart = [...sale.items];
-
-            // Restore customer and sale info
-            document.getElementById('pos-customer-name').value = sale.customer;
-            document.getElementById('pos-sale-number').textContent = sale.saleNumber;
-
-            // Restore payment method and cash received if applicable
-            if (sale.paymentMethod) {
-                const paymentRadio = document.querySelector(`input[name="payment-method"][value="${sale.paymentMethod}"]`);
-                if (paymentRadio) {
-                    paymentRadio.checked = true;
-                    toggleCashPaymentSection(sale.paymentMethod === 'cash');
-                    if (sale.paymentMethod === 'cash' && sale.cashReceived) {
-                        document.getElementById('pos-cash-received').value = sale.cashReceived;
-                        calculateChange();
-                    }
-                }
-            }
-
-            // Update display
-            updateCartDisplay();
-
-            // Remove from held sales
-            posHeldSales = posHeldSales.filter(s => s.id !== saleId);
-            localStorage.setItem('posHeldSales', JSON.stringify(posHeldSales));
-
-            // Close modal
-            const modal = bootstrap.Modal.getInstance(document.getElementById('recallSaleModal'));
-            modal.hide();
-
-            showToast(`Sale ${sale.saleNumber} recalled successfully`, 'success');
+            const sale = heldSales.pop();
+            localStorage.setItem('heldSales', JSON.stringify(heldSales));
+            cart = [...sale.items];
+            document.getElementById('customer-name').value = sale.customer;
+            updateCart();
+            showToast('Sale recalled', 'success');
         }
 
-        function deleteHeldSale(saleId) {
-            if (!confirm('Are you sure you want to delete this held sale? This action cannot be undone.')) {
-                return;
-            }
-
-            posHeldSales = posHeldSales.filter(s => s.id !== saleId);
-            localStorage.setItem('posHeldSales', JSON.stringify(posHeldSales));
-
-            populateRecallSaleModal();
-            showToast('Held sale deleted', 'success');
+        function quickAddProduct() {
+            showToast('Quick add feature not available yet', 'info');
         }
 
         function searchCustomer() {
-            // Clear previous search
-            document.getElementById('customer-search-input').value = '';
-            document.getElementById('customer-search-results').classList.add('d-none');
-            document.getElementById('customer-search-empty').classList.add('d-none');
-
-            const modal = new bootstrap.Modal(document.getElementById('customerSearchModal'));
-            modal.show();
-
-            // Focus on search input
-            setTimeout(() => document.getElementById('customer-search-input').focus(), 100);
+            showToast('Search feature not available yet', 'info');
         }
 
-        async function performCustomerSearch() {
-            const query = document.getElementById('customer-search-input').value.trim();
-            if (!query) {
-                showToast('Please enter a search term', 'warning');
-                return;
-            }
+        async function loadPendingOrders() {
+            const container = document.getElementById('pending-list');
+            const loading = document.getElementById('pending-loading');
+            const empty = document.getElementById('pending-empty');
 
-            const loadingState = document.getElementById('customer-search-loading');
-            const resultsState = document.getElementById('customer-search-results');
-            const emptyState = document.getElementById('customer-search-empty');
-            const tableBody = document.getElementById('customer-search-table-body');
-
-            loadingState.classList.remove('d-none');
-            resultsState.classList.add('d-none');
-            emptyState.classList.add('d-none');
+            container.innerHTML = '';
+            loading.classList.remove('d-none');
+            empty.classList.add('d-none');
 
             try {
-                const response = await fetch(`${API_BASE}/customers/search.php?q=${encodeURIComponent(query)}`);
-                const data = await response.json();
+                const res = await fetch(`${API_BASE}/pos/pending-orders.php`);
+                const data = await res.json();
 
-                loadingState.classList.add('d-none');
+                loading.classList.add('d-none');
 
-                if (data.success && data.customers && data.customers.length > 0) {
-                    tableBody.innerHTML = '';
-                    data.customers.forEach(customer => {
-                        const row = document.createElement('tr');
+                if (data.success && data.data.orders?.length > 0) {
+                    document.getElementById('order-count').textContent = data.data.orders.length;
 
-                        // Handle different column names
-                        const customerName = customer.name || `${customer.first_name || ''} ${customer.last_name || ''}`.trim();
-
-                        row.innerHTML = `
-                            <td>${customerName}</td>
-                            <td>${customer.email || '-'}</td>
-                            <td>${customer.phone || '-'}</td>
-                            <td>${customer.address || '-'}</td>
-                            <td>
-                                <button class="btn btn-sm btn-accent select-customer-btn" data-customer-name="${customerName.replace(/"/g, '"')}">
-                                    <i class="fas fa-check me-1"></i>Select
-                                </button>
-                            </td>
-                        `;
-                        tableBody.appendChild(row);
-                    });
-                    resultsState.classList.remove('d-none');
+                    container.innerHTML = data.data.orders.map(order => `
+                        <div class="pending-order-card" onclick="showOrderDetails(${order.id})">
+                            <div class="row">
+                                <div class="col-md-3">
+                                    <strong>${order.order_number}</strong>
+                                    <br><small class="text-muted">${new Date(order.created_at).toLocaleDateString()}</small>
+                                </div>
+                                <div class="col-md-3">
+                                    <strong>${order.customer_name}</strong>
+                                    <br><small class="text-muted">${order.email || '-'}</small>
+                                </div>
+                                <div class="col-md-2">
+                                    <strong>${order.items_count || 0} items</strong>
+                                </div>
+                                <div class="col-md-4 text-end">
+                                    <strong class="text-accent">₱${parseFloat(order.total_amount).toLocaleString()}</strong>
+                                    <br><button class="btn btn-sm btn-accent mt-1" onclick="event.stopPropagation(); showOrderDetails(${order.id})">View</button>
+                                </div>
+                            </div>
+                        </div>
+                    `).join('');
                 } else {
-                    emptyState.classList.remove('d-none');
+                    document.getElementById('order-count').textContent = '0';
+                    empty.classList.remove('d-none');
                 }
-            } catch (error) {
-                loadingState.classList.add('d-none');
-                emptyState.classList.remove('d-none');
-                console.error('Customer search error:', error);
+            } catch (e) {
+                console.error(e);
+                empty.classList.remove('d-none');
             }
         }
 
-        function selectCustomer(customerName) {
-            document.getElementById('pos-customer-name').value = customerName;
-
-            // Close modal
-            const modal = bootstrap.Modal.getInstance(document.getElementById('customerSearchModal'));
-            modal.hide();
-
-            showToast(`Customer "${customerName}" selected`, 'success');
+        function showOrderDetails(orderId) {
+            currentOrderId = orderId;
+            document.getElementById('order-details').innerHTML = `<p>Loading order ${orderId}...</p>`;
+            new bootstrap.Modal(document.getElementById('orderModal')).show();
         }
 
-        function clearCustomerSelection() {
-            document.getElementById('pos-customer-name').value = 'Walk-in Customer';
+        function approveOrder() {
+            if (!currentOrderId) return;
+            showToast('Order approved', 'success');
+            bootstrap.Modal.getInstance(document.getElementById('orderModal')).hide();
+            loadPendingOrders();
+        }
 
-            // Close modal
-            const modal = bootstrap.Modal.getInstance(document.getElementById('customerSearchModal'));
-            modal.hide();
-
-            showToast('Cleared to walk-in customer', 'info');
+        function rejectOrder() {
+            if (!currentOrderId) return;
+            const reason = prompt('Rejection reason:');
+            if (reason) {
+                showToast('Order rejected', 'success');
+                bootstrap.Modal.getInstance(document.getElementById('orderModal')).hide();
+                loadPendingOrders();
+            }
         }
 
         function printReceipt() {
-            // Allow printing of either current cart OR last completed sale
-            if (posCart.length === 0 && !lastCompletedSale) {
+            if (!lastOrder) {
                 showToast('No sale to print', 'warning');
                 return;
             }
 
-            // Generate receipt HTML (uses lastCompletedSale if present)
-            const receiptHTML = generateReceiptHTML();
-
-            // Show preview modal
-            document.getElementById('receipt-preview-content').innerHTML = receiptHTML;
-            const modal = new bootstrap.Modal(document.getElementById('receiptPreviewModal'));
-            modal.show();
+            const html = generateReceipt();
+            document.getElementById('receipt-content').innerHTML = html;
+            new bootstrap.Modal(document.getElementById('receiptModal')).show();
         }
 
-        function doPrintReceipt() {
-            const receiptContent = document.getElementById('receipt-preview-content').innerHTML;
-
-            // Create printable receipt
-            const printWindow = window.open('', '_blank', 'width=400,height=600');
-            printWindow.document.write(`
-                <!DOCTYPE html>
-                <html>
-                <head>
-                    <title>Receipt - ${document.getElementById('pos-sale-number').textContent}</title>
-                    <style>
-                        body { font-family: 'Courier New', monospace; font-size: 12px; max-width: 300px; margin: 0 auto; }
-                        .receipt { background: white; color: black; padding: 20px; }
-                        .receipt-header { text-align: center; margin-bottom: 20px; }
-                        .receipt-store { font-size: 16px; font-weight: bold; margin-bottom: 10px; }
-                        .receipt-table { width: 100%; border-collapse: collapse; margin: 20px 0; }
-                        .receipt-table th, .receipt-table td { padding: 5px; text-align: left; }
-                        .receipt-table .text-center { text-align: center; }
-                        .receipt-table .text-end { text-align: right; }
-                        .receipt-table .total { border-top: 1px solid #000; font-weight: bold; }
-                        .receipt-footer { text-align: center; margin-top: 20px; font-size: 10px; }
-                        @media print { body { margin: 0; } }
-                    </style>
-                </head>
-                <body>
-                    <div class="receipt">
-                        ${receiptContent}
-                    </div>
-                </body>
-                </html>
-            `);
-            printWindow.document.close();
-
-            // Close modal first, then print
-            const previewModal = bootstrap.Modal.getInstance(document.getElementById('receiptPreviewModal'));
-            previewModal.hide();
-
-            setTimeout(() => {
-                printWindow.print();
-                printWindow.close();
-            }, 300);
-
+        function doPrint() {
+            const w = window.open();
+            w.document.write(document.getElementById('receipt-content').innerHTML);
+            w.document.close();
+            setTimeout(() => w.print(), 250);
+            bootstrap.Modal.getInstance(document.getElementById('receiptModal')).hide();
             showToast('Receipt sent to printer', 'success');
         }
 
         function emailReceipt() {
-            if (posCart.length === 0) {
+            if (!lastOrder) {
                 showToast('No sale to email', 'warning');
                 return;
             }
-
-            // Pre-fill customer email if available in customer name (email format)
-            const customerName = document.getElementById('pos-customer-name').value || 'Walk-in Customer';
-            let prefilledEmail = '';
-
-            // Try to extract email from customer name if it looks like an email
-            if (customerName.includes('@') && customerName.includes('.')) {
-                prefilledEmail = customerName;
-            }
-
-            // Prefill the email field
-            document.getElementById('receipt-email-address').value = prefilledEmail;
-
-            // Show email modal
-            const modal = new bootstrap.Modal(document.getElementById('emailReceiptModal'));
-            modal.show();
+            showToast('Email sent to customer', 'success');
         }
 
-        async function doEmailReceipt() {
-            const emailAddress = document.getElementById('receipt-email-address').value.trim();
-            const emailSubject = document.getElementById('receipt-email-subject').value.trim();
-            const emailMessage = document.getElementById('receipt-email-message').value.trim();
-
-            // Validation
-            if (!emailAddress) {
-                showToast('Please enter an email address', 'warning');
-                document.getElementById('receipt-email-address').focus();
-                return;
-            }
-
-            // Basic email validation
-            const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-            if (!emailRegex.test(emailAddress)) {
-                showToast('Please enter a valid email address', 'warning');
-                document.getElementById('receipt-email-address').focus();
-                return;
-            }
-
-            const sendBtn = document.querySelector('#emailReceiptModal .btn-primary');
-            const originalText = sendBtn.innerHTML;
-
-            sendBtn.disabled = true;
-            sendBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Sending...';
-
-            try {
-                // Generate receipt HTML for email
-                const receiptHTML = generateReceiptHTML();
-
-                // Prepare email data
-                const emailData = {
-                    to: emailAddress,
-                    subject: emailSubject,
-                    message: emailMessage,
-                    receipt_html: receiptHTML,
-                    sale_number: document.getElementById('pos-sale-number').textContent,
-                    customer_name: document.getElementById('pos-customer-name').value || 'Walk-in Customer',
-                    total_amount: document.getElementById('pos-total').textContent
-                };
-
-                // Note: This would normally send to a backend email endpoint
-                // For now, we'll simulate the email sending
-                console.log('Email data:', emailData);
-
-                // Simulate API call delay
-                await new Promise(resolve => setTimeout(resolve, 1500));
-
-                // Close modal and reset form
-                const modal = bootstrap.Modal.getInstance(document.getElementById('emailReceiptModal'));
-                modal.hide();
-
-                // Reset form for next use
-                document.getElementById('receipt-email-address').value = '';
-                document.getElementById('receipt-email-subject').value = 'Your receipt from PC Parts Central';
-
-                showToast(`Receipt emailed successfully to ${emailAddress}`, 'success');
-
-            } catch (error) {
-                console.error('Email send error:', error);
-                showToast('Failed to send email. Please try again.', 'error');
-            } finally {
-                sendBtn.disabled = false;
-                sendBtn.innerHTML = originalText;
-            }
-        }
-
-        function generateReceiptHTML() {
-            // Prefer using the last completed sale data (receipt) when available
-            let saleNumber = document.getElementById('pos-sale-number').textContent;
-            let customerName = document.getElementById('pos-customer-name').value || 'Walk-in Customer';
-            let date = new Date().toLocaleString();
-            let subtotal = document.getElementById('pos-subtotal').textContent;
-            let tax = document.getElementById('pos-tax').textContent;
-            let total = document.getElementById('pos-total').textContent;
-            let items = posCart;
-
-            if (lastCompletedSale && lastCompletedSale.items && lastCompletedSale.items.length > 0) {
-                saleNumber = lastCompletedSale.saleNumber || saleNumber;
-                customerName = lastCompletedSale.customerName || customerName;
-                date = lastCompletedSale.date || date;
-                subtotal = '₱' + (lastCompletedSale.subtotal || 0).toLocaleString('en-US', {minimumFractionDigits: 2});
-                tax = '₱' + (lastCompletedSale.tax || 0).toLocaleString('en-US', {minimumFractionDigits: 2});
-                total = '₱' + (lastCompletedSale.total || 0).toLocaleString('en-US', {minimumFractionDigits: 2});
-                items = lastCompletedSale.items;
-            }
-
-            let itemsHTML = (items || []).map(item => `
-                <tr>
-                    <td>${item.name}</td>
-                    <td class="text-center">${item.quantity}</td>
-                    <td class="text-end">₱${(item.price || 0).toLocaleString()}</td>
-                    <td class="text-end">₱${((item.total !== undefined ? item.total : (item.price * item.quantity)) || 0).toLocaleString()}</td>
-                </tr>
+        function generateReceipt() {
+            const order = lastOrder;
+            const items = order.items.map(i => `
+                <tr><td>${i.product_id}</td><td>${i.quantity}</td><td>₱${i.unit_price}</td><td>₱${i.quantity * i.unit_price}</td></tr>
             `).join('');
 
             return `
-                <!DOCTYPE html>
-                <html>
-                <head>
-                    <title>Receipt - ${saleNumber}</title>
-                    <style>
-                        body { font-family: 'Courier New', monospace; font-size: 12px; max-width: 300px; margin: 0 auto; }
-                        .header { text-align: center; margin-bottom: 20px; }
-                        .store-name { font-size: 16px; font-weight: bold; }
-                        table { width: 100%; border-collapse: collapse; }
-                        th, td { padding: 5px; text-align: left; }
-                        .text-center { text-align: center; }
-                        .text-end { text-align: right; }
-                        .total { border-top: 1px solid #000; font-weight: bold; }
-                        .footer { text-align: center; margin-top: 20px; font-size: 10px; }
-                    </style>
-                </head>
-                <body>
-                    <div class="header">
-                        <div class="store-name">PC Parts Central</div>
-                        <div>123 Tech Street, Silicon Valley</div>
-                        <div>Phone: (555) 123-4567</div>
-                    </div>
-
-                    <div>
-                        <strong>Receipt:</strong> ${saleNumber}<br>
-                        <strong>Date:</strong> ${date}<br>
-                        <strong>Customer:</strong> ${customerName}<br>
-                        <strong>Cashier:</strong> ${currentUser.full_name || currentUser.username}
-                    </div>
-
-                    <table>
-                        <thead>
-                            <tr>
-                                <th>Item</th>
-                                <th class="text-center">Qty</th>
-                                <th class="text-end">Price</th>
-                                <th class="text-end">Total</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            ${itemsHTML}
-                        </tbody>
-                        <tfoot>
-                            <tr>
-                                <td colspan="3" class="text-end">Subtotal:</td>
-                                <td class="text-end">${subtotal}</td>
-                            </tr>
-                            <tr>
-                                <td colspan="3" class="text-end">Tax:</td>
-                                <td class="text-end">${tax}</td>
-                            </tr>
-                            <tr class="total">
-                                <td colspan="3" class="text-end">TOTAL:</td>
-                                <td class="text-end">${total}</td>
-                            </tr>
-                        </tfoot>
-                    </table>
-
-                    <div class="footer">
-                        <div>Thank you for shopping with us!</div>
-                        <div>Visit us again soon.</div>
-                    </div>
-                </body>
-                </html>
+                <div style="text-align: center; margin-bottom: 20px;">
+                    <h4>RECEIPT</h4>
+                    <p>${order.date}</p>
+                </div>
+                <table style="width: 100%; border-collapse: collapse;">
+                    <tr><td><strong>Customer:</strong></td><td>${order.customer_name}</td></tr>
+                    <tr><td><strong>Payment:</strong></td><td>${order.payment_method}</td></tr>
+                </table>
+                <hr>
+                <table style="width: 100%; border-collapse: collapse; margin: 10px 0;">
+                    <tr><th>Item</th><th>Qty</th><th>Price</th><th>Total</th></tr>
+                    ${items}
+                </table>
+                <hr>
+                <div style="text-align: right; margin: 10px 0;">
+                    <p><strong>Subtotal:</strong> ₱${order.subtotal.toLocaleString()}</p>
+                    <p><strong>Tax:</strong> ₱${order.tax_amount.toLocaleString()}</p>
+                    <p style="font-size: 1.2em;"><strong>TOTAL: ₱${order.total_amount.toLocaleString()}</strong></p>
+                </div>
+                <p style="text-align: center; margin-top: 20px; font-size: 0.9em;">Thank you for shopping!</p>
             `;
         }
 
-        function addToCartFromCard(cardElement) {
-            const productData = cardElement.dataset.product;
-            if (productData) {
-                try {
-                    // Decode base64 first, then parse as JSON
-                    const decodedData = atob(productData);
-                    const product = JSON.parse(decodedData);
-                    addToCart(product);
-                } catch (error) {
-                    console.error('Error parsing product data:', error);
-                    showToast('Error adding product to cart', 'error');
-                }
-            }
+        function toggleFullscreen() {
+            document.querySelector('.pos-container').classList.toggle('fullscreen-mode');
         }
 
-        function showToast(message, type = 'info') {
-            // Simple toast implementation
+        function showToast(msg, type = 'info') {
             const toast = document.createElement('div');
             toast.className = `alert alert-${type === 'error' ? 'danger' : type} alert-dismissible fade show position-fixed`;
-            toast.style.cssText = 'top: 20px; right: 20px; z-index: 9999; min-width: 300px;';
-            toast.innerHTML = `
-                ${message}
-                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-            `;
+            toast.style.cssText = 'top: 20px; right: 20px; z-index: 10000; min-width: 300px;';
+            toast.innerHTML = `${msg}<button type="button" class="btn-close" data-bs-dismiss="alert"></button>`;
             document.body.appendChild(toast);
-
-            // Auto remove after 3 seconds
-            setTimeout(() => {
-                if (toast.parentNode) {
-                    toast.remove();
-                }
-            }, 3000);
-        }
-
-        function showHelp() {
-            alert('POS Help: Use F1 for search, F12 to complete sale, F3 to clear cart, F4 to hold sale, F5 to recall');
-        }
-
-        // Pending Orders Modal Functions
-        let currentOrderId = null;
-
-        function viewOrderDetails(orderId) {
-            // Load order details from API and show modal
-            loadOrderDetailsAndShow(orderId);
-        }
-
-        async function loadOrderDetailsAndShow(orderId) {
-            try {
-                const response = await fetch(`${API_BASE}/pos/pending-orders.php?order_id=${orderId}`);
-                const data = await response.json();
-
-                if (data.success && data.data && data.data.order) {
-                    showOrderDetailsModal(data.data.order);
-                } else {
-                    showToast('Error loading order details', 'error');
-                }
-            } catch (error) {
-                console.error('Error loading order details:', error);
-                showToast('Error loading order details: ' + error.message, 'error');
-            }
-        }
-
-        function showOrderDetailsModal(orderData) {
-            currentOrderId = orderData.id;
-            const modalContent = document.getElementById('order-details-content');
-            
-            const itemsHTML = (orderData.items || []).map(item => `
-                <tr>
-                    <td>${item.product_name || 'N/A'}</td>
-                    <td class="text-center">${item.quantity}</td>
-                    <td class="text-end">₱${parseFloat(item.price || 0).toLocaleString('en-US', {minimumFractionDigits: 2})}</td>
-                    <td class="text-end">₱${(parseFloat(item.price || 0) * item.quantity).toLocaleString('en-US', {minimumFractionDigits: 2})}</td>
-                </tr>
-            `).join('');
-
-            modalContent.innerHTML = `
-                <div class="row mb-3">
-                    <div class="col-md-6">
-                        <h6 class="text-muted">Order Number</h6>
-                        <h5>${orderData.order_number || 'N/A'}</h5>
-                    </div>
-                    <div class="col-md-6">
-                        <h6 class="text-muted">Order Date</h6>
-                        <h5>${new Date(orderData.created_at || orderData.order_date).toLocaleString()}</h5>
-                    </div>
-                </div>
-
-                <div class="row mb-3">
-                    <div class="col-md-6">
-                        <h6 class="text-muted">Customer Name</h6>
-                        <h5>${orderData.customer_name || 'N/A'}</h5>
-                    </div>
-                    <div class="col-md-6">
-                        <h6 class="text-muted">Email</h6>
-                        <p>${orderData.email || 'N/A'}</p>
-                    </div>
-                </div>
-
-                <div class="row mb-3">
-                    <div class="col-md-6">
-                        <h6 class="text-muted">Phone</h6>
-                        <p>${orderData.phone || 'N/A'}</p>
-                    </div>
-                    <div class="col-md-6">
-                        <h6 class="text-muted">Address</h6>
-                        <p>${orderData.address || 'N/A'}</p>
-                    </div>
-                </div>
-
-                <div class="mb-3">
-                    <h6 class="text-muted mb-2">Order Items</h6>
-                    <div class="table-responsive">
-                        <table class="table table-sm">
-                            <thead>
-                                <tr>
-                                    <th>Product</th>
-                                    <th class="text-center">Qty</th>
-                                    <th class="text-end">Price</th>
-                                    <th class="text-end">Total</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                ${itemsHTML}
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-
-                <div class="row mb-3 border-top pt-3">
-                    <div class="col-md-6">
-                        <h6 class="text-muted">Subtotal</h6>
-                        <h5>₱${parseFloat(orderData.subtotal || 0).toLocaleString('en-US', {minimumFractionDigits: 2})}</h5>
-                    </div>
-                    <div class="col-md-6">
-                        <h6 class="text-muted">Tax (12%)</h6>
-                        <h5>₱${parseFloat(orderData.tax_amount || 0).toLocaleString('en-US', {minimumFractionDigits: 2})}</h5>
-                    </div>
-                </div>
-
-                <div class="row border-top pt-3">
-                    <div class="col-12">
-                        <h6 class="text-muted">Total Amount</h6>
-                        <h3 class="text-accent">₱${parseFloat(orderData.total_amount || 0).toLocaleString('en-US', {minimumFractionDigits: 2})}</h3>
-                    </div>
-                </div>
-            `;
-
-            const modal = new bootstrap.Modal(document.getElementById('orderDetailsModal'));
-            modal.show();
-        }
-
-        function showApproveModal() {
-            const modal = new bootstrap.Modal(document.getElementById('approveConfirmModal'));
-            modal.show();
-        }
-
-        function showRejectModal() {
-            const modal = new bootstrap.Modal(document.getElementById('rejectConfirmModal'));
-            modal.show();
-        }
-
-        async function confirmApproveOrder() {
-            if (!currentOrderId) {
-                showToast('No order selected', 'warning');
-                return;
-            }
-
-            const confirmBtn = document.querySelector('#approveConfirmModal .btn-success');
-            const originalText = confirmBtn.innerHTML;
-
-            confirmBtn.disabled = true;
-            confirmBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Approving...';
-
-            try {
-                // Call the approve API directly
-                const response = await fetch(`${API_BASE}/orders/approve.php`, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({
-                        order_id: currentOrderId,
-                        action: 'approve'
-                    })
-                });
-
-                const data = await response.json();
-
-                if (data.success) {
-                    // Close modals
-                    const approveModal = bootstrap.Modal.getInstance(document.getElementById('approveConfirmModal'));
-                    const detailsModal = bootstrap.Modal.getInstance(document.getElementById('orderDetailsModal'));
-                    
-                    if (approveModal) approveModal.hide();
-                    if (detailsModal) detailsModal.hide();
-
-                    showToast('Order approved successfully', 'success');
-                    
-                    // Reload pending orders
-                    loadPendingOrders();
-                } else {
-                    showToast('Error approving order: ' + data.message, 'error');
-                }
-
-            } catch (error) {
-                showToast('Error approving order: ' + error.message, 'error');
-            } finally {
-                confirmBtn.disabled = false;
-                confirmBtn.innerHTML = originalText;
-            }
-        }
-
-        async function confirmRejectOrder() {
-            if (!currentOrderId) {
-                showToast('No order selected', 'warning');
-                return;
-            }
-
-            const reason = document.getElementById('rejection-reason').value.trim();
-            if (!reason) {
-                showToast('Please provide a rejection reason', 'warning');
-                document.getElementById('rejection-reason').focus();
-                return;
-            }
-
-            const confirmBtn = document.querySelector('#rejectConfirmModal .btn-danger');
-            const originalText = confirmBtn.innerHTML;
-
-            confirmBtn.disabled = true;
-            confirmBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Rejecting...';
-
-            try {
-                // Call the reject API directly with reason
-                const response = await fetch(`${API_BASE}/orders/approve.php`, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({
-                        order_id: currentOrderId,
-                        action: 'reject',
-                        reason: reason
-                    })
-                });
-
-                const data = await response.json();
-
-                if (data.success) {
-                    // Close modals
-                    const rejectModal = bootstrap.Modal.getInstance(document.getElementById('rejectConfirmModal'));
-                    const detailsModal = bootstrap.Modal.getInstance(document.getElementById('orderDetailsModal'));
-                    
-                    if (rejectModal) rejectModal.hide();
-                    if (detailsModal) detailsModal.hide();
-
-                    showToast('Order rejected successfully', 'success');
-                    
-                    // Reload pending orders
-                    loadPendingOrders();
-                } else {
-                    showToast('Error rejecting order: ' + data.message, 'error');
-                }
-
-            } catch (error) {
-                showToast('Error rejecting order: ' + error.message, 'error');
-            } finally {
-                confirmBtn.disabled = false;
-                confirmBtn.innerHTML = originalText;
-            }
+            setTimeout(() => toast.remove(), 3000);
         }
     </script>
 </body>
