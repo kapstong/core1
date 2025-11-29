@@ -62,50 +62,23 @@ async function loadPendingOrders() {
             const cardsHTML = orders.map(order => {
                 console.log('Order to render:', order);
                 return `
-                <div style="display: block; margin-bottom: 1rem; padding: 1rem; background: var(--bg-secondary); border: 2px solid var(--border-color); border-radius: 0.5rem; cursor: pointer;"
-                     onmouseover="this.style.borderColor='var(--accent)';"
-                     onmouseout="this.style.borderColor='var(--border-color)';"
+                <div style="display: block; margin-bottom: 1rem; padding: 1rem; background: #ffcccc; border: 2px solid #ff0000; border-radius: 0.5rem; cursor: pointer;"
+                     class="pending-order-card"
+                     onmouseover="this.style.borderColor='#00ff00';"
+                     onmouseout="this.style.borderColor='#ff0000';"
                      onclick="viewOrderDetails(${order.id})">
-                        <div style="color: var(--text-primary);">
-                            <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 1rem;">
-                                <div>
-                                    <h6 style="color: var(--accent); font-weight: bold; margin-bottom: 0.25rem; font-size: 1rem;">
-                                        <i class="fas fa-receipt" style="margin-right: 0.5rem;"></i>${order.order_number}
-                                    </h6>
-                                    <small style="color: #6c757d;">${new Date(order.created_at || order.order_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</small>
-                                </div>
-                                <span style="background: #ffc107; color: #212529; padding: 0.25rem 0.5rem; border-radius: 0.25rem; font-size: 0.75rem; font-weight: 600;">
-                                    <i class="fas fa-hourglass-half" style="margin-right: 0.25rem;"></i>Pending
-                                </span>
-                            </div>
-
-                            <div style="margin-bottom: 1rem; border-top: 1px solid var(--border-color); border-bottom: 1px solid var(--border-color); padding: 0.75rem 0;">
-                                <small style="color: #6c757d;">
-                                    <i class="fas fa-user" style="margin-right: 0.5rem;"></i>${order.customer_name || 'N/A'}
-                                </small><br>
-                                <small style="color: #6c757d;">
-                                    <i class="fas fa-envelope" style="margin-right: 0.5rem;"></i>${order.email || 'N/A'}
-                                </small>
-                            </div>
-
-                            <div style="margin-bottom: 1rem;">
-                                <small style="color: #6c757d; display: block; margin-bottom: 0.25rem;">
-                                    <i class="fas fa-box" style="margin-right: 0.5rem;"></i><strong>${order.items_count || 0}</strong> item(s)
-                                </small>
-                                <small style="color: #6c757d; display: block;">
-                                    <i class="fas fa-credit-card" style="margin-right: 0.5rem;"></i>Payment: <strong>${order.payment_method || 'N/A'}</strong>
-                                </small>
-                            </div>
-
-                            <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 1.5rem; padding-top: 1rem; border-top: 1px solid var(--border-color);">
-                                <div>
-                                    <small style="color: #6c757d;">Total:</small><br>
-                                    <strong style="color: #198754; font-size: 1.25rem;">₱${parseFloat(order.total_amount || 0).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</strong>
-                                </div>
-                                <button style="padding: 0.25rem 0.5rem; font-size: 0.875rem; border: 1px solid #0d6efd; background: transparent; color: #0d6efd; border-radius: 0.25rem; cursor: pointer;" onclick="event.stopPropagation(); viewOrderDetails(${order.id})">
-                                    <i class="fas fa-arrow-right" style="margin-right: 0.25rem;"></i>Details
-                                </button>
-                            </div>
+                        <div style="color: #000000;">
+                            <h4 style="color: #0000ff; font-weight: bold; margin-bottom: 0.5rem;">
+                                <i class="fas fa-receipt"></i> ${order.order_number}
+                            </h4>
+                            <p style="margin-bottom: 0.5rem;"><strong>Date:</strong> ${new Date(order.created_at || order.order_date).toLocaleDateString()}</p>
+                            <p style="margin-bottom: 0.5rem;"><strong>Customer:</strong> ${order.customer_name || 'N/A'}</p>
+                            <p style="margin-bottom: 0.5rem;"><strong>Email:</strong> ${order.email || 'N/A'}</p>
+                            <p style="margin-bottom: 0.5rem;"><strong>Items:</strong> ${order.items_count || 0} item(s)</p>
+                            <p style="margin-bottom: 1rem;"><strong>Total: ₱${parseFloat(order.total_amount || 0).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</strong></p>
+                            <button style="background: #007bff; color: white; border: none; padding: 0.5rem 1rem; border-radius: 0.25rem; cursor: pointer;" onclick="event.stopPropagation(); viewOrderDetails(${order.id})">
+                                <i class="fas fa-arrow-right"></i> View Details
+                            </button>
                         </div>
                 </div>
                 `;
@@ -119,11 +92,18 @@ async function loadPendingOrders() {
             console.log('Number of child elements in listEl:', listEl.children.length);
 
             // Verify the structure after setting HTML
-            const firstCard = listEl.querySelector('.card');
+            const firstCard = listEl.querySelector('div[style*="display: block"]');
             if (firstCard) {
                 console.log('First card element found and displayed');
+                console.log('Card element:', firstCard);
+                console.log('Card text content:', firstCard.textContent.substring(0, 100) + '...');
             } else {
                 console.log('WARNING: No card element found after setting HTML!');
+                console.log('Current innerHTML:', listEl.innerHTML.substring(0, 500) + '...');
+                console.log('List of child elements:');
+                Array.from(listEl.children).forEach((child, index) => {
+                    console.log(`Child ${index}:`, child.tagName, child.className, child.style.display);
+                });
             }
 
         } else {
