@@ -97,6 +97,17 @@ async function loadPendingOrders() {
                 console.log('First card element found and displayed');
                 console.log('Card element:', firstCard);
                 console.log('Card text content:', firstCard.textContent.substring(0, 100) + '...');
+
+                // TEMPORARY: Also show the data in the debug rectangle
+                console.log('SHOWING DATA IN DEBUG RECTANGLE...');
+                const debugList = document.getElementById('debug-pending-orders-list');
+                if (debugList) {
+                    debugList.innerHTML = cardsHTML;
+                    document.getElementById('debug-pending-orders').style.display = 'block';
+                    console.log('Debug rectangle should now be visible!');
+                } else {
+                    console.error('Debug rectangle not found!');
+                }
             } else {
                 console.log('WARNING: No card element found after setting HTML!');
                 console.log('Current innerHTML:', listEl.innerHTML.substring(0, 500) + '...');

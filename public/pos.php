@@ -443,6 +443,12 @@ if (!in_array($user['role'], $allowedRoles)) {
             </div>
         </div>
 
+        <!-- DEBUG: PENDING ORDERS - FORCE VISIBLE -->
+        <div id="debug-pending-orders" style="display: none; position: fixed; top: 100px; left: 20px; width: 400px; height: 500px; background: #ffcccc; border: 2px solid #ff0000; z-index: 9999; padding: 1rem; overflow-y: auto;">
+            <h3 style="color: #ff0000;">DEBUG: PENDING ORDERS</h3>
+            <div id="debug-pending-orders-list"></div>
+        </div>
+
         <!-- POS Main Content -->
         <div class="pos-main">
             <div class="container-fluid">
