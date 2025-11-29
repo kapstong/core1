@@ -260,8 +260,10 @@
                         window.location.href = 'index.php';
                     }, 3000);
                 } else {
-                    console.error('Registration failed:', data);
-                    showToast(data.message || 'Registration failed. Please try again.', 'error');
+                    console.error('Registration failed - Response status:', response.status);
+                    console.error('Registration failed - Full response:', data);
+                    console.error('Registration failed - Message:', data.message);
+                    showToast(data.message || `Registration failed (Status ${response.status}). Please try again.`, 'error');
                 }
             } catch (error) {
                 console.error('Registration error:', error);

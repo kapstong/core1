@@ -41,6 +41,8 @@ if (!$data || empty($data)) {
 
 error_log('Data validation passed');
 
+error_log('Data validation passed');
+
 // Validate required fields
 $required_fields = ['name', 'email', 'username', 'password'];
 $missing_fields = [];
@@ -51,9 +53,12 @@ foreach ($required_fields as $field) {
 }
 
 if (!empty($missing_fields)) {
-    error_log('Supplier registration - Missing fields: ' . implode(', ', $missing_fields) . ' | Received data: ' . json_encode($data));
-    Response::error('Required fields are missing: ' . implode(', ', $missing_fields), 400);
+    $errorMsg = 'Required fields are missing: ' . implode(', ', $missing_fields);
+    error_log('Supplier registration - ' . $errorMsg . ' | Received data: ' . json_encode($data));
+    Response::error($errorMsg, 400);
 }
+
+error_log('All required fields present');
 
 // Supplier-specific fields (optional, stored in suppliers table)
 $supplierData = [
