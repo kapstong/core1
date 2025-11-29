@@ -21,9 +21,12 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     Response::error('Method not allowed', 405);
 }
 
-$data = json_decode(file_get_contents('php://input'), true);
-if (!$data) {
-    Response::error('Invalid request format. Please try again.', 400);
+$input = file_get_contents('php://input');
+$data = json_decode($input, true);
+
+if (!$data || empty($data)) {
+    error_log('Supplier registration - Invalid JSON received: ' . substr($input, 0, 500));
+    Response::error('Invalid request format. Please ensure all required fields are provided and try again.', 400);
 }
 
 // Validate required fields
@@ -36,6 +39,7 @@ foreach ($required_fields as $field) {
 }
 
 if (!empty($missing_fields)) {
+    error_log('Supplier registration - Missing fields: ' . implode(', ', $missing_fields) . ' | Received data: ' . json_encode($data));
     Response::error('Required fields are missing: ' . implode(', ', $missing_fields), 400);
 }
 

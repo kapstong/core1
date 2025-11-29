@@ -228,6 +228,9 @@
                 const payload = {};
                 form.forEach((v, k) => payload[k] = v);
 
+                // Log payload for debugging
+                console.log('Signup payload:', payload);
+
                 // Validate password strength
                 if (payload.password.length < 8) {
                     showToast('Password must be at least 8 characters long', 'error');
@@ -236,6 +239,7 @@
                     return;
                 }
 
+                console.log('Sending to:', `${API_BASE}/suppliers/register.php`);
                 const response = await fetch(`${API_BASE}/suppliers/register.php`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -254,6 +258,7 @@
                         window.location.href = 'index.php';
                     }, 3000);
                 } else {
+                    console.error('Registration failed:', data);
                     showToast(data.message || 'Registration failed. Please try again.', 'error');
                 }
             } catch (error) {
