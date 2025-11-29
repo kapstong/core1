@@ -1,9 +1,8 @@
 /**
  * POS Pending Orders Management
  * Handles loading, displaying, and managing pending customer orders
+ * Note: currentOrderId is declared in pos.php
  */
-
-let currentOrderId = null;
 
 /**
  * Load and display pending orders
