@@ -362,97 +362,29 @@ async function rejectOrder(orderId) {
 }
 
 /**
- * Force show pending orders panel (for Bootstrap tab conflicts)
+ * Show pending orders panel using Bootstrap's Tab API
  */
 function showPendingOrdersPanel() {
-    console.log('Forcing show of pending orders panel');
+    console.log('Showing pending orders panel using Bootstrap Tab API');
 
-    // Hide all tab panes
-    document.querySelectorAll('.tab-pane').forEach(pane => {
-        pane.classList.remove('show', 'active');
-    });
-
-    // Remove active class from all tab buttons
-    document.querySelectorAll('.nav-tabs .nav-link').forEach(tab => {
-        tab.classList.remove('active');
-    });
-
-    // Show pending orders panel
-    const panel = document.getElementById('pending-orders-panel');
-    if (panel) {
-        panel.classList.add('show', 'active');
-
-        // *** AGGRESSIVE CSS OVERRIDE *** - Add custom CSS rule to beat Bootstrap's display:none
-        const styleId = 'force-show-pending-orders';
-        let existingStyle = document.getElementById(styleId);
-
-        if (!existingStyle) {
-            existingStyle = document.createElement('style');
-            existingStyle.id = styleId;
-            existingStyle.textContent = `
-                #pending-orders-panel.show.active {
-                    display: block !important;
-                    visibility: visible !important;
-                    opacity: 1 !important;
-                    height: auto !important;
-                    min-height: 400px !important;
-                    width: 100% !important;
-                }
-            `;
-            document.head.appendChild(existingStyle);
-            console.log('*** INJECTED FORCE-SHOW CSS RULE ***');
-        }
-
-        // Force immediate stylesheet recalculation
-        panel.offsetHeight; // Trigger reflow
-
-        console.log('Added show/active classes to pending orders panel');
-        console.log('Panel computed style display:', window.getComputedStyle(panel).display);
-        console.log('Panel computed style visibility:', window.getComputedStyle(panel).visibility);
-        const rectAfterInject = panel.getBoundingClientRect();
-        console.log('Panel bounding rect AFTER CSS injection:', rectAfterInject);
-
-        // Still collapsed? Try adding even more aggressive fixes
-        if (rectAfterInject.width === 0 || rectAfterInject.height === 0) {
-            console.log('PANEL STILL COLLAPSED - Trying parent override');
-
-            // Override parent .tab-content behavior
-            const tabContent = panel.closest('.tab-content');
-            if (tabContent) {
-                tabContent.style.overflow = 'visible';
-                tabContent.style.position = 'relative';
-                console.log('Modified parent tab-content container');
-            }
-
-            // Final fallback - move panel out of tab system entirely
-            panel.style.position = 'absolute';
-            panel.style.top = '60px'; // Below nav tabs
-            panel.style.left = '0';
-            panel.style.width = '100%';
-            panel.style.zIndex = '1000';
-            panel.style.background = '#ffffff';
-
-            const finalRect = panel.getBoundingClientRect();
-            console.log('Final bounding rect after positioning hack:', finalRect);
-
-            if (finalRect.width > 0 && finalRect.height > 0) {
-                console.log('SUCCESS - Panel now has dimensions with absolute positioning!');
-            } else {
-                console.log('FAILED - Panel still has 0 dimensions. Manual intervention required.');
-                alert('PANEL STILL COLLAPSED - Manual CSS intervention needed. Panel bounding rect: ' + JSON.stringify(finalRect));
-            }
-        } else {
-            console.log('SUCCESS - Panel expanded with CSS injection!');
-        }
-    } else {
-        console.log('PANEL NOT FOUND!');
+    const tabButton = document.getElementById('pending-orders-tab');
+    if (!tabButton) {
+        console.error('Pending orders tab button not found!');
+        return;
     }
 
-    // Activate the pending orders tab
-    const tab = document.getElementById('pending-orders-tab');
-    if (tab) {
-        tab.classList.add('active');
-        console.log('Activated pending orders tab');
+    try {
+        // Use Bootstrap's Tab API to properly show the tab
+        const tab = new bootstrap.Tab(tabButton);
+        tab.show();
+
+        console.log('Successfully triggered Bootstrap tab show()');
+    } catch (error) {
+        console.error('Error using Bootstrap Tab API:', error);
+
+        // Fallback: manually trigger click
+        console.log('Fallback: triggering click event');
+        tabButton.click();
     }
 }
 
@@ -566,11 +498,10 @@ function initializePendingOrders() {
     if (pendingTab) {
         console.log('Found pending orders tab, adding event listeners');
 
-        // Add click handler that forces panel show and loads data
-        pendingTab.addEventListener('click', function() {
-            console.log('Pending orders tab clicked');
-            showPendingOrdersPanel(); // Force Bootstrap to show the panel
-            setTimeout(() => loadPendingOrders(), 100); // Load data after panel is shown
+        // Listen for Bootstrap tab shown event instead of click
+        pendingTab.addEventListener('shown.bs.tab', function(event) {
+            console.log('Pending orders tab shown');
+            setTimeout(() => loadPendingOrders(), 100); // Load data after tab transition completes
         });
 
         console.log('Event listeners attached to pending orders tab');
