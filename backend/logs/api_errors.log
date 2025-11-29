@@ -1,0 +1,1 @@
+[28-Nov-2025 05:29:38 UTC] PHP Warning:  Undefined array key "REQUEST_METHOD" in C:\wamp64\www\core1\backend\api\orders\approve.php on line 32
