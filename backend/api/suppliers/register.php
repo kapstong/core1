@@ -4,6 +4,8 @@
  * POST /backend/api/suppliers/register.php
  */
 
+// Log start of request
+error_log('=== Supplier Registration Request Started ===');
 
 // Suppress error display for clean JSON responses
 error_reporting(E_ALL);
@@ -15,19 +17,29 @@ require_once __DIR__ . '/../../config/database.php';
 require_once __DIR__ . '/../../utils/Response.php';
 require_once __DIR__ . '/../../middleware/CORS.php';
 
+error_log('Files included successfully');
+
 CORS::handle();
 
+error_log('CORS handled, REQUEST_METHOD: ' . ($_SERVER['REQUEST_METHOD'] ?? 'NOT SET'));
+
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+    error_log('Not a POST request, returning 405');
     Response::error('Method not allowed', 405);
 }
 
 $input = file_get_contents('php://input');
+error_log('Raw input received: ' . substr($input, 0, 200));
+
 $data = json_decode($input, true);
+error_log('JSON decoded, data is: ' . var_export($data, true));
 
 if (!$data || empty($data)) {
     error_log('Supplier registration - Invalid JSON received. Raw input: ' . var_export($input, true) . ' | Decoded: ' . var_export($data, true));
     Response::error('Invalid request format. Please ensure all required fields are provided and try again.', 400);
 }
+
+error_log('Data validation passed');
 
 // Validate required fields
 $required_fields = ['name', 'email', 'username', 'password'];
