@@ -30,9 +30,11 @@ RewriteRule ^supplier(/.*)?$ supplier$1 [L]
 RewriteRule ^backend/api/(.*)$ backend/api/$1 [L,QSA]
 
 # Handle .php files in public directory
+RewriteCond %{REQUEST_URI} !^/public/
 RewriteCond %{REQUEST_FILENAME} !-f
 RewriteCond %{REQUEST_FILENAME} !-d
-RewriteRule ^(.*)$ public/$1 [L]
+RewriteCond %{REQUEST_FILENAME}.php !-f
+RewriteRule ^([^.]+)$ public/$1 [L]
 
 # Block access to sensitive files
 <FilesMatch "\.(env|git|gitignore|htaccess|htpasswd|log|tmp)$">
