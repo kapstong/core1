@@ -74,7 +74,7 @@ try {
             COALESCE(SUM(poi.quantity_ordered), 0) as total_quantity,
             COALESCE(SUM(poi.total_cost), 0) as calculated_total
         FROM purchase_orders po
-        LEFT JOIN users s ON po.supplier_id = s.id AND s.role = 'supplier'
+        LEFT JOIN users s ON po.supplier_id = s.id
         LEFT JOIN users u ON po.created_by = u.id
         LEFT JOIN users ua ON po.approved_by = ua.id
         LEFT JOIN purchase_order_items poi ON po.id = poi.po_id

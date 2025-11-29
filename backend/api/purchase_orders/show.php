@@ -57,7 +57,7 @@ try {
             u.full_name as created_by_name,
             ua.full_name as approved_by_name
         FROM purchase_orders po
-        LEFT JOIN users s ON po.supplier_id = s.id AND s.role = 'supplier'
+        LEFT JOIN users s ON po.supplier_id = s.id
         LEFT JOIN users u ON po.created_by = u.id
         LEFT JOIN users ua ON po.approved_by = ua.id
         WHERE po.id = :po_id
