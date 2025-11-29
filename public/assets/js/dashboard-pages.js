@@ -1,3 +1,158 @@
+// Money Masking Utilities
+const moneyMasking = {
+    // Store original values for toggling
+    revealedValues: new Map(),
+    isGloballyMasked: true,
+
+    // Generate unique ID for element
+    getElementId(element) {
+        if (!element.id) {
+            element.id = 'money-' + Math.random().toString(36).substr(2, 9);
+        }
+        return element.id;
+    },
+
+    // Mask a money value
+    maskValue(value) {
+        return '₱' + '*'.repeat(4);
+    },
+
+    // Format original value for display
+    formatValue(value) {
+        if (typeof value === 'string') {
+            value = parseFloat(value.replace(/[^0-9.-]/g, '')) || 0;
+        }
+        return '₱' + (parseFloat(value) || 0).toLocaleString('en-US', {
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2
+        });
+    },
+
+    // Apply masking to element
+    applyMask(element, originalValue) {
+        const id = this.getElementId(element);
+        this.revealedValues.set(id, originalValue);
+        element.textContent = this.maskValue(originalValue);
+        element.dataset.moneyMasked = 'true';
+        element.dataset.moneyOriginal = originalValue;
+    },
+
+    // Remove mask from element
+    revealValue(element) {
+        const id = this.getElementId(element);
+        const value = this.revealedValues.get(id) || element.dataset.moneyOriginal;
+        element.textContent = this.formatValue(value);
+        element.dataset.moneyMasked = 'false';
+    },
+
+    // Toggle mask on element
+    toggleMask(element) {
+        if (element.dataset.moneyMasked === 'true') {
+            this.revealValue(element);
+        } else {
+            this.applyMask(element, element.dataset.moneyOriginal);
+        }
+    },
+
+    // Create eye toggle button
+    createEyeToggle() {
+        const btn = document.createElement('button');
+        btn.className = 'money-eye-toggle';
+        btn.type = 'button';
+        btn.innerHTML = '<i class="fas fa-eye"></i>';
+        btn.title = 'Toggle money visibility';
+        return btn;
+    },
+
+    // Add eye toggle to money element
+    addEyeToggle(moneyElement) {
+        if (moneyElement.querySelector('.money-eye-toggle')) {
+            return; // Already has toggle
+        }
+
+        const eyeToggle = this.createEyeToggle();
+        const wrapper = document.createElement('span');
+        wrapper.className = 'money-with-toggle';
+        wrapper.style.display = 'inline-flex';
+        wrapper.style.alignItems = 'center';
+        wrapper.style.gap = '6px';
+
+        moneyElement.parentNode.insertBefore(wrapper, moneyElement);
+        wrapper.appendChild(moneyElement);
+        wrapper.appendChild(eyeToggle);
+
+        eyeToggle.addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            this.toggleMask(moneyElement);
+            eyeToggle.classList.toggle('revealed');
+        });
+    },
+
+    // Find and mask all money elements
+    maskAllMoneyElements() {
+        // Money stat values
+        const statValues = document.querySelectorAll('[data-money-value], .money-value, .stat-value[data-amount]');
+        statValues.forEach(el => {
+            const value = el.dataset.moneyValue || el.dataset.amount || el.textContent;
+            this.applyMask(el, value);
+            this.addEyeToggle(el);
+        });
+
+        // Money in tables/lists
+        const moneyElements = document.querySelectorAll('[data-money], .amount, .price, .total, .spent, .revenue');
+        moneyElements.forEach(el => {
+            if (!el.dataset.moneyMasked) {
+                const value = el.dataset.money || el.textContent;
+                if (value && value.includes('₱')) {
+                    this.applyMask(el, value);
+                    this.addEyeToggle(el);
+                }
+            }
+        });
+    },
+
+    // Reveal all money elements (for printing or export)
+    revealAll() {
+        const maskedElements = document.querySelectorAll('[data-money-masked="true"]');
+        maskedElements.forEach(el => this.revealValue(el));
+        this.isGloballyMasked = false;
+    },
+
+    // Mask all money elements again
+    maskAll() {
+        const elements = document.querySelectorAll('[data-money-original]');
+        elements.forEach(el => {
+            if (el.dataset.moneyMasked !== 'true') {
+                this.applyMask(el, el.dataset.moneyOriginal);
+            }
+        });
+        this.isGloballyMasked = true;
+    },
+
+    // Apply masking to a specific element by ID
+    maskElementById(elementId, originalValue) {
+        const el = document.getElementById(elementId);
+        if (el) {
+            if (originalValue === undefined) {
+                originalValue = el.textContent;
+            }
+            this.applyMask(el, originalValue);
+            this.addEyeToggle(el);
+        }
+    },
+
+    // Quick mask money values that were just set
+    maskMoneyElements(elementIds) {
+        if (!Array.isArray(elementIds)) {
+            elementIds = [elementIds];
+        }
+        elementIds.forEach(id => {
+            setTimeout(() => this.maskElementById(id), 10);
+        });
+    }
+};
+
 // Dashboard page loading functions
 
 async function loadSupplierHomePage() {
@@ -1227,7 +1382,11 @@ async function loadSupplierData() {
             document.getElementById('total-orders').textContent = stats.total_orders || 0;
             document.getElementById('completed-orders').textContent = stats.approved_orders || 0;
             document.getElementById('pending-orders').textContent = stats.draft_orders || 0;
-            document.getElementById('total-revenue').textContent = `₱${(stats.total_spent || 0).toLocaleString()}`;
+            const revenueFmt = `₱${(stats.total_spent || 0).toLocaleString()}`;
+            const revenueEl = document.getElementById('total-revenue');
+            revenueEl.textContent = revenueFmt;
+            revenueEl.dataset.moneyOriginal = revenueFmt;
+            moneyMasking.maskElementById('total-revenue', revenueFmt);
             document.getElementById('current-rating').textContent = `⭐ ${supplier.rating || 0}`;
         } else {
             // If supplier profile doesn't exist, show a message
@@ -2086,9 +2245,20 @@ async function loadAnalyticsData() {
             const analytics = data.data;
 
             // Update stats
-            document.getElementById('analytics-total-sales').textContent = `₱${(analytics.total_sales || 0).toLocaleString()}`;
+            const totalSalesFmt = `₱${(analytics.total_sales || 0).toLocaleString()}`;
+            const avgOrderFmt = `₱${(analytics.avg_order_value || 0).toLocaleString()}`;
+            
+            const salesEl = document.getElementById('analytics-total-sales');
+            salesEl.textContent = totalSalesFmt;
+            salesEl.dataset.moneyOriginal = totalSalesFmt;
+            moneyMasking.maskElementById('analytics-total-sales', totalSalesFmt);
+            
             document.getElementById('analytics-total-orders').textContent = analytics.total_orders || 0;
-            document.getElementById('analytics-avg-order').textContent = `₱${(analytics.avg_order_value || 0).toLocaleString()}`;
+            
+            const avgEl = document.getElementById('analytics-avg-order');
+            avgEl.textContent = avgOrderFmt;
+            avgEl.dataset.moneyOriginal = avgOrderFmt;
+            moneyMasking.maskElementById('analytics-avg-order', avgOrderFmt);
             document.getElementById('analytics-profit-margin').textContent = `${(analytics.profit_margin || 0).toFixed(1)}%`;
 
             // Update trends (mock data for now)
@@ -2100,7 +2270,11 @@ async function loadAnalyticsData() {
             // Update customer analytics
             document.getElementById('new-customers').textContent = analytics.new_customers || 0;
             document.getElementById('returning-customers').textContent = analytics.returning_customers || 0;
-            document.getElementById('avg-customer-value').textContent = `₱${(analytics.avg_customer_value || 0).toLocaleString()}`;
+            const avgCustFmt = `₱${(analytics.avg_customer_value || 0).toLocaleString()}`;
+            const custEl = document.getElementById('avg-customer-value');
+            custEl.textContent = avgCustFmt;
+            custEl.dataset.moneyOriginal = avgCustFmt;
+            moneyMasking.maskElementById('avg-customer-value', avgCustFmt);
             document.getElementById('customer-retention').textContent = `${(analytics.customer_retention || 0).toFixed(1)}%`;
 
             // Initialize charts
@@ -8211,8 +8385,18 @@ function updateSalesStats(sales) {
     const todayCount = sales.filter(sale => new Date(sale.sale_date).toDateString() === today).length;
 
     document.getElementById('total-sales-count').textContent = totalCount;
-    document.getElementById('total-revenue').textContent = formatCurrency(totalRevenue);
-    document.getElementById('avg-sale-value').textContent = formatCurrency(avgValue);
+    const revenueFmt = formatCurrency(totalRevenue);
+    const revEl = document.getElementById('total-revenue');
+    revEl.textContent = revenueFmt;
+    revEl.dataset.moneyOriginal = revenueFmt;
+    moneyMasking.maskElementById('total-revenue', revenueFmt);
+    
+    const avgFmt = formatCurrency(avgValue);
+    const avgEl = document.getElementById('avg-sale-value');
+    avgEl.textContent = avgFmt;
+    avgEl.dataset.moneyOriginal = avgFmt;
+    moneyMasking.maskElementById('avg-sale-value', avgFmt);
+    
     document.getElementById('today-sales-count').textContent = todayCount;
 }
 

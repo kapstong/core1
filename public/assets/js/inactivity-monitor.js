@@ -31,17 +31,29 @@ const createWarningModal = () => {
             #inactivityWarningModal.show {
                 display: block !important;
             }
-            #inactivityWarningModal .modal-backdrop {
+            
+            /* Force modal backdrop to have blur effect */
+            .inactivity-modal-backdrop {
+                position: fixed;
+                top: 0;
+                left: 0;
+                width: 100%;
+                height: 100%;
+                background-color: rgba(0, 0, 0, 0.7);
                 backdrop-filter: blur(8px);
                 -webkit-backdrop-filter: blur(8px);
-                background-color: rgba(0, 0, 0, 0.7) !important;
+                z-index: 1040;
             }
-            .modal-backdrop.show {
-                backdrop-filter: blur(8px);
-                -webkit-backdrop-filter: blur(8px);
-                background-color: rgba(0, 0, 0, 0.7) !important;
+            
+            #inactivityWarningModal {
+                z-index: 1050 !important;
+            }
+            
+            #inactivityWarningModal .modal-backdrop {
+                display: none !important;
             }
         </style>
+        <div class="inactivity-modal-backdrop" id="inactivityBackdrop" style="display: none;"></div>
         <div class="modal fade" id="inactivityWarningModal" data-bs-backdrop="static" data-bs-keyboard="false" tabindex="-1">
             <div class="modal-dialog modal-dialog-centered">
                 <div class="modal-content" style="background: #1a1a1a; border: 2px solid #ffc107; box-shadow: 0 0 30px rgba(255, 193, 7, 0.3);">
@@ -79,6 +91,11 @@ const createWarningModal = () => {
     const existingModal = document.getElementById('inactivityWarningModal');
     if (existingModal) {
         existingModal.remove();
+    }
+    
+    const existingBackdrop = document.getElementById('inactivityBackdrop');
+    if (existingBackdrop) {
+        existingBackdrop.remove();
     }
 
     // Add modal to body
@@ -159,6 +176,12 @@ function showWarningWithCountdown() {
 
     if (!modal) {
         createWarningModal();
+    }
+
+    // Show backdrop with blur
+    const backdrop = document.getElementById('inactivityBackdrop');
+    if (backdrop) {
+        backdrop.style.display = 'block';
     }
 
     // Show modal
@@ -254,6 +277,13 @@ function resetOnActivity() {
         if (bsModal) {
             bsModal.hide();
         }
+        
+        // Hide backdrop
+        const backdrop = document.getElementById('inactivityBackdrop');
+        if (backdrop) {
+            backdrop.style.display = 'none';
+        }
+        
         warningShown = false;
         clearAllTimers();
         console.log('✓ Activity detected - session extended');

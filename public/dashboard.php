@@ -1329,6 +1329,13 @@
                             </div>
                         `;
                 }
+                
+                // Apply money masking after page loads
+                if (typeof moneyMasking !== 'undefined') {
+                    setTimeout(() => {
+                        moneyMasking.maskAllMoneyElements();
+                    }, 100);
+                }
             } catch (error) {
                 content.innerHTML = `
                     <div class="alert alert-danger">

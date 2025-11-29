@@ -3224,3 +3224,69 @@ body * {
 }
 .sale-details-modal .financials { background: rgba(255,255,255,0.02); border-radius: 8px; }
 
+/* ============================================
+   MONEY MASKING STYLES
+   ============================================ */
+[data-money-masked="true"] {
+    font-family: 'Courier New', monospace;
+    letter-spacing: 1px;
+    font-weight: 600;
+    color: #ffaa00;
+    font-size: 0.95em;
+}
+
+.money-with-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    position: relative;
+}
+
+.money-eye-toggle {
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 2px 6px;
+    color: var(--text-secondary);
+    font-size: 0.85em;
+    transition: all 0.3s ease;
+    border-radius: 4px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 24px;
+    height: 24px;
+}
+
+.money-eye-toggle:hover {
+    background: rgba(0, 245, 255, 0.1);
+    color: var(--accent);
+    transform: scale(1.1);
+}
+
+.money-eye-toggle.revealed {
+    background: rgba(0, 245, 255, 0.2);
+    color: var(--accent);
+}
+
+.money-eye-toggle:active {
+    transform: scale(0.95);
+}
+
+/* Apply to stat values */
+.stat-value[data-money-masked="true"] {
+    font-size: 1.2em;
+    letter-spacing: 1px;
+}
+
+/* Apply to table amounts */
+.amount[data-money-masked="true"],
+.price[data-money-masked="true"],
+.total[data-money-masked="true"],
+.spent[data-money-masked="true"],
+.revenue[data-money-masked="true"] {
+    font-family: 'Courier New', monospace;
+    letter-spacing: 0.5px;
+}
+
+
