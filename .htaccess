@@ -23,8 +23,9 @@ RewriteRule ^$ index.php [L]
 # Allow direct access to public/assets/
 RewriteRule ^public/assets/(.*)$ public/assets/$1 [L]
 
-# Allow direct access to supplier folder
+# Allow direct access to supplier/suppliers folders
 RewriteRule ^supplier(/.*)?$ supplier$1 [L]
+RewriteRule ^suppliers(/.*)?$ suppliers$1 [L]
 
 # Allow access to backend/api/ for AJAX requests
 RewriteRule ^backend/api/(.*)$ backend/api/$1 [L,QSA]
