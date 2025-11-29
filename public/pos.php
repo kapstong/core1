@@ -977,28 +977,29 @@ if (!in_array($user['role'], $allowedRoles)) {
                 const res = await fetch(`${API_BASE}/orders/show.php?id=${orderId}`);
                 const data = await res.json();
 
-                if (data.success && data.data.order) {
-                    const order = data.data.order;
-                    const items = (order.order_items || order.items || []).map(i => `
+                if (data.success) {
+                    // The order is directly in data.data, not data.data.order
+                    const order = data.data || {};
+                    const items = (order.items || []).map(i => `
                         <tr>
-                            <td>${i.product_name || i.product?.name || 'Product'}</td>
+                            <td>${i.name || 'Product'}</td>
                             <td>${i.quantity}</td>
-                            <td>₱${parseFloat(i.unit_price || i.price).toLocaleString()}</td>
-                            <td>₱${(i.quantity * (i.unit_price || i.price)).toLocaleString()}</td>
+                            <td>₱${parseFloat(i.unit_price || 0).toLocaleString('en-US', {minimumFractionDigits: 2})}</td>
+                            <td>₱${(i.quantity * (i.unit_price || 0)).toLocaleString('en-US', {minimumFractionDigits: 2})}</td>
                         </tr>
                     `).join('');
 
                     const html = `
                         <div class="row mb-3">
                             <div class="col-md-6">
-                                <p><strong>Order Number:</strong> ${order.order_number}</p>
-                                <p><strong>Date:</strong> ${new Date(order.created_at).toLocaleString()}</p>
+                                <p><strong>Order Number:</strong> ${order.order_number || 'N/A'}</p>
+                                <p><strong>Date:</strong> ${order.created_at ? new Date(order.created_at).toLocaleString() : 'N/A'}</p>
                                 <p><strong>Status:</strong> <span class="badge bg-warning">${order.status || 'Pending'}</span></p>
                             </div>
                             <div class="col-md-6">
-                                <p><strong>Customer:</strong> ${order.customer_name || order.first_name + ' ' + order.last_name}</p>
+                                <p><strong>Customer:</strong> ${order.first_name && order.last_name ? order.first_name + ' ' + order.last_name : order.customer_name || 'N/A'}</p>
                                 <p><strong>Email:</strong> ${order.email || '-'}</p>
-                                <p><strong>Phone:</strong> ${order.phone || order.customer_phone || '-'}</p>
+                                <p><strong>Phone:</strong> ${order.customer_phone || order.phone || '-'}</p>
                             </div>
                         </div>
                         <hr>
@@ -1008,19 +1009,19 @@ if (!in_array($user['role'], $allowedRoles)) {
                                     <tr><th>Product</th><th>Qty</th><th>Unit Price</th><th>Total</th></tr>
                                 </thead>
                                 <tbody>
-                                    ${items || '<tr><td colspan="4">No items</td></tr>'}
+                                    ${items || '<tr><td colspan="4" class="text-center">No items</td></tr>'}
                                 </tbody>
                             </table>
                         </div>
                         <hr>
                         <div class="row">
                             <div class="col-md-6">
-                                <p><strong>Subtotal:</strong> ₱${parseFloat(order.subtotal || 0).toLocaleString()}</p>
-                                <p><strong>Tax (12%):</strong> ₱${parseFloat(order.tax_amount || 0).toLocaleString()}</p>
-                                <p><strong>Shipping:</strong> ₱${parseFloat(order.shipping_cost || 0).toLocaleString()}</p>
+                                <p><strong>Subtotal:</strong> ₱${parseFloat(order.subtotal || 0).toLocaleString('en-US', {minimumFractionDigits: 2})}</p>
+                                <p><strong>Tax (12%):</strong> ₱${parseFloat(order.tax_amount || 0).toLocaleString('en-US', {minimumFractionDigits: 2})}</p>
+                                <p><strong>Shipping:</strong> ₱${parseFloat(order.shipping_cost || 0).toLocaleString('en-US', {minimumFractionDigits: 2})}</p>
                             </div>
                             <div class="col-md-6 text-end">
-                                <p style="font-size: 1.2em;"><strong class="text-accent">Total: ₱${parseFloat(order.total_amount || 0).toLocaleString()}</strong></p>
+                                <p style="font-size: 1.2em;"><strong class="text-accent">Total: ₱${parseFloat(order.total_amount || 0).toLocaleString('en-US', {minimumFractionDigits: 2})}</strong></p>
                             </div>
                         </div>
                         ${order.notes ? `<hr><p><strong>Notes:</strong> ${order.notes}</p>` : ''}
@@ -1028,7 +1029,7 @@ if (!in_array($user['role'], $allowedRoles)) {
                             <hr>
                             <p><strong>Shipping Address:</strong></p>
                             <p>${order.shipping_address_1}${order.shipping_address_2 ? ', ' + order.shipping_address_2 : ''}</p>
-                            <p>${order.shipping_city}, ${order.shipping_state} ${order.shipping_postal}</p>
+                            <p>${order.shipping_city || ''}, ${order.shipping_state || ''} ${order.shipping_postal || ''}</p>
                         ` : ''}
                     `;
 
