@@ -454,7 +454,7 @@ if (!in_array($user['role'], $allowedRoles)) {
                         </button>
                     </li>
                     <li class="nav-item" role="presentation">
-                        <button class="nav-link" id="pending-orders-tab" data-bs-toggle="tab" data-bs-target="#pending-orders-panel" type="button" role="tab" onclick="loadPendingOrders()">
+                        <button class="nav-link" id="pending-orders-tab" data-bs-toggle="tab" data-bs-target="#pending-orders-panel" type="button" role="tab">
                             <i class="fas fa-clock me-2"></i>Pending Orders
                             <span class="badge bg-warning text-dark ms-2" id="pending-orders-count">0</span>
                         </button>

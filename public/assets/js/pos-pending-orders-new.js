@@ -385,6 +385,37 @@ async function rejectOrder(orderId) {
 }
 
 /**
+ * Force show pending orders panel (for Bootstrap tab conflicts)
+ */
+function showPendingOrdersPanel() {
+    console.log('Forcing show of pending orders panel');
+
+    // Hide all tab panes
+    document.querySelectorAll('.tab-pane').forEach(pane => {
+        pane.classList.remove('show', 'active');
+    });
+
+    // Remove active class from all tab buttons
+    document.querySelectorAll('.nav-tabs .nav-link').forEach(tab => {
+        tab.classList.remove('active');
+    });
+
+    // Show pending orders panel
+    const panel = document.getElementById('pending-orders-panel');
+    if (panel) {
+        panel.classList.add('show', 'active');
+        console.log('Added show/active classes to pending orders panel');
+    }
+
+    // Activate the pending orders tab
+    const tab = document.getElementById('pending-orders-tab');
+    if (tab) {
+        tab.classList.add('active');
+        console.log('Activated pending orders tab');
+    }
+}
+
+/**
  * Fallback function using legacy shop/orders.php endpoint
  */
 async function loadPendingOrdersLegacy() {
@@ -476,16 +507,33 @@ async function loadPendingOrdersLegacy() {
 // Initialize when DOM is ready
 if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', function() {
-        // Load pending orders when tab is shown
-        const pendingTab = document.getElementById('pending-orders-tab');
-        if (pendingTab) {
-            pendingTab.addEventListener('click', loadPendingOrders);
-        }
+        // Initialize pending orders functionality
+        initializePendingOrders();
     });
 } else {
-    // Load pending orders when tab is shown
+    // Initialize pending orders functionality immediately
+    initializePendingOrders();
+}
+
+/**
+ * Initialize pending orders functionality
+ */
+function initializePendingOrders() {
+    console.log('Initializing pending orders functionality');
+
     const pendingTab = document.getElementById('pending-orders-tab');
     if (pendingTab) {
-        pendingTab.addEventListener('click', loadPendingOrders);
+        console.log('Found pending orders tab, adding event listeners');
+
+        // Add click handler that forces panel show and loads data
+        pendingTab.addEventListener('click', function() {
+            console.log('Pending orders tab clicked');
+            showPendingOrdersPanel(); // Force Bootstrap to show the panel
+            setTimeout(() => loadPendingOrders(), 100); // Load data after panel is shown
+        });
+
+        console.log('Event listeners attached to pending orders tab');
+    } else {
+        console.log('Pending orders tab not found!');
     }
 }
