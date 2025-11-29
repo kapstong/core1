@@ -498,11 +498,21 @@ function initializePendingOrders() {
     if (pendingTab) {
         console.log('Found pending orders tab, adding event listeners');
 
-        // Force load data immediately to see if there are pending orders
-        console.log('Loading pending orders data on page load...');
-        setTimeout(() => loadPendingOrders(), 500);
+        // TEMPORARY: Force show the pending orders tab immediately to test if data loads correctly when visible
+        console.log('FORCING PENDING ORDERS TAB TO SHOW ON PAGE LOAD...');
+        setTimeout(() => {
+            console.log('Activating pending orders tab...');
+            const tab = new bootstrap.Tab(pendingTab);
+            tab.show();
 
-        // Also listen for Bootstrap tab shown event
+            // Load data after the tab is shown
+            setTimeout(() => {
+                console.log('Loading pending orders data after tab activation...');
+                loadPendingOrders();
+            }, 100);
+        }, 1000); // Wait 1 second to let page load
+
+        // Also listen for Bootstrap tab shown event for normal operation
         pendingTab.addEventListener('shown.bs.tab', function(event) {
             console.log('Pending orders tab shown');
             setTimeout(() => loadPendingOrders(), 100); // Load data after tab transition completes
