@@ -320,7 +320,7 @@ if (MaintenanceMode::handle()) {
             </div>
             <div class="col-md-3 mb-3">
                 <div class="stats-card">
-                    <div class="stats-value money-value" id="total-spent" data-money-value="₱0">₱0</div>
+                    <div class="stats-value" id="total-spent">₱0</div>
                     <div class="stats-label">Total Spent</div>
                 </div>
             </div>
@@ -547,7 +547,6 @@ if (MaintenanceMode::handle()) {
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-    <script src="assets/js/dashboard-pages.js"></script>
     <script>
         const IS_DEVELOPMENT = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
         const BASE_PATH = IS_DEVELOPMENT ? '/core1' : '';
@@ -633,12 +632,7 @@ if (MaintenanceMode::handle()) {
                     document.getElementById('member-since').textContent = new Date(customer.created_at).getFullYear();
                     document.getElementById('loyalty-points').textContent = customer.loyalty_points || '0';
 
-                    // Apply money masking after updating values
-                    if (typeof moneyMasking !== 'undefined') {
-                        setTimeout(() => {
-                            moneyMasking.maskAllMoneyElements();
-                        }, 100);
-                    }
+                    // Stats are displayed for customer information only
                 } else {
                     showMessage('personal-message', data.message || 'Failed to load profile', 'danger');
                 }

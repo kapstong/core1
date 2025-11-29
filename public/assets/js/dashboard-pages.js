@@ -3,6 +3,11 @@ const moneyMasking = {
     // Store original values for toggling
     revealedValues: new Map(),
     isGloballyMasked: true,
+    
+    // Check if masking should be applied (only for inventory staff)
+    shouldMask() {
+        return typeof currentUser !== 'undefined' && currentUser && currentUser.role === 'staff';
+    },
 
     // Generate unique ID for element
     getElementId(element) {
@@ -97,6 +102,9 @@ const moneyMasking = {
 
     // Find and mask all money elements
     maskAllMoneyElements() {
+        // Only mask for inventory staff
+        if (!this.shouldMask()) return;
+        
         // Money stat values - check all stat-value elements for peso symbol
         const statValues = document.querySelectorAll('.stat-value');
         statValues.forEach(el => {
@@ -145,6 +153,9 @@ const moneyMasking = {
 
     // Apply masking to a specific element by ID
     maskElementById(elementId, originalValue) {
+        // Only mask for inventory staff
+        if (!this.shouldMask()) return;
+        
         const el = document.getElementById(elementId);
         if (el) {
             if (originalValue === undefined) {
