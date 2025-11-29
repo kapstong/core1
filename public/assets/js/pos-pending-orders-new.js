@@ -31,18 +31,27 @@ async function loadPendingOrders() {
             credentials: 'include'
         });
 
+        console.log('API Response status:', response.status, response.statusText);
+
         if (!response.ok) {
-            throw new Error(`API responded with status ${response.status}`);
+            const errorText = await response.text();
+            console.error('API Error Response:', errorText);
+            // Try the old endpoint as fallback
+            console.log('Trying fallback endpoint...');
+            return loadPendingOrdersLegacy();
         }
 
         const data = await response.json();
         console.log('Pending orders loaded:', data);
+        console.log('Orders array:', data.data?.orders);
+        console.log('Data structure check - success:', data.success, 'has data:', !!data.data, 'has orders:', !!data.data?.orders);
 
         loadingEl.classList.add('d-none');
 
         // Check if we have orders
         if (data.success && data.data && data.data.orders && Array.isArray(data.data.orders) && data.data.orders.length > 0) {
             const orders = data.data.orders;
+            console.log('Rendering', orders.length, 'orders');
 
             // Update count badge
             if (countBadge) {
@@ -50,57 +59,63 @@ async function loadPendingOrders() {
             }
 
             // Render order cards
-            listEl.innerHTML = orders.map(order => `
-                <div class="col-md-6 col-lg-4">
-                    <div class="card h-100" style="background: var(--bg-secondary); border: 1px solid var(--border-color); cursor: pointer; transition: all 0.3s ease;" 
+            const cardsHTML = orders.map(order => {
+                console.log('Order to render:', order);
+                return `
+                <div class="col-md-6 col-lg-4" style="min-height: 300px;">
+                    <div class="card h-100" style="background: var(--bg-secondary); border: 2px solid var(--border-color); cursor: pointer; transition: all 0.3s ease;" 
                          onmouseover="this.style.borderColor='var(--accent)'; this.style.transform='translateY(-2px)';" 
                          onmouseout="this.style.borderColor='var(--border-color)'; this.style.transform='translateY(0)';"
                          onclick="viewOrderDetails(${order.id})">
-                        <div class="card-body">
-                            <div class="d-flex justify-content-between align-items-start mb-3">
-                                <div>
-                                    <h6 class="card-title mb-1" style="color: var(--accent);">
-                                        <i class="fas fa-receipt me-2"></i>${order.order_number}
-                                    </h6>
-                                    <small class="text-muted">${new Date(order.created_at || order.order_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</small>
+                            <div class="card-body" style="color: var(--text-primary);">
+                                <div class="d-flex justify-content-between align-items-start mb-3">
+                                    <div>
+                                        <h6 class="card-title mb-1" style="color: var(--accent); font-weight: bold;">
+                                            <i class="fas fa-receipt me-2"></i>${order.order_number}
+                                        </h6>
+                                        <small class="text-muted">${new Date(order.created_at || order.order_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</small>
+                                    </div>
+                                    <span class="badge bg-warning text-dark">
+                                        <i class="fas fa-hourglass-half me-1"></i>Pending
+                                    </span>
                                 </div>
-                                <span class="badge bg-warning text-dark">
-                                    <i class="fas fa-hourglass-half me-1"></i>Pending
-                                </span>
-                            </div>
-                            
-                            <div class="mb-2" style="border-top: 1px solid var(--border-color); border-bottom: 1px solid var(--border-color); padding: 0.75rem 0;">
-                                <small class="text-muted">
-                                    <i class="fas fa-user me-2"></i>${order.customer_name || 'N/A'}
-                                </small>
-                                <br>
-                                <small class="text-muted">
-                                    <i class="fas fa-envelope me-2"></i>${order.email || 'N/A'}
-                                </small>
-                            </div>
-
-                            <div class="mb-2">
-                                <small class="text-muted d-block mb-1">
-                                    <i class="fas fa-box me-2"></i><strong>${order.items_count || 0}</strong> item(s)
-                                </small>
-                                <small class="text-muted d-block">
-                                    <i class="fas fa-credit-card me-2"></i>Payment: <strong>${order.payment_method || 'N/A'}</strong>
-                                </small>
-                            </div>
-
-                            <div class="d-flex justify-content-between align-items-center mt-3 pt-2" style="border-top: 1px solid var(--border-color);">
-                                <div>
-                                    <small class="text-muted">Total:</small><br>
-                                    <strong class="text-success fs-5">₱${parseFloat(order.total_amount || 0).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</strong>
+                                
+                                <div class="mb-2" style="border-top: 1px solid var(--border-color); border-bottom: 1px solid var(--border-color); padding: 0.75rem 0;">
+                                    <small class="text-muted">
+                                        <i class="fas fa-user me-2"></i>${order.customer_name || 'N/A'}
+                                    </small>
+                                    <br>
+                                    <small class="text-muted">
+                                        <i class="fas fa-envelope me-2"></i>${order.email || 'N/A'}
+                                    </small>
                                 </div>
-                                <button class="btn btn-sm btn-outline-primary" onclick="event.stopPropagation(); viewOrderDetails(${order.id})">
-                                    <i class="fas fa-arrow-right me-1"></i>Details
-                                </button>
+
+                                <div class="mb-2">
+                                    <small class="text-muted d-block mb-1">
+                                        <i class="fas fa-box me-2"></i><strong>${order.items_count || 0}</strong> item(s)
+                                    </small>
+                                    <small class="text-muted d-block">
+                                        <i class="fas fa-credit-card me-2"></i>Payment: <strong>${order.payment_method || 'N/A'}</strong>
+                                    </small>
+                                </div>
+
+                                <div class="d-flex justify-content-between align-items-center mt-3 pt-2" style="border-top: 1px solid var(--border-color);">
+                                    <div>
+                                        <small class="text-muted">Total:</small><br>
+                                        <strong class="text-success fs-5">₱${parseFloat(order.total_amount || 0).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</strong>
+                                    </div>
+                                    <button class="btn btn-sm btn-outline-primary" onclick="event.stopPropagation(); viewOrderDetails(${order.id})">
+                                        <i class="fas fa-arrow-right me-1"></i>Details
+                                    </button>
+                                </div>
                             </div>
-                        </div>
                     </div>
                 </div>
-            `).join('');
+                `;
+            }).join('');
+            
+            console.log('Generated HTML length:', cardsHTML.length);
+            listEl.innerHTML = cardsHTML;
 
         } else {
             // No pending orders
@@ -354,6 +369,95 @@ async function rejectOrder(orderId) {
         } else {
             alert('Error: ' + error.message);
         }
+    }
+}
+
+/**
+ * Fallback function using legacy shop/orders.php endpoint
+ */
+async function loadPendingOrdersLegacy() {
+    console.log('Using legacy endpoint for pending orders');
+    const loadingEl = document.getElementById('pending-orders-loading');
+    const emptyEl = document.getElementById('pending-orders-empty');
+    const listEl = document.getElementById('pending-orders-list');
+    const countBadge = document.getElementById('pending-orders-count');
+
+    loadingEl.classList.remove('d-none');
+    emptyEl.classList.add('d-none');
+    listEl.innerHTML = '';
+
+    try {
+        const response = await fetch('../backend/api/shop/orders.php?status=pending', {
+            method: 'GET',
+            credentials: 'include'
+        });
+
+        if (!response.ok) {
+            throw new Error(`Legacy endpoint failed: ${response.status}`);
+        }
+
+        const data = await response.json();
+        console.log('Legacy endpoint response:', data);
+
+        loadingEl.classList.add('d-none');
+
+        if (data.success && data.data && data.data.orders && Array.isArray(data.data.orders) && data.data.orders.length > 0) {
+            const orders = data.data.orders;
+
+            if (countBadge) {
+                countBadge.textContent = orders.length;
+            }
+
+            const cardsHTML = orders.map(order => `
+                <div class="col-md-6 col-lg-4" style="min-height: 300px;">
+                    <div class="card h-100" style="background: var(--bg-secondary); border: 2px solid var(--border-color); cursor: pointer; transition: all 0.3s ease;" 
+                         onclick="viewOrderDetails(${order.id})">
+                            <div class="card-body" style="color: var(--text-primary);">
+                                <div class="d-flex justify-content-between align-items-start mb-3">
+                                    <div>
+                                        <h6 class="card-title mb-1" style="color: var(--accent); font-weight: bold;">
+                                            <i class="fas fa-receipt me-2"></i>${order.order_number}
+                                        </h6>
+                                        <small class="text-muted">${new Date(order.created_at || order.order_date).toLocaleDateString()}</small>
+                                    </div>
+                                    <span class="badge bg-warning text-dark">Pending</span>
+                                </div>
+                                
+                                <div class="mb-2" style="padding: 0.75rem 0;">
+                                    <small style="color: var(--text-primary);"><i class="fas fa-user me-2"></i>${order.customer_name || 'N/A'}</small><br>
+                                    <small style="color: var(--text-primary);"><i class="fas fa-envelope me-2"></i>${order.email || 'N/A'}</small>
+                                </div>
+
+                                <div class="mb-2">
+                                    <small><i class="fas fa-box me-2"></i><strong>${order.items_count || 0}</strong> item(s)</small><br>
+                                    <small><i class="fas fa-credit-card me-2"></i>Payment: <strong>${order.payment_method || 'N/A'}</strong></small>
+                                </div>
+
+                                <div class="d-flex justify-content-between align-items-center mt-3 pt-2" style="border-top: 1px solid var(--border-color);">
+                                    <div>
+                                        <small>Total:</small><br>
+                                        <strong class="text-success" style="font-size: 1.25rem;">₱${parseFloat(order.total_amount || 0).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</strong>
+                                    </div>
+                                    <button class="btn btn-sm btn-outline-primary" onclick="event.stopPropagation(); viewOrderDetails(${order.id})">
+                                        <i class="fas fa-arrow-right me-1"></i>Details
+                                    </button>
+                                </div>
+                            </div>
+                    </div>
+                </div>
+            `).join('');
+
+            listEl.innerHTML = cardsHTML;
+        } else {
+            emptyEl.classList.remove('d-none');
+            if (countBadge) {
+                countBadge.textContent = '0';
+            }
+        }
+    } catch (error) {
+        console.error('Legacy endpoint error:', error);
+        loadingEl.classList.add('d-none');
+        listEl.innerHTML = `<div class="alert alert-danger">${error.message}</div>`;
     }
 }
 
