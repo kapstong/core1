@@ -3243,35 +3243,38 @@ body * {
 }
 
 .money-eye-toggle {
-    background: rgba(255, 255, 255, 0.1);
+    background: transparent;
     border: none;
     cursor: pointer;
-    padding: 4px 8px;
+    padding: 6px 10px;
     color: #ffffff;
-    font-size: 0.85em;
-    transition: all 0.3s ease;
+    font-size: 1.1em;
+    transition: all 0.2s ease;
     border-radius: 4px;
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    min-width: 28px;
-    height: 28px;
+    min-width: 32px;
+    height: 32px;
+    opacity: 0.7;
 }
 
 .money-eye-toggle:hover {
-    background: rgba(255, 255, 255, 0.2);
+    background: rgba(255, 255, 255, 0.15);
     color: #ffffff;
-    transform: scale(1.1);
+    opacity: 1;
+    transform: scale(1.15);
 }
 
 .money-eye-toggle.revealed {
-    background: rgba(0, 245, 255, 0.25);
-    color: #ffffff;
-    border: 1px solid rgba(0, 245, 255, 0.5);
+    background: rgba(0, 245, 255, 0.2);
+    color: #00f5ff;
+    opacity: 1;
+    border: 1px solid rgba(0, 245, 255, 0.6);
 }
 
 .money-eye-toggle:active {
-    transform: scale(0.95);
+    transform: scale(0.98);
 }
 
 /* Apply to stat values */

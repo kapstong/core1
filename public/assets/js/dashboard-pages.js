@@ -4,11 +4,11 @@ const moneyMasking = {
     revealedValues: new Map(),
     isGloballyMasked: true,
     
-    // Check if masking should be applied (for all inventory staff roles)
+    // Check if masking should be applied (for admin and all inventory staff roles)
     shouldMask() {
         if (typeof currentUser === 'undefined' || !currentUser) return false;
-        const inventoryStaffRoles = ['staff', 'inventory_manager', 'purchasing_officer'];
-        return inventoryStaffRoles.includes(currentUser.role);
+        const maskedRoles = ['admin', 'staff', 'inventory_manager', 'purchasing_officer'];
+        return maskedRoles.includes(currentUser.role);
     },
 
     // Generate unique ID for element
