@@ -25,7 +25,7 @@ $input = file_get_contents('php://input');
 $data = json_decode($input, true);
 
 if (!$data || empty($data)) {
-    error_log('Supplier registration - Invalid JSON received: ' . substr($input, 0, 500));
+    error_log('Supplier registration - Invalid JSON received. Raw input: ' . var_export($input, true) . ' | Decoded: ' . var_export($data, true));
     Response::error('Invalid request format. Please ensure all required fields are provided and try again.', 400);
 }
 

@@ -230,9 +230,11 @@
 
                 // Log payload for debugging
                 console.log('Signup payload:', payload);
+                console.log('Payload JSON:', JSON.stringify(payload));
+                console.log('Payload keys:', Object.keys(payload));
 
                 // Validate password strength
-                if (payload.password.length < 8) {
+                if (!payload.password || payload.password.length < 8) {
                     showToast('Password must be at least 8 characters long', 'error');
                     submitBtn.disabled = false;
                     submitBtn.innerHTML = originalText;
