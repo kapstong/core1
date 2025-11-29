@@ -57,7 +57,7 @@ try {
         SELECT
             grn.*,
             po.po_number,
-            supplier.full_name as supplier_name,
+            COALESCE(supplier.full_name, 'Unknown Supplier') as supplier_name,
             u.full_name as received_by_name,
             COALESCE(COUNT(grni.id), 0) as item_count,
             COALESCE(SUM(grni.quantity_received), 0) as total_quantity_received,

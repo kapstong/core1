@@ -66,8 +66,9 @@ try {
     $query = "
         SELECT
             po.*,
-            s.full_name as supplier_name,
-            CONCAT('SUP-', LPAD(s.id, 5, '0')) as supplier_code,
+            po.supplier_id,
+            COALESCE(s.full_name, 'Unknown Supplier') as supplier_name,
+            COALESCE(CONCAT('SUP-', LPAD(s.id, 5, '0')), 'N/A') as supplier_code,
             u.full_name as created_by_name,
             ua.full_name as approved_by_name,
             COALESCE(COUNT(poi.id), 0) as item_count,

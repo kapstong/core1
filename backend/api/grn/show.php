@@ -54,13 +54,13 @@ try {
             po.po_number,
             po.order_date as po_order_date,
             po.expected_delivery_date as po_expected_delivery,
-            s.full_name as supplier_name,
-            CONCAT('SUP-', LPAD(s.id, 5, '0')) as supplier_code,
+            COALESCE(s.full_name, 'Unknown Supplier') as supplier_name,
+            COALESCE(CONCAT('SUP-', LPAD(s.id, 5, '0')), 'N/A') as supplier_code,
             s.email,
             u.full_name as received_by_name
         FROM goods_received_notes grn
         LEFT JOIN purchase_orders po ON grn.po_id = po.id
-        LEFT JOIN users s ON po.supplier_id = s.id AND s.role = 'supplier'
+        LEFT JOIN users s ON po.supplier_id = s.id
         LEFT JOIN users u ON grn.received_by = u.id
         WHERE grn.id = :grn_id
     ";

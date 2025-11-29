@@ -502,13 +502,18 @@ async function loadApprovedPOs() {
         const response = await fetch(url);
         const data = await response.json();
 
+        console.log('Approved POs API Response:', data);
+
         if (data.success) {
             // API wraps purchase_orders in a 'data' object
             grnApprovedPOs = (data.data && data.data.purchase_orders) || data.purchase_orders || [];
+            console.log('Loaded Approved POs:', grnApprovedPOs);
         } else {
             grnApprovedPOs = [];
+            console.warn('API returned error:', data);
         }
     } catch (error) {
+        console.error('Error loading approved POs:', error);
         grnApprovedPOs = [];
     }
 }
