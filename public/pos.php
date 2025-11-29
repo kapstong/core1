@@ -966,26 +966,135 @@ if (!in_array($user['role'], $allowedRoles)) {
             }
         }
 
-        function showOrderDetails(orderId) {
+        async function showOrderDetails(orderId) {
             currentOrderId = orderId;
-            document.getElementById('order-details').innerHTML = `<p>Loading order ${orderId}...</p>`;
+            document.getElementById('order-details').innerHTML = `<div class="text-center"><div class="spinner-border text-accent" role="status"></div><p class="mt-2">Loading order details...</p></div>`;
             new bootstrap.Modal(document.getElementById('orderModal')).show();
+
+            try {
+                const res = await fetch(`${API_BASE}/orders/index.php?id=${orderId}`);
+                const data = await res.json();
+
+                if (data.success && data.data.order) {
+                    const order = data.data.order;
+                    const items = (order.items || []).map(i => `
+                        <tr>
+                            <td>${i.product_name || 'Product'}</td>
+                            <td>${i.quantity}</td>
+                            <td>₱${parseFloat(i.unit_price).toLocaleString()}</td>
+                            <td>₱${(i.quantity * i.unit_price).toLocaleString()}</td>
+                        </tr>
+                    `).join('');
+
+                    const html = `
+                        <div class="row mb-3">
+                            <div class="col-md-6">
+                                <p><strong>Order Number:</strong> ${order.order_number}</p>
+                                <p><strong>Date:</strong> ${new Date(order.created_at).toLocaleString()}</p>
+                                <p><strong>Status:</strong> <span class="badge bg-warning">${order.status || 'Pending'}</span></p>
+                            </div>
+                            <div class="col-md-6">
+                                <p><strong>Customer:</strong> ${order.customer_name}</p>
+                                <p><strong>Email:</strong> ${order.email || '-'}</p>
+                                <p><strong>Phone:</strong> ${order.phone || '-'}</p>
+                            </div>
+                        </div>
+                        <hr>
+                        <div class="table-responsive">
+                            <table class="table table-sm">
+                                <thead>
+                                    <tr><th>Product</th><th>Qty</th><th>Unit Price</th><th>Total</th></tr>
+                                </thead>
+                                <tbody>
+                                    ${items}
+                                </tbody>
+                            </table>
+                        </div>
+                        <hr>
+                        <div class="row">
+                            <div class="col-md-6">
+                                <p><strong>Subtotal:</strong> ₱${parseFloat(order.subtotal || 0).toLocaleString()}</p>
+                                <p><strong>Tax (12%):</strong> ₱${parseFloat(order.tax_amount || 0).toLocaleString()}</p>
+                            </div>
+                            <div class="col-md-6 text-end">
+                                <p style="font-size: 1.2em;"><strong class="text-accent">Total: ₱${parseFloat(order.total_amount || 0).toLocaleString()}</strong></p>
+                            </div>
+                        </div>
+                        ${order.notes ? `<hr><p><strong>Notes:</strong> ${order.notes}</p>` : ''}
+                    `;
+
+                    document.getElementById('order-details').innerHTML = html;
+                } else {
+                    document.getElementById('order-details').innerHTML = `<div class="alert alert-danger">Failed to load order details</div>`;
+                }
+            } catch (e) {
+                console.error(e);
+                document.getElementById('order-details').innerHTML = `<div class="alert alert-danger">Error loading order details</div>`;
+            }
         }
 
-        function approveOrder() {
+        async function approveOrder() {
             if (!currentOrderId) return;
-            showToast('Order approved', 'success');
-            bootstrap.Modal.getInstance(document.getElementById('orderModal')).hide();
-            loadPendingOrders();
+
+            if (!confirm('Approve this order?')) return;
+
+            const overlay = document.getElementById('loading-overlay');
+            overlay.classList.remove('d-none');
+
+            try {
+                const res = await fetch(`${API_BASE}/orders/approve.php`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ order_id: currentOrderId, action: 'approve' })
+                });
+
+                const data = await res.json();
+
+                if (data.success) {
+                    showToast('Order approved successfully', 'success');
+                    bootstrap.Modal.getInstance(document.getElementById('orderModal')).hide();
+                    loadPendingOrders();
+                } else {
+                    showToast('Error: ' + (data.message || 'Failed to approve'), 'error');
+                }
+            } catch (e) {
+                console.error(e);
+                showToast('Error approving order', 'error');
+            } finally {
+                overlay.classList.add('d-none');
+            }
         }
 
-        function rejectOrder() {
+        async function rejectOrder() {
             if (!currentOrderId) return;
+
             const reason = prompt('Rejection reason:');
-            if (reason) {
-                showToast('Order rejected', 'success');
-                bootstrap.Modal.getInstance(document.getElementById('orderModal')).hide();
-                loadPendingOrders();
+            if (!reason) return;
+
+            const overlay = document.getElementById('loading-overlay');
+            overlay.classList.remove('d-none');
+
+            try {
+                const res = await fetch(`${API_BASE}/orders/approve.php`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ order_id: currentOrderId, action: 'reject', reason: reason })
+                });
+
+                const data = await res.json();
+
+                if (data.success) {
+                    showToast('Order rejected', 'success');
+                    bootstrap.Modal.getInstance(document.getElementById('orderModal')).hide();
+                    loadPendingOrders();
+                } else {
+                    showToast('Error: ' + (data.message || 'Failed to reject'), 'error');
+                }
+            } catch (e) {
+                console.error(e);
+                showToast('Error rejecting order', 'error');
+            } finally {
+                overlay.classList.add('d-none');
             }
         }
 
