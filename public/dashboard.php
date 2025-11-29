@@ -1332,9 +1332,14 @@
                 
                 // Apply money masking after page loads
                 if (typeof moneyMasking !== 'undefined') {
+                    // Try immediately and then with delays
+                    moneyMasking.maskAllMoneyElements();
                     setTimeout(() => {
                         moneyMasking.maskAllMoneyElements();
-                    }, 100);
+                    }, 50);
+                    setTimeout(() => {
+                        moneyMasking.maskAllMoneyElements();
+                    }, 150);
                 }
             } catch (error) {
                 content.innerHTML = `

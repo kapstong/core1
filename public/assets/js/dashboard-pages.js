@@ -66,6 +66,10 @@ const moneyMasking = {
 
     // Add eye toggle to money element
     addEyeToggle(moneyElement) {
+        // Check if already has toggle (either direct child or as wrapper)
+        if (moneyElement.parentNode && moneyElement.parentNode.classList && moneyElement.parentNode.classList.contains('money-with-toggle')) {
+            return; // Already wrapped
+        }
         if (moneyElement.querySelector('.money-eye-toggle')) {
             return; // Already has toggle
         }
@@ -77,33 +81,42 @@ const moneyMasking = {
         wrapper.style.alignItems = 'center';
         wrapper.style.gap = '6px';
 
-        moneyElement.parentNode.insertBefore(wrapper, moneyElement);
-        wrapper.appendChild(moneyElement);
-        wrapper.appendChild(eyeToggle);
+        if (moneyElement.parentNode) {
+            moneyElement.parentNode.insertBefore(wrapper, moneyElement);
+            wrapper.appendChild(moneyElement);
+            wrapper.appendChild(eyeToggle);
 
-        eyeToggle.addEventListener('click', (e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            this.toggleMask(moneyElement);
-            eyeToggle.classList.toggle('revealed');
-        });
+            eyeToggle.addEventListener('click', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                this.toggleMask(moneyElement);
+                eyeToggle.classList.toggle('revealed');
+            });
+        }
     },
 
     // Find and mask all money elements
     maskAllMoneyElements() {
-        // Money stat values
-        const statValues = document.querySelectorAll('[data-money-value], .money-value, .stat-value[data-amount]');
+        // Money stat values - check all stat-value elements for peso symbol
+        const statValues = document.querySelectorAll('.stat-value');
         statValues.forEach(el => {
-            const value = el.dataset.moneyValue || el.dataset.amount || el.textContent;
-            this.applyMask(el, value);
-            this.addEyeToggle(el);
+            // Skip if already masked
+            if (el.dataset.moneyMasked === 'true') return;
+            
+            const text = el.textContent.trim();
+            // If contains peso symbol, it's money
+            if (text.includes('₱')) {
+                const value = el.dataset.moneyValue || el.dataset.amount || text;
+                this.applyMask(el, value);
+                this.addEyeToggle(el);
+            }
         });
 
-        // Money in tables/lists
-        const moneyElements = document.querySelectorAll('[data-money], .amount, .price, .total, .spent, .revenue');
-        moneyElements.forEach(el => {
+        // Also check elements with explicit money attributes
+        const explicitMoney = document.querySelectorAll('[data-money-value], .money-value, [data-money], .amount, .price, .total, .spent, .revenue');
+        explicitMoney.forEach(el => {
             if (!el.dataset.moneyMasked) {
-                const value = el.dataset.money || el.textContent;
+                const value = el.dataset.moneyValue || el.dataset.amount || el.dataset.money || el.textContent;
                 if (value && value.includes('₱')) {
                     this.applyMask(el, value);
                     this.addEyeToggle(el);
