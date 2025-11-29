@@ -8380,7 +8380,7 @@ function displaySalesHistory(sales) {
                 </td>
                 <td>${sale.customer_name || 'Walk-in'}</td>
                 <td>${sale.items_count || 0} items</td>
-                <td><strong>${formatCurrency(sale.total_amount)}</strong></td>
+                <td><strong class="money-value" data-money-value="${formatCurrency(sale.total_amount)}">${formatCurrency(sale.total_amount)}</strong></td>
                 <td><span class="badge bg-info">${sale.payment_method}</span></td>
                 <td>${statusBadge}</td>
                 <td>
@@ -8401,6 +8401,13 @@ function displaySalesHistory(sales) {
             </tr>
         `;
     }).join('');
+    
+    // Apply money masking to newly rendered table
+    if (typeof moneyMasking !== 'undefined') {
+        setTimeout(() => {
+            moneyMasking.maskAllMoneyElements();
+        }, 10);
+    }
 }
 
 function updateSalesStats(sales) {
