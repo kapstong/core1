@@ -607,9 +607,11 @@ if (!in_array($user['role'], $allowedRoles)) {
         document.addEventListener('DOMContentLoaded', function() {
             loadCategories();
             loadProducts();
+            loadPendingOrders();
             setupEventListeners();
             updateClock();
             setInterval(updateClock, 1000);
+            setInterval(loadPendingOrders, 30000); // Refresh pending orders every 30 seconds
             heldSales = JSON.parse(localStorage.getItem('heldSales') || '[]');
         });
 
@@ -972,17 +974,17 @@ if (!in_array($user['role'], $allowedRoles)) {
             new bootstrap.Modal(document.getElementById('orderModal')).show();
 
             try {
-                const res = await fetch(`${API_BASE}/orders/index.php?id=${orderId}`);
+                const res = await fetch(`${API_BASE}/orders/show.php?id=${orderId}`);
                 const data = await res.json();
 
                 if (data.success && data.data.order) {
                     const order = data.data.order;
-                    const items = (order.items || []).map(i => `
+                    const items = (order.order_items || order.items || []).map(i => `
                         <tr>
-                            <td>${i.product_name || 'Product'}</td>
+                            <td>${i.product_name || i.product?.name || 'Product'}</td>
                             <td>${i.quantity}</td>
-                            <td>₱${parseFloat(i.unit_price).toLocaleString()}</td>
-                            <td>₱${(i.quantity * i.unit_price).toLocaleString()}</td>
+                            <td>₱${parseFloat(i.unit_price || i.price).toLocaleString()}</td>
+                            <td>₱${(i.quantity * (i.unit_price || i.price)).toLocaleString()}</td>
                         </tr>
                     `).join('');
 
@@ -994,9 +996,9 @@ if (!in_array($user['role'], $allowedRoles)) {
                                 <p><strong>Status:</strong> <span class="badge bg-warning">${order.status || 'Pending'}</span></p>
                             </div>
                             <div class="col-md-6">
-                                <p><strong>Customer:</strong> ${order.customer_name}</p>
+                                <p><strong>Customer:</strong> ${order.customer_name || order.first_name + ' ' + order.last_name}</p>
                                 <p><strong>Email:</strong> ${order.email || '-'}</p>
-                                <p><strong>Phone:</strong> ${order.phone || '-'}</p>
+                                <p><strong>Phone:</strong> ${order.phone || order.customer_phone || '-'}</p>
                             </div>
                         </div>
                         <hr>
@@ -1006,7 +1008,7 @@ if (!in_array($user['role'], $allowedRoles)) {
                                     <tr><th>Product</th><th>Qty</th><th>Unit Price</th><th>Total</th></tr>
                                 </thead>
                                 <tbody>
-                                    ${items}
+                                    ${items || '<tr><td colspan="4">No items</td></tr>'}
                                 </tbody>
                             </table>
                         </div>
@@ -1015,21 +1017,28 @@ if (!in_array($user['role'], $allowedRoles)) {
                             <div class="col-md-6">
                                 <p><strong>Subtotal:</strong> ₱${parseFloat(order.subtotal || 0).toLocaleString()}</p>
                                 <p><strong>Tax (12%):</strong> ₱${parseFloat(order.tax_amount || 0).toLocaleString()}</p>
+                                <p><strong>Shipping:</strong> ₱${parseFloat(order.shipping_cost || 0).toLocaleString()}</p>
                             </div>
                             <div class="col-md-6 text-end">
                                 <p style="font-size: 1.2em;"><strong class="text-accent">Total: ₱${parseFloat(order.total_amount || 0).toLocaleString()}</strong></p>
                             </div>
                         </div>
                         ${order.notes ? `<hr><p><strong>Notes:</strong> ${order.notes}</p>` : ''}
+                        ${order.shipping_address_1 ? `
+                            <hr>
+                            <p><strong>Shipping Address:</strong></p>
+                            <p>${order.shipping_address_1}${order.shipping_address_2 ? ', ' + order.shipping_address_2 : ''}</p>
+                            <p>${order.shipping_city}, ${order.shipping_state} ${order.shipping_postal}</p>
+                        ` : ''}
                     `;
 
                     document.getElementById('order-details').innerHTML = html;
                 } else {
-                    document.getElementById('order-details').innerHTML = `<div class="alert alert-danger">Failed to load order details</div>`;
+                    document.getElementById('order-details').innerHTML = `<div class="alert alert-danger">Failed to load order details: ${data.message || 'Unknown error'}</div>`;
                 }
             } catch (e) {
-                console.error(e);
-                document.getElementById('order-details').innerHTML = `<div class="alert alert-danger">Error loading order details</div>`;
+                console.error('Order details error:', e);
+                document.getElementById('order-details').innerHTML = `<div class="alert alert-danger">Error loading order details: ${e.message}</div>`;
             }
         }
 
