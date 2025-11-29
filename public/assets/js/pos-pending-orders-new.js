@@ -381,13 +381,69 @@ function showPendingOrdersPanel() {
     const panel = document.getElementById('pending-orders-panel');
     if (panel) {
         panel.classList.add('show', 'active');
-        panel.style.display = 'block'; // Force visible
-        panel.style.opacity = '1'; // Force visible
-        panel.style.visibility = 'visible'; // Force visible
+
+        // *** AGGRESSIVE CSS OVERRIDE *** - Add custom CSS rule to beat Bootstrap's display:none
+        const styleId = 'force-show-pending-orders';
+        let existingStyle = document.getElementById(styleId);
+
+        if (!existingStyle) {
+            existingStyle = document.createElement('style');
+            existingStyle.id = styleId;
+            existingStyle.textContent = `
+                #pending-orders-panel.show.active {
+                    display: block !important;
+                    visibility: visible !important;
+                    opacity: 1 !important;
+                    height: auto !important;
+                    min-height: 400px !important;
+                    width: 100% !important;
+                }
+            `;
+            document.head.appendChild(existingStyle);
+            console.log('*** INJECTED FORCE-SHOW CSS RULE ***');
+        }
+
+        // Force immediate stylesheet recalculation
+        panel.offsetHeight; // Trigger reflow
+
         console.log('Added show/active classes to pending orders panel');
         console.log('Panel computed style display:', window.getComputedStyle(panel).display);
         console.log('Panel computed style visibility:', window.getComputedStyle(panel).visibility);
-        console.log('Panel bounding rect:', panel.getBoundingClientRect());
+        const rectAfterInject = panel.getBoundingClientRect();
+        console.log('Panel bounding rect AFTER CSS injection:', rectAfterInject);
+
+        // Still collapsed? Try adding even more aggressive fixes
+        if (rectAfterInject.width === 0 || rectAfterInject.height === 0) {
+            console.log('PANEL STILL COLLAPSED - Trying parent override');
+
+            // Override parent .tab-content behavior
+            const tabContent = panel.closest('.tab-content');
+            if (tabContent) {
+                tabContent.style.overflow = 'visible';
+                tabContent.style.position = 'relative';
+                console.log('Modified parent tab-content container');
+            }
+
+            // Final fallback - move panel out of tab system entirely
+            panel.style.position = 'absolute';
+            panel.style.top = '60px'; // Below nav tabs
+            panel.style.left = '0';
+            panel.style.width = '100%';
+            panel.style.zIndex = '1000';
+            panel.style.background = '#ffffff';
+
+            const finalRect = panel.getBoundingClientRect();
+            console.log('Final bounding rect after positioning hack:', finalRect);
+
+            if (finalRect.width > 0 && finalRect.height > 0) {
+                console.log('SUCCESS - Panel now has dimensions with absolute positioning!');
+            } else {
+                console.log('FAILED - Panel still has 0 dimensions. Manual intervention required.');
+                alert('PANEL STILL COLLAPSED - Manual CSS intervention needed. Panel bounding rect: ' + JSON.stringify(finalRect));
+            }
+        } else {
+            console.log('SUCCESS - Panel expanded with CSS injection!');
+        }
     } else {
         console.log('PANEL NOT FOUND!');
     }
