@@ -381,7 +381,15 @@ function showPendingOrdersPanel() {
     const panel = document.getElementById('pending-orders-panel');
     if (panel) {
         panel.classList.add('show', 'active');
+        panel.style.display = 'block'; // Force visible
+        panel.style.opacity = '1'; // Force visible
+        panel.style.visibility = 'visible'; // Force visible
         console.log('Added show/active classes to pending orders panel');
+        console.log('Panel computed style display:', window.getComputedStyle(panel).display);
+        console.log('Panel computed style visibility:', window.getComputedStyle(panel).visibility);
+        console.log('Panel bounding rect:', panel.getBoundingClientRect());
+    } else {
+        console.log('PANEL NOT FOUND!');
     }
 
     // Activate the pending orders tab
