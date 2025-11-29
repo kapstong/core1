@@ -15,9 +15,10 @@ async function loadPendingOrders() {
     loading.classList.remove('d-none');
     empty.classList.add('d-none');
     list.innerHTML = '';
-
     try {
-        const response = await fetch(`../backend/api/shop/orders.php?status=pending`);
+        const response = await fetch(`../backend/api/shop/orders.php?status=pending`, {
+            credentials: 'include'
+        });
         const data = await response.json();
 
         console.log('Pending orders response:', data);
@@ -93,7 +94,9 @@ async function viewOrderDetails(orderId) {
     modal.show();
 
     try {
-        const response = await fetch(`../backend/api/shop/orders.php?action=details&id=${orderId}`);
+        const response = await fetch(`../backend/api/shop/orders.php?action=details&id=${orderId}`, {
+            credentials: 'include'
+        });
         const data = await response.json();
 
         if (data.success && data.data && data.data.order) {
@@ -228,6 +231,7 @@ async function confirmApproveOrder() {
             headers: {
                 'Content-Type': 'application/json'
             },
+            credentials: 'include',
             body: JSON.stringify({
                 order_id: currentOrderId,
                 action: 'approve'
@@ -307,6 +311,7 @@ async function confirmRejectOrder() {
             headers: {
                 'Content-Type': 'application/json'
             },
+            credentials: 'include',
             body: JSON.stringify({
                 order_id: currentOrderId,
                 action: 'reject',

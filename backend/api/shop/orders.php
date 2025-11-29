@@ -66,8 +66,13 @@ function handleGetRequest($action) {
     $customerId = $isCustomer ? $_SESSION['customer_id'] : null;
 
     // Handle different actions
-    if ($action === '' && isset($_GET['status']) && $_GET['status'] === 'pending' && $isStaff) {
+    if ($action === '' && isset($_GET['status']) && $_GET['status'] === 'pending') {
+        if (!$isStaff) {
+            error_log('DEBUG: User not staff. isStaff=' . ($isStaff ? 'true' : 'false') . ', isCustomer=' . ($isCustomer ? 'true' : 'false'));
+            Response::error('Staff access required for pending orders', 403);
+        }
         // Staff viewing pending orders
+        error_log('DEBUG: Fetching pending orders for user: ' . json_encode(Auth::user()));
         getPendingOrders();
         return;
     }
@@ -239,6 +244,9 @@ function getPendingOrders() {
 
     $stmt->execute();
     $orders = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    
+    error_log('DEBUG: getPendingOrders query result count: ' . count($orders));
+    error_log('DEBUG: getPendingOrders query result: ' . json_encode($orders));
 
     // Get order items count for each order
     foreach ($orders as &$order) {
