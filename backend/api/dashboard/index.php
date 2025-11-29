@@ -32,6 +32,7 @@ try {
 function getDashboardData() {
     $db = Database::getInstance()->getConnection();
     $userRole = Auth::userRole();
+    $userId = Auth::userId();
 
     // Get date range parameters
     $period = isset($_GET['period']) ? $_GET['period'] : '30'; // days
@@ -42,7 +43,7 @@ function getDashboardData() {
         'summary' => getSummaryMetrics($db, $startDate, $endDate),
         'charts' => getChartData($db, $startDate, $endDate),
         'alerts' => getSystemAlerts($db),
-        'recent_activity' => getRecentActivity($db),
+        'recent_activity' => getRecentActivity($db, $userId, $userRole),
         'top_performers' => getTopPerformers($db, $startDate, $endDate),
         'period' => [
             'start' => $startDate,
@@ -344,8 +345,11 @@ function getSystemAlerts($db) {
     return $alerts;
 }
 
-function getRecentActivity($db) {
+function getRecentActivity($db, $userId, $userRole) {
     try {
+        // Admin can see all activity logs, staff can only see their own
+        $userIdFilter = ($userRole === 'admin') ? '' : 'WHERE al.user_id = :user_id';
+        
         $activityQuery = "
             SELECT
                 al.id,
@@ -358,11 +362,15 @@ function getRecentActivity($db) {
                 u.full_name
             FROM activity_logs al
             LEFT JOIN users u ON al.user_id = u.id
+            {$userIdFilter}
             ORDER BY al.created_at DESC
             LIMIT 10
         ";
 
         $stmt = $db->prepare($activityQuery);
+        if ($userRole !== 'admin') {
+            $stmt->bindParam(':user_id', $userId, PDO::PARAM_INT);
+        }
         $stmt->execute();
         $activities = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
@@ -597,10 +605,8 @@ function filterDashboardByRole($dashboard, $role) {
             unset($dashboard['top_performers']['customers']);
         }
 
-        // REMOVE recent activity completely for staff
-        if (isset($dashboard['recent_activity'])) {
-            unset($dashboard['recent_activity']);
-        }
+        // Keep recent activity for staff (filtered to show only their own activity)
+        // Activity logs are already filtered in getRecentActivity function
 
         return $dashboard;
     }
