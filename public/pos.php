@@ -1054,6 +1054,11 @@ if (!in_array($user['role'], $allowedRoles)) {
             loadProducts();
             setupEventListeners();
 
+            // Initialize pending orders functionality if available
+            if (typeof initializePendingOrders !== 'undefined') {
+                initializePendingOrders();
+            }
+
             // Update clock
             setInterval(() => {
                 document.getElementById('pos-time').textContent = new Date().toLocaleTimeString();
@@ -1076,6 +1081,14 @@ if (!in_array($user['role'], $allowedRoles)) {
             document.getElementById('pos-category-filter').addEventListener('change', (e) => {
                 loadProducts(document.getElementById('pos-search').value, e.target.value);
             });
+
+            // Tab change handler for pending orders
+            const pendingOrdersTab = document.getElementById('pending-orders-tab');
+            if (pendingOrdersTab) {
+                pendingOrdersTab.addEventListener('shown.bs.tab', function() {
+                    loadPendingOrders();
+                });
+            }
 
             // Barcode scanner
             document.getElementById('pos-barcode').addEventListener('keypress', (e) => {
@@ -2166,7 +2179,240 @@ if (!in_array($user['role'], $allowedRoles)) {
         }
 
         function showHelp() {
-            alert('POS Help: Use F1 for search, F12 to complete sale, F3 to clear cart');
+            alert('POS Help: Use F1 for search, F12 to complete sale, F3 to clear cart, F4 to hold sale, F5 to recall');
+        }
+
+        // Pending Orders Modal Functions
+        let currentOrderId = null;
+
+        function viewOrderDetails(orderId) {
+            // Load order details from API and show modal
+            loadOrderDetailsAndShow(orderId);
+        }
+
+        async function loadOrderDetailsAndShow(orderId) {
+            try {
+                const response = await fetch(`${API_BASE}/pos/pending-orders.php?order_id=${orderId}`);
+                const data = await response.json();
+
+                if (data.success && data.data && data.data.order) {
+                    showOrderDetailsModal(data.data.order);
+                } else {
+                    showToast('Error loading order details', 'error');
+                }
+            } catch (error) {
+                console.error('Error loading order details:', error);
+                showToast('Error loading order details: ' + error.message, 'error');
+            }
+        }
+
+        function showOrderDetailsModal(orderData) {
+            currentOrderId = orderData.id;
+            const modalContent = document.getElementById('order-details-content');
+            
+            const itemsHTML = (orderData.items || []).map(item => `
+                <tr>
+                    <td>${item.product_name || 'N/A'}</td>
+                    <td class="text-center">${item.quantity}</td>
+                    <td class="text-end">₱${parseFloat(item.price || 0).toLocaleString('en-US', {minimumFractionDigits: 2})}</td>
+                    <td class="text-end">₱${(parseFloat(item.price || 0) * item.quantity).toLocaleString('en-US', {minimumFractionDigits: 2})}</td>
+                </tr>
+            `).join('');
+
+            modalContent.innerHTML = `
+                <div class="row mb-3">
+                    <div class="col-md-6">
+                        <h6 class="text-muted">Order Number</h6>
+                        <h5>${orderData.order_number || 'N/A'}</h5>
+                    </div>
+                    <div class="col-md-6">
+                        <h6 class="text-muted">Order Date</h6>
+                        <h5>${new Date(orderData.created_at || orderData.order_date).toLocaleString()}</h5>
+                    </div>
+                </div>
+
+                <div class="row mb-3">
+                    <div class="col-md-6">
+                        <h6 class="text-muted">Customer Name</h6>
+                        <h5>${orderData.customer_name || 'N/A'}</h5>
+                    </div>
+                    <div class="col-md-6">
+                        <h6 class="text-muted">Email</h6>
+                        <p>${orderData.email || 'N/A'}</p>
+                    </div>
+                </div>
+
+                <div class="row mb-3">
+                    <div class="col-md-6">
+                        <h6 class="text-muted">Phone</h6>
+                        <p>${orderData.phone || 'N/A'}</p>
+                    </div>
+                    <div class="col-md-6">
+                        <h6 class="text-muted">Address</h6>
+                        <p>${orderData.address || 'N/A'}</p>
+                    </div>
+                </div>
+
+                <div class="mb-3">
+                    <h6 class="text-muted mb-2">Order Items</h6>
+                    <div class="table-responsive">
+                        <table class="table table-sm">
+                            <thead>
+                                <tr>
+                                    <th>Product</th>
+                                    <th class="text-center">Qty</th>
+                                    <th class="text-end">Price</th>
+                                    <th class="text-end">Total</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${itemsHTML}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div class="row mb-3 border-top pt-3">
+                    <div class="col-md-6">
+                        <h6 class="text-muted">Subtotal</h6>
+                        <h5>₱${parseFloat(orderData.subtotal || 0).toLocaleString('en-US', {minimumFractionDigits: 2})}</h5>
+                    </div>
+                    <div class="col-md-6">
+                        <h6 class="text-muted">Tax (12%)</h6>
+                        <h5>₱${parseFloat(orderData.tax_amount || 0).toLocaleString('en-US', {minimumFractionDigits: 2})}</h5>
+                    </div>
+                </div>
+
+                <div class="row border-top pt-3">
+                    <div class="col-12">
+                        <h6 class="text-muted">Total Amount</h6>
+                        <h3 class="text-accent">₱${parseFloat(orderData.total_amount || 0).toLocaleString('en-US', {minimumFractionDigits: 2})}</h3>
+                    </div>
+                </div>
+            `;
+
+            const modal = new bootstrap.Modal(document.getElementById('orderDetailsModal'));
+            modal.show();
+        }
+
+        function showApproveModal() {
+            const modal = new bootstrap.Modal(document.getElementById('approveConfirmModal'));
+            modal.show();
+        }
+
+        function showRejectModal() {
+            const modal = new bootstrap.Modal(document.getElementById('rejectConfirmModal'));
+            modal.show();
+        }
+
+        async function confirmApproveOrder() {
+            if (!currentOrderId) {
+                showToast('No order selected', 'warning');
+                return;
+            }
+
+            const confirmBtn = document.querySelector('#approveConfirmModal .btn-success');
+            const originalText = confirmBtn.innerHTML;
+
+            confirmBtn.disabled = true;
+            confirmBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Approving...';
+
+            try {
+                // Call the approve API directly
+                const response = await fetch(`${API_BASE}/orders/approve.php`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        order_id: currentOrderId,
+                        action: 'approve'
+                    })
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    // Close modals
+                    const approveModal = bootstrap.Modal.getInstance(document.getElementById('approveConfirmModal'));
+                    const detailsModal = bootstrap.Modal.getInstance(document.getElementById('orderDetailsModal'));
+                    
+                    if (approveModal) approveModal.hide();
+                    if (detailsModal) detailsModal.hide();
+
+                    showToast('Order approved successfully', 'success');
+                    
+                    // Reload pending orders
+                    loadPendingOrders();
+                } else {
+                    showToast('Error approving order: ' + data.message, 'error');
+                }
+
+            } catch (error) {
+                showToast('Error approving order: ' + error.message, 'error');
+            } finally {
+                confirmBtn.disabled = false;
+                confirmBtn.innerHTML = originalText;
+            }
+        }
+
+        async function confirmRejectOrder() {
+            if (!currentOrderId) {
+                showToast('No order selected', 'warning');
+                return;
+            }
+
+            const reason = document.getElementById('rejection-reason').value.trim();
+            if (!reason) {
+                showToast('Please provide a rejection reason', 'warning');
+                document.getElementById('rejection-reason').focus();
+                return;
+            }
+
+            const confirmBtn = document.querySelector('#rejectConfirmModal .btn-danger');
+            const originalText = confirmBtn.innerHTML;
+
+            confirmBtn.disabled = true;
+            confirmBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Rejecting...';
+
+            try {
+                // Call the reject API directly with reason
+                const response = await fetch(`${API_BASE}/orders/approve.php`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        order_id: currentOrderId,
+                        action: 'reject',
+                        reason: reason
+                    })
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    // Close modals
+                    const rejectModal = bootstrap.Modal.getInstance(document.getElementById('rejectConfirmModal'));
+                    const detailsModal = bootstrap.Modal.getInstance(document.getElementById('orderDetailsModal'));
+                    
+                    if (rejectModal) rejectModal.hide();
+                    if (detailsModal) detailsModal.hide();
+
+                    showToast('Order rejected successfully', 'success');
+                    
+                    // Reload pending orders
+                    loadPendingOrders();
+                } else {
+                    showToast('Error rejecting order: ' + data.message, 'error');
+                }
+
+            } catch (error) {
+                showToast('Error rejecting order: ' + error.message, 'error');
+            } finally {
+                confirmBtn.disabled = false;
+                confirmBtn.innerHTML = originalText;
+            }
         }
     </script>
 </body>
