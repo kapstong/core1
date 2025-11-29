@@ -115,7 +115,19 @@ async function loadPendingOrders() {
             }).join('');
             
             console.log('Generated HTML length:', cardsHTML.length);
+            console.log('Cards HTML preview:', cardsHTML.substring(0, 200) + '...');
+            console.log('Setting innerHTML to listEl:', listEl);
             listEl.innerHTML = cardsHTML;
+            console.log('innerHTML set successfully, listEl now has:', listEl.innerHTML.length, 'characters');
+            console.log('Number of child elements in listEl:', listEl.children.length);
+
+            // Verify the structure after setting HTML
+            const firstCard = listEl.querySelector('.card');
+            if (firstCard) {
+                console.log('First card element found and displayed');
+            } else {
+                console.log('WARNING: No card element found after setting HTML!');
+            }
 
         } else {
             // No pending orders
