@@ -323,7 +323,7 @@ window.openGRNModal = async function(grnId = null) {
                                         <option value="">-- Select Purchase Order --</option>
                                         ${grnApprovedPOs.map(po => `
                                             <option value="${po.id}">
-                                                ${po.po_number} - ${po.supplier?.name || 'N/A'} - ${formatCurrency(po.total_amount)}
+                                                ${po.po_number} - ${po.supplier_name || po.supplier?.name || 'N/A'} - ${formatCurrency(po.total_amount)}
                                             </option>
                                         `).join('')}
                                     </select>
