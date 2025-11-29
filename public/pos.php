@@ -21,8 +21,8 @@ if (!$isLoggedIn) {
     exit;
 }
 
-// Check if user has POS access (ONLY staff members can manage customer orders)
-$allowedRoles = ['staff'];
+// Check if user has POS access (staff members and related inventory roles can manage customer orders)
+$allowedRoles = ['staff', 'inventory_manager', 'purchasing_officer', 'admin'];
 if (!in_array($user['role'], $allowedRoles)) {
     header('Location: dashboard.php');
     exit;

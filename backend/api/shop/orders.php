@@ -55,7 +55,7 @@ try {
 
 function handleGetRequest($action) {
     // Check if user is authenticated (customer or staff)
-    $isStaff = Auth::check() && Auth::user()['role'] === 'staff';
+    $isStaff = Auth::check() && in_array(Auth::user()['role'], ['staff', 'inventory_manager', 'purchasing_officer', 'admin']);
     $isCustomer = isset($_SESSION['customer_id']);
 
     if (!$isStaff && !$isCustomer) {
