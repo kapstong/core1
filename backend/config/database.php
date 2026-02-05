@@ -81,7 +81,26 @@ class Database {
             $stmt->execute($params);
             return $stmt;
         } catch (PDOException $e) {
-            throw new Exception("Query failed: " . $e->getMessage());
+            $message = $e->getMessage();
+            if (stripos($message, 'deleted_at') !== false) {
+                // Fallback for environments missing deleted_at columns
+                $fallbackSql = $sql;
+                $fallbackSql = preg_replace('/\\s+AND\\s+[a-zA-Z0-9_\\.]*deleted_at\\s+IS\\s+NULL/i', '', $fallbackSql);
+                $fallbackSql = preg_replace('/\\s+WHERE\\s+[a-zA-Z0-9_\\.]*deleted_at\\s+IS\\s+NULL\\s*(AND\\s*)?/i', ' WHERE ', $fallbackSql);
+                $fallbackSql = preg_replace('/,\\s*deleted_at\\s*=\\s*NOW\\(\\)/i', '', $fallbackSql);
+                $fallbackSql = preg_replace('/\\s+deleted_at\\s*=\\s*NOW\\(\\),/i', '', $fallbackSql);
+                $fallbackSql = preg_replace('/\\s+deleted_at\\s*=\\s*NOW\\(\\)\\s*/i', '', $fallbackSql);
+                $fallbackSql = preg_replace('/\\s+WHERE\\s*$/i', '', $fallbackSql);
+
+                try {
+                    $stmt = $this->conn->prepare($fallbackSql);
+                    $stmt->execute($params);
+                    return $stmt;
+                } catch (PDOException $fallbackException) {
+                    throw new Exception("Query failed: " . $message);
+                }
+            }
+            throw new Exception("Query failed: " . $message);
         }
     }
 
