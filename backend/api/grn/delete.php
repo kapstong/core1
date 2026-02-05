@@ -53,7 +53,9 @@ function deleteGRN($user) {
     $grnId = (int)($_POST['id'] ?? $_GET['id'] ?? 0);
     $reason = $_POST['reason'] ?? $_GET['reason'] ?? 'Deleted by ' . $user['full_name'];
 
-    $db = Database::getInstance()->getConnection();
+    $dbInstance = Database::getInstance();
+    $db = $dbInstance->getConnection();
+    $hasDeletedAt = $dbInstance->columnExists('goods_received_notes', 'deleted_at');
     $db->beginTransaction();
 
     try {
@@ -61,7 +63,7 @@ function deleteGRN($user) {
         $grnQuery = "SELECT g.*, po.po_number
                      FROM goods_received_notes g
                      INNER JOIN purchase_orders po ON g.po_id = po.id
-                     WHERE g.id = :id AND g.deleted_at IS NULL";
+                     WHERE g.id = :id" . ($hasDeletedAt ? " AND g.deleted_at IS NULL" : "");
         $grnStmt = $db->prepare($grnQuery);
         $grnStmt->bindParam(':id', $grnId, PDO::PARAM_INT);
         $grnStmt->execute();
@@ -175,16 +177,23 @@ function deleteGRN($user) {
         $updatePOStmt->bindParam(':po_id', $grn['po_id'], PDO::PARAM_INT);
         $updatePOStmt->execute();
 
-        // Soft delete GRN (keep items for archive)
-        $deleteGRNQuery = "UPDATE goods_received_notes SET deleted_at = NOW() WHERE id = :id";
-        $deleteGRNStmt = $db->prepare($deleteGRNQuery);
-        $deleteGRNStmt->bindParam(':id', $grnId, PDO::PARAM_INT);
-        $deleteGRNStmt->execute();
+        // Soft delete GRN if supported, otherwise hard delete
+        if ($hasDeletedAt) {
+            $deleteGRNQuery = "UPDATE goods_received_notes SET deleted_at = NOW() WHERE id = :id";
+            $deleteGRNStmt = $db->prepare($deleteGRNQuery);
+            $deleteGRNStmt->bindParam(':id', $grnId, PDO::PARAM_INT);
+            $deleteGRNStmt->execute();
+        } else {
+            $deleteGRNQuery = "DELETE FROM goods_received_notes WHERE id = :id";
+            $deleteGRNStmt = $db->prepare($deleteGRNQuery);
+            $deleteGRNStmt->bindParam(':id', $grnId, PDO::PARAM_INT);
+            $deleteGRNStmt->execute();
+        }
 
         $db->commit();
 
         // Log GRN deletion
-        AuditLogger::logDelete('grn', $grnId, "GRN {$grn['grn_number']} soft-deleted - Inventory reversed", [
+        AuditLogger::logDelete('grn', $grnId, "GRN {$grn['grn_number']} deleted - Inventory reversed", [
             'grn_number' => $grn['grn_number'],
             'po_number' => $grn['po_number'],
             'items_reversed' => count($items),

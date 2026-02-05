@@ -38,17 +38,18 @@ try {
 
     $db = Database::getInstance();
     $conn = $db->getConnection();
+    $hasDeletedAt = $db->columnExists('users', 'deleted_at');
 
     // Check if role filter is requested
     $roleFilter = isset($_GET['role']) ? $_GET['role'] : null;
 
     // First, get total count of users
-    $countQuery = "SELECT COUNT(*) as total FROM users WHERE deleted_at IS NULL";
+    $countQuery = "SELECT COUNT(*) as total FROM users" . ($hasDeletedAt ? " WHERE deleted_at IS NULL" : "");
     $countStmt = $conn->query($countQuery);
     $totalUsers = $countStmt->fetch(PDO::FETCH_ASSOC)['total'];
 
     // Get all users without any filter first
-    $allQuery = "SELECT role, COUNT(*) as count FROM users WHERE deleted_at IS NULL GROUP BY role";
+    $allQuery = "SELECT role, COUNT(*) as count FROM users" . ($hasDeletedAt ? " WHERE deleted_at IS NULL" : "") . " GROUP BY role";
     $roleStmt = $conn->query($allQuery);
     $roleCounts = $roleStmt->fetchAll(PDO::FETCH_ASSOC);
 
@@ -65,7 +66,7 @@ try {
                     u.last_login,
                     u.created_at
                   FROM users u
-                  WHERE u.role = 'supplier' AND u.deleted_at IS NULL
+                  WHERE u.role = 'supplier'" . ($hasDeletedAt ? " AND u.deleted_at IS NULL" : "") . "
                   ORDER BY u.full_name ASC";
     } else {
         // Get all users EXCLUDING ALL SUPPLIERS (pending and approved)
@@ -83,8 +84,7 @@ try {
                     u.created_at
                   FROM users u
                   WHERE
-                    u.deleted_at IS NULL
-                    AND u.role != 'supplier'
+                    u.role != 'supplier'" . ($hasDeletedAt ? " AND u.deleted_at IS NULL" : "") . "
                   ORDER BY
                     u.created_at DESC";
     }

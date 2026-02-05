@@ -58,9 +58,10 @@ try {
 
     $db = Database::getInstance();
     $conn = $db->getConnection();
+    $hasDeletedAt = $db->columnExists('purchase_orders', 'deleted_at');
 
     // Check if PO exists
-    $stmt = $conn->prepare("SELECT * FROM purchase_orders WHERE id = :id AND deleted_at IS NULL");
+    $stmt = $conn->prepare("SELECT * FROM purchase_orders WHERE id = :id" . ($hasDeletedAt ? " AND deleted_at IS NULL" : ""));
     $stmt->execute([':id' => $poId]);
     $po = $stmt->fetch(PDO::FETCH_ASSOC);
 

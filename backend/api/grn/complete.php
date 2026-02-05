@@ -46,7 +46,9 @@ try {
         Response::error('GRN ID is required', 400);
     }
 
-    $db = Database::getInstance()->getConnection();
+    $dbInstance = Database::getInstance();
+    $db = $dbInstance->getConnection();
+    $hasDeletedAt = $dbInstance->columnExists('goods_received_notes', 'deleted_at');
 
     // Check if GRN exists and can be completed
     $grnCheckStmt = $db->prepare("
@@ -54,7 +56,7 @@ try {
         FROM goods_received_notes grn
         LEFT JOIN purchase_orders po ON grn.po_id = po.id
         LEFT JOIN users s ON po.supplier_id = s.id AND s.role = 'supplier'
-        WHERE grn.id = :id AND grn.deleted_at IS NULL
+        WHERE grn.id = :id" . ($hasDeletedAt ? " AND grn.deleted_at IS NULL" : "") . "
     ");
     $grnCheckStmt->execute([':id' => $grnId]);
     $grn = $grnCheckStmt->fetch(PDO::FETCH_ASSOC);

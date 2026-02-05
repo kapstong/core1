@@ -11,6 +11,7 @@ Env::load();
 class Database {
     private static $instance = null;
     private $conn;
+    private $columnCache = [];
 
     // Database configuration (with fallback defaults)
     private $db_type;
@@ -66,6 +67,41 @@ class Database {
      */
     public function getConnection() {
         return $this->conn;
+    }
+
+    /**
+     * Check if a column exists in a table (cached)
+     */
+    public function columnExists($table, $column) {
+        if ($this->conn === null) {
+            return false;
+        }
+
+        $key = strtolower($table . '.' . $column);
+        if (isset($this->columnCache[$key])) {
+            return $this->columnCache[$key];
+        }
+
+        try {
+            $stmt = $this->conn->prepare("
+                SELECT COUNT(*) 
+                FROM INFORMATION_SCHEMA.COLUMNS
+                WHERE TABLE_SCHEMA = :schema
+                  AND TABLE_NAME = :table
+                  AND COLUMN_NAME = :column
+            ");
+            $stmt->execute([
+                ':schema' => $this->db_name,
+                ':table' => $table,
+                ':column' => $column
+            ]);
+            $exists = ((int)$stmt->fetchColumn()) > 0;
+        } catch (PDOException $e) {
+            $exists = false;
+        }
+
+        $this->columnCache[$key] = $exists;
+        return $exists;
     }
 
     /**

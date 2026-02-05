@@ -25,12 +25,15 @@ try {
 
     $db = Database::getInstance();
     $conn = $db->getConnection();
+    $hasDeletedAt = $db->columnExists('goods_received_notes', 'deleted_at');
 
     // Build query with filters
     $where = [];
     $params = [];
 
-    $where[] = "grn.deleted_at IS NULL";
+    if ($hasDeletedAt) {
+        $where[] = "grn.deleted_at IS NULL";
+    }
 
     // Role-based access
     if ($user['role'] === 'staff') {

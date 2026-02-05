@@ -53,6 +53,7 @@ try {
 
     $db = Database::getInstance();
     $conn = $db->getConnection();
+    $hasDeletedAt = $db->columnExists('purchase_orders', 'deleted_at');
 
     // Check if PO exists
     $stmt = $conn->prepare("SELECT status FROM purchase_orders WHERE id = :id");
@@ -80,12 +81,17 @@ try {
     $stmt->execute([':po_id' => $poId]);
     $poDetails = $stmt->fetch(PDO::FETCH_ASSOC);
 
-    // Soft delete the purchase order
-    $stmt = $conn->prepare("UPDATE purchase_orders SET deleted_at = NOW() WHERE id = :id");
-    $stmt->execute([':id' => $poId]);
+    // Soft delete the purchase order if supported, otherwise hard delete
+    if ($hasDeletedAt) {
+        $stmt = $conn->prepare("UPDATE purchase_orders SET deleted_at = NOW() WHERE id = :id");
+        $stmt->execute([':id' => $poId]);
+    } else {
+        $stmt = $conn->prepare("DELETE FROM purchase_orders WHERE id = :id");
+        $stmt->execute([':id' => $poId]);
+    }
 
     // Log PO deletion to audit logs
-    AuditLogger::logDelete('purchase_order', $poId, "Purchase order {$poDetails['po_number']} soft-deleted", [
+    AuditLogger::logDelete('purchase_order', $poId, "Purchase order {$poDetails['po_number']} deleted", [
         'po_number' => $poDetails['po_number'],
         'supplier_id' => $poDetails['supplier_id'],
         'supplier_name' => $poDetails['supplier_name'],

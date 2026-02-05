@@ -34,12 +34,15 @@ try {
 
     $db = Database::getInstance();
     $conn = $db->getConnection();
+    $hasDeletedAt = $db->columnExists('purchase_orders', 'deleted_at');
 
     // Build query with filters
     $where = [];
     $params = [];
 
-    $where[] = "po.deleted_at IS NULL";
+    if ($hasDeletedAt) {
+        $where[] = "po.deleted_at IS NULL";
+    }
 
     if (isset($_GET['status'])) {
         $where[] = "po.status = :status";

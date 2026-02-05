@@ -8,10 +8,16 @@ require_once __DIR__ . '/../config/database.php';
 
 class Product {
     private $db;
+    private $conn;
     private $table = 'products';
 
     public function __construct() {
-        $this->db = Database::getInstance()->getConnection();
+        $this->db = Database::getInstance();
+        $this->conn = $this->db->getConnection();
+    }
+
+    private function hasDeletedAt() {
+        return $this->db->columnExists($this->table, 'deleted_at');
     }
 
     /**
@@ -22,8 +28,13 @@ class Product {
                          i.quantity_on_hand, i.quantity_reserved, i.quantity_available, i.warehouse_location
                   FROM {$this->table} p
                   LEFT JOIN categories c ON p.category_id = c.id
-                  LEFT JOIN inventory i ON p.id = i.product_id
-                  WHERE p.deleted_at IS NULL";
+                  LEFT JOIN inventory i ON p.id = i.product_id";
+
+        if ($this->hasDeletedAt()) {
+            $query .= " WHERE p.deleted_at IS NULL";
+        } else {
+            $query .= " WHERE 1=1";
+        }
 
         $params = [];
 
@@ -77,7 +88,7 @@ class Product {
             $params[] = $offset;
         }
 
-        $stmt = $this->db->prepare($query);
+        $stmt = $this->conn->prepare($query);
 
         foreach ($params as $index => $value) {
             $stmt->bindValue($index + 1, $value);
@@ -96,9 +107,13 @@ class Product {
                   FROM {$this->table} p
                   LEFT JOIN categories c ON p.category_id = c.id
                   LEFT JOIN inventory i ON p.id = i.product_id
-                  WHERE p.id = :id AND p.deleted_at IS NULL";
+                  WHERE p.id = :id";
 
-        $stmt = $this->db->prepare($query);
+        if ($this->hasDeletedAt()) {
+            $query .= " AND p.deleted_at IS NULL";
+        }
+
+        $stmt = $this->conn->prepare($query);
         $stmt->bindParam(':id', $id, PDO::PARAM_INT);
         $stmt->execute();
 
@@ -114,9 +129,13 @@ class Product {
                   FROM {$this->table} p
                   LEFT JOIN categories c ON p.category_id = c.id
                   LEFT JOIN inventory i ON p.id = i.product_id
-                  WHERE p.sku = :sku AND p.deleted_at IS NULL";
+                  WHERE p.sku = :sku";
 
-        $stmt = $this->db->prepare($query);
+        if ($this->hasDeletedAt()) {
+            $query .= " AND p.deleted_at IS NULL";
+        }
+
+        $stmt = $this->conn->prepare($query);
         $stmt->bindParam(':sku', $sku);
         $stmt->execute();
 
@@ -132,13 +151,17 @@ class Product {
                   FROM {$this->table} p
                   LEFT JOIN categories c ON p.category_id = c.id
                   LEFT JOIN inventory i ON p.id = i.product_id
-                  WHERE p.name = :name AND p.is_active = 1 AND p.deleted_at IS NULL";
+                  WHERE p.name = :name AND p.is_active = 1";
+
+        if ($this->hasDeletedAt()) {
+            $query .= " AND p.deleted_at IS NULL";
+        }
 
         if ($categoryId) {
             $query .= " AND p.category_id = :category_id";
         }
 
-        $stmt = $this->db->prepare($query);
+        $stmt = $this->conn->prepare($query);
         $stmt->bindParam(':name', $name);
         if ($categoryId) {
             $stmt->bindParam(':category_id', $categoryId, PDO::PARAM_INT);
@@ -153,7 +176,7 @@ class Product {
      */
     public function create($data) {
         try {
-            $this->db->beginTransaction();
+            $this->conn->beginTransaction();
 
             $query = "INSERT INTO {$this->table}
                       (sku, name, category_id, description, brand, specifications,
@@ -162,7 +185,7 @@ class Product {
                       (:sku, :name, :category_id, :description, :brand, :specifications,
                        :cost_price, :selling_price, :reorder_level, :is_active, :image_url, :warranty_months)";
 
-            $stmt = $this->db->prepare($query);
+            $stmt = $this->conn->prepare($query);
 
             $specs = isset($data['specifications']) ? json_encode($data['specifications']) : null;
             $isActive = $data['is_active'] ?? 1;
@@ -186,24 +209,24 @@ class Product {
             $stmt->bindParam(':warranty_months', $warrantyMonths, PDO::PARAM_INT);
 
             $stmt->execute();
-            $productId = $this->db->lastInsertId();
+            $productId = $this->conn->lastInsertId();
 
             // Create inventory record with initial stock if provided (quantity_available is auto-calculated)
             $initialStock = isset($data['stock_quantity']) ? (int)$data['stock_quantity'] : 0;
             $invQuery = "INSERT INTO inventory (product_id, quantity_on_hand, quantity_reserved)
                          VALUES (:product_id, :quantity, 0)";
 
-            $invStmt = $this->db->prepare($invQuery);
+            $invStmt = $this->conn->prepare($invQuery);
             $invStmt->bindParam(':product_id', $productId, PDO::PARAM_INT);
             $invStmt->bindParam(':quantity', $initialStock, PDO::PARAM_INT);
             $invStmt->execute();
 
-            $this->db->commit();
+            $this->conn->commit();
 
             return $this->findById($productId);
 
         } catch (PDOException $e) {
-            $this->db->rollBack();
+            $this->conn->rollBack();
             throw $e;
         }
     }
@@ -236,12 +259,12 @@ class Product {
         }
 
         try {
-            $this->db->beginTransaction();
+            $this->conn->beginTransaction();
 
             // Update product table if there are fields to update
             if (!empty($fields)) {
                 $query = "UPDATE {$this->table} SET " . implode(', ', $fields) . " WHERE id = :id";
-                $stmt = $this->db->prepare($query);
+                $stmt = $this->conn->prepare($query);
                 $stmt->execute($params);
             }
 
@@ -251,7 +274,7 @@ class Product {
 
                 // Check if inventory record exists
                 $checkQuery = "SELECT id FROM inventory WHERE product_id = :product_id";
-                $checkStmt = $this->db->prepare($checkQuery);
+                $checkStmt = $this->conn->prepare($checkQuery);
                 $checkStmt->bindParam(':product_id', $id, PDO::PARAM_INT);
                 $checkStmt->execute();
 
@@ -266,17 +289,17 @@ class Product {
                                 VALUES (:product_id, :quantity, 0)";
                 }
 
-                $invStmt = $this->db->prepare($invQuery);
+                $invStmt = $this->conn->prepare($invQuery);
                 $invStmt->bindParam(':product_id', $id, PDO::PARAM_INT);
                 $invStmt->bindParam(':quantity', $stockQty, PDO::PARAM_INT);
                 $invStmt->execute();
             }
 
-            $this->db->commit();
+            $this->conn->commit();
             return true;
 
         } catch (PDOException $e) {
-            $this->db->rollBack();
+            $this->conn->rollBack();
             throw $e;
         }
     }
@@ -285,10 +308,16 @@ class Product {
      * Delete product (hard delete)
      */
     public function delete($id) {
-        $query = "UPDATE {$this->table}
-                  SET is_active = 0, deleted_at = NOW()
-                  WHERE id = :id";
-        $stmt = $this->db->prepare($query);
+        if ($this->hasDeletedAt()) {
+            $query = "UPDATE {$this->table}
+                      SET is_active = 0, deleted_at = NOW()
+                      WHERE id = :id";
+        } else {
+            $query = "UPDATE {$this->table}
+                      SET is_active = 0
+                      WHERE id = :id";
+        }
+        $stmt = $this->conn->prepare($query);
         $stmt->bindParam(':id', $id, PDO::PARAM_INT);
         return $stmt->execute();
     }
@@ -297,13 +326,16 @@ class Product {
      * Check if SKU exists (only for active products)
      */
     public function skuExists($sku, $excludeId = null) {
-        $query = "SELECT COUNT(*) as count FROM {$this->table} WHERE sku = :sku AND is_active = 1 AND deleted_at IS NULL";
+        $query = "SELECT COUNT(*) as count FROM {$this->table} WHERE sku = :sku AND is_active = 1";
+        if ($this->hasDeletedAt()) {
+            $query .= " AND deleted_at IS NULL";
+        }
 
         if ($excludeId) {
             $query .= " AND id != :id";
         }
 
-        $stmt = $this->db->prepare($query);
+        $stmt = $this->conn->prepare($query);
         $stmt->bindParam(':sku', $sku);
 
         if ($excludeId) {
@@ -325,10 +357,16 @@ class Product {
                   FROM {$this->table} p
                   LEFT JOIN categories c ON p.category_id = c.id
                   LEFT JOIN inventory i ON p.id = i.product_id
-                  WHERE p.is_active = 1 AND p.deleted_at IS NULL AND i.quantity_available <= p.reorder_level
+                  WHERE p.is_active = 1";
+
+        if ($this->hasDeletedAt()) {
+            $query .= " AND p.deleted_at IS NULL";
+        }
+
+        $query .= " AND i.quantity_available <= p.reorder_level
                   ORDER BY i.quantity_available ASC";
 
-        $stmt = $this->db->prepare($query);
+        $stmt = $this->conn->prepare($query);
         $stmt->execute();
 
         return $stmt->fetchAll();
