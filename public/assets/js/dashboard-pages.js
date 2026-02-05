@@ -899,6 +899,221 @@ async function loadSettingsPage() {
     }
 }
 
+function getSettingValue(settings, key, fallback = '') {
+    if (!Array.isArray(settings)) return fallback;
+    const found = settings.find(s => s.setting_key === key);
+    if (!found) return fallback;
+    return found.parsed_value !== undefined ? found.parsed_value : (found.setting_value ?? fallback);
+}
+
+async function loadSettingsData() {
+    try {
+        const response = await fetch(`${API_BASE}/settings/index.php`, { credentials: 'same-origin' });
+        const result = await response.json();
+
+        if (!result.success) {
+            throw new Error(result.message || 'Failed to load settings');
+        }
+
+        const settings = result.data?.settings || result.settings || [];
+        window.currentSettings = settings;
+
+        // Business info
+        const businessName = document.getElementById('business-name');
+        const businessEmail = document.getElementById('business-email');
+        const businessPhone = document.getElementById('business-phone');
+        const businessAddress = document.getElementById('business-address');
+        const taxRate = document.getElementById('tax-rate');
+
+        if (businessName) businessName.value = getSettingValue(settings, 'store_name', '');
+        if (businessEmail) businessEmail.value = getSettingValue(settings, 'store_email', '');
+        if (businessPhone) businessPhone.value = getSettingValue(settings, 'store_phone', '');
+        if (businessAddress) businessAddress.value = getSettingValue(settings, 'store_address', '');
+        if (taxRate) taxRate.value = getSettingValue(settings, 'tax_rate', '');
+
+        // Email settings
+        const smtpHost = document.getElementById('smtp-host');
+        const smtpPort = document.getElementById('smtp-port');
+        const smtpUsername = document.getElementById('smtp-username');
+        const smtpPassword = document.getElementById('smtp-password');
+        const smtpSsl = document.getElementById('smtp-ssl');
+
+        if (smtpHost) smtpHost.value = getSettingValue(settings, 'smtp_host', '');
+        if (smtpPort) smtpPort.value = getSettingValue(settings, 'smtp_port', '');
+        if (smtpUsername) smtpUsername.value = getSettingValue(settings, 'smtp_username', '');
+        if (smtpPassword) smtpPassword.value = getSettingValue(settings, 'smtp_password', '');
+        if (smtpSsl) smtpSsl.checked = !!getSettingValue(settings, 'smtp_ssl', false);
+
+        // Security settings
+        const inactivityTimeout = document.getElementById('inactivity-timeout');
+        if (inactivityTimeout) inactivityTimeout.value = getSettingValue(settings, 'inactivity_timeout', '');
+
+        // Maintenance settings
+        const maintenanceStatus = document.getElementById('maintenance-status');
+        const maintenanceMessage = document.getElementById('maintenance-message');
+        const maintenanceMessageDisplay = document.getElementById('maintenance-message-display');
+        const maintenanceModeValue = getSettingValue(settings, 'maintenance_mode', false);
+        const maintenanceMessageValue = getSettingValue(settings, 'maintenance_message', '');
+
+        if (maintenanceMessage) maintenanceMessage.value = maintenanceMessageValue || '';
+        if (maintenanceStatus) {
+            const enabled = maintenanceModeValue === true || maintenanceModeValue === 'true' || maintenanceModeValue === 1 || maintenanceModeValue === '1';
+            maintenanceStatus.textContent = enabled ? 'Enabled' : 'Disabled';
+            maintenanceStatus.className = `badge ${enabled ? 'bg-warning' : 'bg-secondary'}`;
+        }
+        if (maintenanceMessageDisplay) {
+            maintenanceMessageDisplay.innerHTML = maintenanceMessageValue
+                ? `<div class="alert alert-secondary">${maintenanceMessageValue}</div>`
+                : '';
+        }
+    } catch (error) {
+        console.error('Settings load error:', error);
+        showError(error.message || 'Failed to load settings');
+    }
+}
+
+async function saveBusinessSettings() {
+    const payload = {
+        settings: [
+            { key: 'store_name', value: document.getElementById('business-name')?.value || '' },
+            { key: 'store_email', value: document.getElementById('business-email')?.value || '' },
+            { key: 'store_phone', value: document.getElementById('business-phone')?.value || '' },
+            { key: 'store_address', value: document.getElementById('business-address')?.value || '' },
+            { key: 'tax_rate', value: document.getElementById('tax-rate')?.value || '' }
+        ]
+    };
+
+    try {
+        const response = await fetch(`${API_BASE}/settings/index.php`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+        const result = await response.json();
+        if (!result.success) throw new Error(result.message || 'Failed to save business settings');
+        showSuccess('Business settings saved');
+    } catch (error) {
+        showError(error.message || 'Failed to save business settings');
+    }
+}
+
+async function saveEmailSettings() {
+    const payload = {
+        settings: [
+            { key: 'smtp_host', value: document.getElementById('smtp-host')?.value || '' },
+            { key: 'smtp_port', value: document.getElementById('smtp-port')?.value || '' },
+            { key: 'smtp_username', value: document.getElementById('smtp-username')?.value || '' },
+            { key: 'smtp_password', value: document.getElementById('smtp-password')?.value || '' },
+            { key: 'smtp_ssl', value: document.getElementById('smtp-ssl')?.checked ? 'true' : 'false' }
+        ]
+    };
+
+    try {
+        const response = await fetch(`${API_BASE}/settings/index.php`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+        const result = await response.json();
+        if (!result.success) throw new Error(result.message || 'Failed to save email settings');
+        showSuccess('Email settings saved');
+    } catch (error) {
+        showError(error.message || 'Failed to save email settings');
+    }
+}
+
+async function saveSecuritySettings() {
+    const timeoutValue = document.getElementById('inactivity-timeout')?.value ?? '';
+    const payload = {
+        setting_key: 'inactivity_timeout',
+        setting_value: timeoutValue,
+        category: 'general',
+        description: 'Auto-logout after inactivity (minutes, 0 = disabled)'
+    };
+
+    try {
+        const response = await fetch(`${API_BASE}/settings/index.php`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+        const result = await response.json();
+        if (!result.success) throw new Error(result.message || 'Failed to save security settings');
+        showSuccess('Security settings saved');
+        const statusEl = document.getElementById('timeout-status');
+        if (statusEl) statusEl.textContent = 'Updated successfully';
+    } catch (error) {
+        showError(error.message || 'Failed to save security settings');
+    }
+}
+
+async function toggleMaintenanceMode(enable) {
+    const message = document.getElementById('maintenance-message')?.value || '';
+    const payload = {
+        maintenance_mode: enable ? 'true' : 'false',
+        maintenance_message: message
+    };
+
+    try {
+        const response = await fetch(`${API_BASE}/settings/index.php`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+        const result = await response.json();
+        if (!result.success) throw new Error(result.message || 'Failed to update maintenance mode');
+        showSuccess(`Maintenance mode ${enable ? 'enabled' : 'disabled'}`);
+        await loadSettingsData();
+    } catch (error) {
+        showError(error.message || 'Failed to update maintenance mode');
+    }
+}
+
+async function saveMaintenanceMessage() {
+    const message = document.getElementById('maintenance-message')?.value || '';
+    const payload = { maintenance_message: message };
+    try {
+        const response = await fetch(`${API_BASE}/settings/index.php`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+        const result = await response.json();
+        if (!result.success) throw new Error(result.message || 'Failed to save maintenance message');
+        showSuccess('Maintenance message saved');
+        await loadSettingsData();
+    } catch (error) {
+        showError(error.message || 'Failed to save maintenance message');
+    }
+}
+
+async function clearCache() {
+    try {
+        const response = await fetch(`${API_BASE}/settings/clear-cache.php`, { method: 'POST' });
+        const result = await response.json();
+        if (!result.success) throw new Error(result.message || 'Failed to clear cache');
+        showSuccess('Cache cleared');
+    } catch (error) {
+        showError(error.message || 'Failed to clear cache');
+    }
+}
+
+async function resetSettings() {
+    try {
+        const response = await fetch(`${API_BASE}/settings/reset.php`, { method: 'POST' });
+        const result = await response.json();
+        if (!result.success) throw new Error(result.message || 'Failed to reset settings');
+        showSuccess('Settings reset to defaults');
+        await loadSettingsData();
+    } catch (error) {
+        showError(error.message || 'Failed to reset settings');
+    }
+}
+
+function backupDatabase() {
+    showInfo('Database backup endpoint is not configured on this server.');
+}
+
 
 async function loadRecentlyDeleted(forceRefresh = false) {
     const categoriesBody = document.getElementById('recently-categories-body');
