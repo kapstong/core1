@@ -609,6 +609,38 @@ async function loadSettingsPage() {
                         </form>
                     </div>
                 </div>
+
+                <div class="card mt-4" style="background: var(--bg-card); border: 1px solid var(--border-color);">
+                    <div class="card-header d-flex align-items-center justify-content-between" style="background: var(--bg-tertiary); border-color: var(--border-color);">
+                        <h5 class="mb-0"><i class="fas fa-archive me-2"></i>Archived Categories</h5>
+                        <button class="btn btn-sm btn-outline-primary" id="refresh-archived-categories">
+                            <i class="fas fa-sync-alt me-1"></i>Refresh
+                        </button>
+                    </div>
+                    <div class="card-body">
+                        <p class="text-muted mb-3">Soft-deleted categories are listed here for reference.</p>
+                        <div class="table-responsive">
+                            <table class="table table-hover align-middle mb-0">
+                                <thead>
+                                    <tr>
+                                        <th>Name</th>
+                                        <th>Slug</th>
+                                        <th>Icon</th>
+                                        <th>Updated</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="archived-categories-body">
+                                    <tr>
+                                        <td colspan="4" class="text-muted">Loading archived categories...</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                        <div id="archived-categories-empty" class="text-muted mt-3" style="display:none;">
+                            <i class="fas fa-check-circle me-1"></i>No archived categories found.
+                        </div>
+                    </div>
+                </div>
             </div>
 
             <div class="col-lg-4">
@@ -681,6 +713,7 @@ async function loadSettingsPage() {
     setTimeout(async () => {
         // Load current settings
         await loadSettingsData();
+        await loadArchivedCategories();
     }, 0);
 
     // Business form handler
@@ -700,6 +733,67 @@ async function loadSettingsPage() {
         e.preventDefault();
         await saveSecuritySettings();
     });
+
+    const refreshArchivedBtn = document.getElementById('refresh-archived-categories');
+    if (refreshArchivedBtn) {
+        refreshArchivedBtn.addEventListener('click', async () => {
+            await loadArchivedCategories(true);
+        });
+    }
+}
+
+async function loadArchivedCategories(forceRefresh = false) {
+    const tableBody = document.getElementById('archived-categories-body');
+    const emptyState = document.getElementById('archived-categories-empty');
+
+    if (!tableBody) return;
+
+    if (forceRefresh) {
+        tableBody.innerHTML = '<tr><td colspan="4" class="text-muted">Refreshing archived categories...</td></tr>';
+    }
+
+    try {
+        const response = await fetch(`${API_BASE}/categories/index.php?active_only=0`);
+        const result = await response.json();
+
+        if (!result.success) {
+            throw new Error(result.message || 'Failed to load archived categories');
+        }
+
+        const categories = result.data?.categories || result.categories || [];
+        const archived = categories.filter(category => Number(category.is_active) === 0);
+
+        if (!archived.length) {
+            tableBody.innerHTML = '';
+            if (emptyState) {
+                emptyState.style.display = 'block';
+            }
+            return;
+        }
+
+        if (emptyState) {
+            emptyState.style.display = 'none';
+        }
+
+        tableBody.innerHTML = archived.map(category => {
+            const icon = category.icon ? `<i class="${category.icon} me-1"></i>` : '';
+            const updatedAt = category.updated_at ? new Date(category.updated_at).toLocaleString() : 'N/A';
+            return `
+                <tr>
+                    <td><strong>${category.name || 'Unnamed'}</strong></td>
+                    <td><code>${category.slug || ''}</code></td>
+                    <td>${icon}${category.icon || '—'}</td>
+                    <td>${updatedAt}</td>
+                </tr>
+            `;
+        }).join('');
+    } catch (error) {
+        tableBody.innerHTML = '<tr><td colspan="4" class="text-danger">Failed to load archived categories.</td></tr>';
+        if (emptyState) {
+            emptyState.style.display = 'none';
+        }
+        devLog('Error loading archived categories:', error);
+    }
 }
 
 async function loadSettingsData() {
