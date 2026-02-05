@@ -209,6 +209,20 @@ if (typeof window.formatCurrency !== 'function') {
     };
 }
 
+// Date formatter (define if missing)
+if (typeof window.formatDate !== 'function') {
+    window.formatDate = function formatDate(value) {
+        if (!value) return '';
+        const date = new Date(value);
+        if (isNaN(date.getTime())) return String(value);
+        return date.toLocaleString('en-US', {
+            year: 'numeric',
+            month: 'short',
+            day: '2-digit'
+        });
+    };
+}
+
 // Dashboard page loading functions
 
 async function loadSupplierHomePage() {
