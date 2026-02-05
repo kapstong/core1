@@ -179,6 +179,19 @@ const moneyMasking = {
     }
 };
 
+// Global error logging to surface hidden JS failures
+window.addEventListener('error', (event) => {
+    try {
+        console.error('Global JS error:', event.error || event.message || event);
+    } catch (e) {}
+});
+
+window.addEventListener('unhandledrejection', (event) => {
+    try {
+        console.error('Unhandled promise rejection:', event.reason || event);
+    } catch (e) {}
+});
+
 // Currency formatter (define if missing)
 if (typeof window.formatCurrency !== 'function') {
     window.formatCurrency = function formatCurrency(value) {
@@ -2411,15 +2424,20 @@ async function loadProducts() {
 
         if (data.success && data.data && data.data.products && data.data.products.length > 0) {
             allProducts = data.data.products;
-            displayProducts(allProducts);
-            content.classList.remove('d-none');
+            try {
+                displayProducts(allProducts);
+                content.classList.remove('d-none');
+            } catch (renderError) {
+                console.error('Products render error:', renderError);
+                showError(`Failed to render products: ${renderError.message || renderError}`);
+            }
         } else {
             noProductsMessage.classList.remove('d-none');
         }
     } catch (error) {
         devLog('Error loading products:', error);
         loadingIndicator.classList.add('d-none');
-        showError('Failed to load products. Please try again.');
+        showError(`Failed to load products. ${error?.message || error}`);
     }
 }
 
