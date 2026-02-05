@@ -12,7 +12,7 @@
     <link rel="prefetch" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link rel="preload" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" as="style">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <link rel="stylesheet" href="assets/css/main.css">
+    <link rel="stylesheet" href="assets/css/main.css?v=1.1">
     <link rel="stylesheet" href="assets/css/icon-optimizations.css">
     <!-- CUSTOM CHECKBOX SYSTEM - Modern redesign for entire application -->
     <link rel="stylesheet" href="assets/css/checkboxes.css?v=1.0">

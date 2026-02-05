@@ -1080,26 +1080,36 @@ input[type="date"]:focus-visible {
 }
 
 /* Dark theme tabs (fix white tab buttons) */
-.nav-tabs .nav-link {
+.nav-tabs .nav-link,
+.modal .nav-tabs .nav-link {
     color: var(--text-primary) !important;
     background: transparent !important;
     border-color: transparent !important;
 }
 
-.nav-tabs .nav-link:hover {
+.nav-tabs .nav-link:hover,
+.modal .nav-tabs .nav-link:hover,
+.modal .nav-tabs .nav-link:focus {
     color: var(--text-primary) !important;
     background: rgba(0, 245, 255, 0.1) !important;
     border-color: rgba(0, 245, 255, 0.35) !important;
 }
 
-.nav-tabs .nav-link.active {
+.nav-tabs .nav-link.active,
+.modal .nav-tabs .nav-link.active {
     color: var(--accent) !important;
     background: rgba(0, 245, 255, 0.18) !important;
     border-color: rgba(0, 245, 255, 0.45) !important;
 }
 
-.nav-tabs {
+.nav-tabs,
+.modal .nav-tabs {
     border-bottom: 1px solid var(--border-color) !important;
+}
+
+/* Ensure modal tabs never render white backgrounds */
+.modal .nav-tabs .nav-link {
+    box-shadow: none !important;
 }
 
 /* ============================================
