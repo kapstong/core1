@@ -706,15 +706,19 @@ async function loadSettingsPage() {
                             <table class="table table-hover align-middle mb-0">
                                 <thead>
                                     <tr>
+                                        <th style="width: 40px;">
+                                            <input type="checkbox" id="archived-select-all" aria-label="Select all archived categories">
+                                        </th>
                                         <th>Name</th>
                                         <th>Slug</th>
                                         <th>Icon</th>
                                         <th>Updated</th>
+                                        <th style="width: 120px;">Actions</th>
                                     </tr>
                                 </thead>
                                 <tbody id="archived-categories-body">
                                     <tr>
-                                        <td colspan="4" class="text-muted">Loading archived categories...</td>
+                                        <td colspan="6" class="text-muted">Loading archived categories...</td>
                                     </tr>
                                 </tbody>
                             </table>
@@ -724,6 +728,9 @@ async function loadSettingsPage() {
                         </div>
                     </div>
                     <div class="modal-footer">
+                        <button class="btn btn-outline-success" id="restore-archived-selected" disabled>
+                            <i class="fas fa-undo me-1"></i>Restore Selected
+                        </button>
                         <button class="btn btn-outline-secondary" id="refresh-archived-categories-modal">
                             <i class="fas fa-sync-alt me-1"></i>Refresh
                         </button>
@@ -781,16 +788,25 @@ async function loadSettingsPage() {
             modal.show();
         });
     }
+
+    const restoreSelectedBtn = document.getElementById('restore-archived-selected');
+    if (restoreSelectedBtn) {
+        restoreSelectedBtn.addEventListener('click', async () => {
+            await restoreSelectedArchivedCategories();
+        });
+    }
 }
 
 async function loadArchivedCategories(forceRefresh = false) {
     const tableBody = document.getElementById('archived-categories-body');
     const emptyState = document.getElementById('archived-categories-empty');
+    const selectAll = document.getElementById('archived-select-all');
+    const restoreSelectedBtn = document.getElementById('restore-archived-selected');
 
     if (!tableBody) return;
 
     if (forceRefresh) {
-        tableBody.innerHTML = '<tr><td colspan="4" class="text-muted">Refreshing archived categories...</td></tr>';
+        tableBody.innerHTML = '<tr><td colspan="6" class="text-muted">Refreshing archived categories...</td></tr>';
     }
 
     try {
@@ -811,6 +827,12 @@ async function loadArchivedCategories(forceRefresh = false) {
             if (emptyState) {
                 emptyState.style.display = 'block';
             }
+            if (selectAll) {
+                selectAll.checked = false;
+            }
+            if (restoreSelectedBtn) {
+                restoreSelectedBtn.disabled = true;
+            }
             return;
         }
 
@@ -823,19 +845,154 @@ async function loadArchivedCategories(forceRefresh = false) {
             const updatedAt = category.updated_at ? new Date(category.updated_at).toLocaleString() : 'N/A';
             return `
                 <tr>
+                    <td>
+                        <input type="checkbox" class="archived-category-checkbox" data-id="${category.id}" aria-label="Select ${category.name || 'category'}">
+                    </td>
                     <td><strong>${category.name || 'Unnamed'}</strong></td>
                     <td><code>${category.slug || ''}</code></td>
                     <td>${icon}${category.icon || '-'}</td>
                     <td>${updatedAt}</td>
+                    <td>
+                        <button class="btn btn-sm btn-outline-success archived-restore-btn" data-id="${category.id}">
+                            <i class="fas fa-undo me-1"></i>Restore
+                        </button>
+                    </td>
                 </tr>
             `;
         }).join('');
+
+        if (selectAll) {
+            selectAll.checked = false;
+        }
+        if (restoreSelectedBtn) {
+            restoreSelectedBtn.disabled = true;
+        }
+
+        wireArchivedCategoryHandlers();
     } catch (error) {
-        tableBody.innerHTML = '<tr><td colspan="4" class="text-danger">Failed to load archived categories.</td></tr>';
+        tableBody.innerHTML = '<tr><td colspan="6" class="text-danger">Failed to load archived categories.</td></tr>';
         if (emptyState) {
             emptyState.style.display = 'none';
         }
         devLog('Error loading archived categories:', error);
+    }
+}
+
+function wireArchivedCategoryHandlers() {
+    const selectAll = document.getElementById('archived-select-all');
+    const restoreSelectedBtn = document.getElementById('restore-archived-selected');
+    const checkboxes = Array.from(document.querySelectorAll('.archived-category-checkbox'));
+    const restoreButtons = Array.from(document.querySelectorAll('.archived-restore-btn'));
+
+    if (selectAll) {
+        selectAll.addEventListener('change', () => {
+            checkboxes.forEach(cb => {
+                cb.checked = selectAll.checked;
+            });
+            if (restoreSelectedBtn) {
+                restoreSelectedBtn.disabled = !checkboxes.some(cb => cb.checked);
+            }
+        });
+    }
+
+    checkboxes.forEach(cb => {
+        cb.addEventListener('change', () => {
+            if (selectAll) {
+                selectAll.checked = checkboxes.length > 0 && checkboxes.every(item => item.checked);
+            }
+            if (restoreSelectedBtn) {
+                restoreSelectedBtn.disabled = !checkboxes.some(item => item.checked);
+            }
+        });
+    });
+
+    restoreButtons.forEach(btn => {
+        btn.addEventListener('click', async () => {
+            const categoryId = btn.dataset.id;
+            if (!categoryId) return;
+            await restoreArchivedCategory(categoryId);
+        });
+    });
+}
+
+async function restoreArchivedCategory(categoryId) {
+    if (!await showConfirm('Restore this category back to active list?', {
+        title: 'Restore Category',
+        confirmText: 'Restore',
+        type: 'success',
+        icon: 'fas fa-undo'
+    })) {
+        return;
+    }
+
+    try {
+        const formData = new FormData();
+        formData.append('is_active', 1);
+
+        const response = await fetch(`${API_BASE}/categories/update.php?id=${categoryId}`, {
+            method: 'POST',
+            credentials: 'same-origin',
+            body: formData
+        });
+
+        const result = await response.json();
+        if (result.success) {
+            showSuccess('Category restored successfully');
+            await loadArchivedCategories(true);
+            await loadCategories();
+        } else {
+            showError(result.message || 'Failed to restore category');
+        }
+    } catch (error) {
+        devLog('Error restoring category:', error);
+        showError('Failed to restore category');
+    }
+}
+
+async function restoreSelectedArchivedCategories() {
+    const selected = Array.from(document.querySelectorAll('.archived-category-checkbox:checked'))
+        .map(cb => cb.dataset.id)
+        .filter(Boolean);
+
+    if (selected.length === 0) {
+        showError('Select at least one category to restore.');
+        return;
+    }
+
+    if (!await showConfirm(`Restore ${selected.length} archived categor${selected.length === 1 ? 'y' : 'ies'}?`, {
+        title: 'Restore Selected',
+        confirmText: 'Restore',
+        type: 'success',
+        icon: 'fas fa-undo'
+    })) {
+        return;
+    }
+
+    try {
+        const restorePromises = selected.map(id => {
+            const formData = new FormData();
+            formData.append('is_active', 1);
+            return fetch(`${API_BASE}/categories/update.php?id=${id}`, {
+                method: 'POST',
+                credentials: 'same-origin',
+                body: formData
+            }).then(res => res.json());
+        });
+
+        const results = await Promise.all(restorePromises);
+        const failures = results.filter(result => !result.success);
+
+        if (failures.length) {
+            showError(`${failures.length} restore${failures.length === 1 ? '' : 's'} failed.`);
+        } else {
+            showSuccess('Selected categories restored successfully');
+        }
+
+        await loadArchivedCategories(true);
+        await loadCategories();
+    } catch (error) {
+        devLog('Error restoring selected categories:', error);
+        showError('Failed to restore selected categories');
     }
 }
 
