@@ -731,6 +731,9 @@ async function loadSettingsPage() {
                         <button class="btn btn-outline-success" id="restore-archived-selected" disabled>
                             <i class="fas fa-undo me-1"></i>Restore Selected
                         </button>
+                        <button class="btn btn-outline-danger" id="delete-archived-selected" disabled>
+                            <i class="fas fa-trash me-1"></i>Delete Selected
+                        </button>
                         <button class="btn btn-outline-secondary" id="refresh-archived-categories-modal">
                             <i class="fas fa-sync-alt me-1"></i>Refresh
                         </button>
@@ -795,6 +798,13 @@ async function loadSettingsPage() {
             await restoreSelectedArchivedCategories();
         });
     }
+
+    const deleteSelectedBtn = document.getElementById('delete-archived-selected');
+    if (deleteSelectedBtn) {
+        deleteSelectedBtn.addEventListener('click', async () => {
+            await deleteSelectedArchivedCategories();
+        });
+    }
 }
 
 async function loadArchivedCategories(forceRefresh = false) {
@@ -802,6 +812,7 @@ async function loadArchivedCategories(forceRefresh = false) {
     const emptyState = document.getElementById('archived-categories-empty');
     const selectAll = document.getElementById('archived-select-all');
     const restoreSelectedBtn = document.getElementById('restore-archived-selected');
+    const deleteSelectedBtn = document.getElementById('delete-archived-selected');
 
     if (!tableBody) return;
 
@@ -833,6 +844,9 @@ async function loadArchivedCategories(forceRefresh = false) {
             if (restoreSelectedBtn) {
                 restoreSelectedBtn.disabled = true;
             }
+            if (deleteSelectedBtn) {
+                deleteSelectedBtn.disabled = true;
+            }
             return;
         }
 
@@ -853,9 +867,14 @@ async function loadArchivedCategories(forceRefresh = false) {
                     <td>${icon}${category.icon || '-'}</td>
                     <td>${updatedAt}</td>
                     <td>
-                        <button class="btn btn-sm btn-outline-success archived-restore-btn" data-id="${category.id}">
-                            <i class="fas fa-undo me-1"></i>Restore
-                        </button>
+                        <div class="d-flex gap-2">
+                            <button class="btn btn-sm btn-outline-success archived-restore-btn" data-id="${category.id}">
+                                <i class="fas fa-undo me-1"></i>Restore
+                            </button>
+                            <button class="btn btn-sm btn-outline-danger archived-delete-btn" data-id="${category.id}">
+                                <i class="fas fa-trash me-1"></i>Delete
+                            </button>
+                        </div>
                     </td>
                 </tr>
             `;
@@ -866,6 +885,9 @@ async function loadArchivedCategories(forceRefresh = false) {
         }
         if (restoreSelectedBtn) {
             restoreSelectedBtn.disabled = true;
+        }
+        if (deleteSelectedBtn) {
+            deleteSelectedBtn.disabled = true;
         }
 
         wireArchivedCategoryHandlers();
@@ -883,6 +905,8 @@ function wireArchivedCategoryHandlers() {
     const restoreSelectedBtn = document.getElementById('restore-archived-selected');
     const checkboxes = Array.from(document.querySelectorAll('.archived-category-checkbox'));
     const restoreButtons = Array.from(document.querySelectorAll('.archived-restore-btn'));
+    const deleteSelectedBtn = document.getElementById('delete-archived-selected');
+    const deleteButtons = Array.from(document.querySelectorAll('.archived-delete-btn'));
 
     if (selectAll) {
         selectAll.addEventListener('change', () => {
@@ -891,6 +915,9 @@ function wireArchivedCategoryHandlers() {
             });
             if (restoreSelectedBtn) {
                 restoreSelectedBtn.disabled = !checkboxes.some(cb => cb.checked);
+            }
+            if (deleteSelectedBtn) {
+                deleteSelectedBtn.disabled = !checkboxes.some(cb => cb.checked);
             }
         });
     }
@@ -903,6 +930,9 @@ function wireArchivedCategoryHandlers() {
             if (restoreSelectedBtn) {
                 restoreSelectedBtn.disabled = !checkboxes.some(item => item.checked);
             }
+            if (deleteSelectedBtn) {
+                deleteSelectedBtn.disabled = !checkboxes.some(item => item.checked);
+            }
         });
     });
 
@@ -911,6 +941,14 @@ function wireArchivedCategoryHandlers() {
             const categoryId = btn.dataset.id;
             if (!categoryId) return;
             await restoreArchivedCategory(categoryId);
+        });
+    });
+
+    deleteButtons.forEach(btn => {
+        btn.addEventListener('click', async () => {
+            const categoryId = btn.dataset.id;
+            if (!categoryId) return;
+            await deleteArchivedCategory(categoryId);
         });
     });
 }
@@ -993,6 +1031,84 @@ async function restoreSelectedArchivedCategories() {
     } catch (error) {
         devLog('Error restoring selected categories:', error);
         showError('Failed to restore selected categories');
+    }
+}
+
+async function deleteArchivedCategory(categoryId) {
+    if (!await showConfirm('This will permanently delete the category. Continue?', {
+        title: 'Permanent Delete',
+        confirmText: 'Delete',
+        type: 'danger',
+        icon: 'fas fa-trash'
+    })) {
+        return;
+    }
+
+    try {
+        const response = await fetch(`${API_BASE}/categories/delete.php`, {
+            method: 'DELETE',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'same-origin',
+            body: JSON.stringify({ id: categoryId })
+        });
+
+        const result = await response.json();
+        if (result.success) {
+            showSuccess('Category permanently deleted');
+            await loadArchivedCategories(true);
+            await loadCategories();
+        } else {
+            showError(result.message || 'Failed to delete category');
+        }
+    } catch (error) {
+        devLog('Error deleting category:', error);
+        showError('Failed to delete category');
+    }
+}
+
+async function deleteSelectedArchivedCategories() {
+    const selected = Array.from(document.querySelectorAll('.archived-category-checkbox:checked'))
+        .map(cb => cb.dataset.id)
+        .filter(Boolean);
+
+    if (selected.length === 0) {
+        showError('Select at least one category to delete.');
+        return;
+    }
+
+    if (!await showConfirm(`Permanently delete ${selected.length} categor${selected.length === 1 ? 'y' : 'ies'}?`, {
+        title: 'Permanent Delete',
+        confirmText: 'Delete',
+        type: 'danger',
+        icon: 'fas fa-trash'
+    })) {
+        return;
+    }
+
+    try {
+        const deletePromises = selected.map(id =>
+            fetch(`${API_BASE}/categories/delete.php`, {
+                method: 'DELETE',
+                headers: { 'Content-Type': 'application/json' },
+                credentials: 'same-origin',
+                body: JSON.stringify({ id })
+            }).then(res => res.json())
+        );
+
+        const results = await Promise.all(deletePromises);
+        const failures = results.filter(result => !result.success);
+
+        if (failures.length) {
+            showError(`${failures.length} delete${failures.length === 1 ? '' : 's'} failed.`);
+        } else {
+            showSuccess('Selected categories permanently deleted');
+        }
+
+        await loadArchivedCategories(true);
+        await loadCategories();
+    } catch (error) {
+        devLog('Error deleting selected categories:', error);
+        showError('Failed to delete selected categories');
     }
 }
 
