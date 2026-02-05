@@ -174,25 +174,11 @@ function addToCart($customerModel, $customerId, $sessionId) {
         Response::error("Only {$product['quantity_available']} items available in stock", 400);
     }
 
-    // Begin transaction for cart and inventory update
-    $db->beginTransaction();
+    // Add to cart (no inventory reservation on cart add)
+    $success = $customerModel->addToCart($customerId, $sessionId, $productId, $quantity);
 
-    try {
-        // Add to cart
-        $success = $customerModel->addToCart($customerId, $sessionId, $productId, $quantity);
-
-        if (!$success) {
-            throw new Exception('Failed to add item to cart');
-        }
-
-        // Reserve stock for this cart item
-        reserveStock($db, $productId, $quantity);
-
-        $db->commit();
-
-    } catch (Exception $e) {
-        $db->rollBack();
-        Response::error($e->getMessage(), 500);
+    if (!$success) {
+        Response::error('Failed to add item to cart', 500);
     }
 
     // Get updated cart
@@ -253,52 +239,11 @@ function updateCartItem($customerModel, $customerId, $sessionId) {
         Response::error("Only {$inventory['quantity_available']} items available in stock", 400);
     }
 
-    // Get current cart quantity to calculate reservation change
-    $currentQuantity = 0;
-    if ($customerId) {
-        $cartQuery = "SELECT quantity FROM shopping_cart WHERE customer_id = :customer_id AND product_id = :product_id";
-        $cartStmt = $db->prepare($cartQuery);
-        $cartStmt->bindParam(':customer_id', $customerId, PDO::PARAM_INT);
-        $cartStmt->bindParam(':product_id', $productId, PDO::PARAM_INT);
-        $cartStmt->execute();
-        $cartItem = $cartStmt->fetch(PDO::FETCH_ASSOC);
-        $currentQuantity = $cartItem ? $cartItem['quantity'] : 0;
-    } elseif ($sessionId) {
-        $cartQuery = "SELECT quantity FROM shopping_cart WHERE session_id = :session_id AND product_id = :product_id";
-        $cartStmt = $db->prepare($cartQuery);
-        $cartStmt->bindParam(':session_id', $sessionId);
-        $cartStmt->bindParam(':product_id', $productId, PDO::PARAM_INT);
-        $cartStmt->execute();
-        $cartItem = $cartStmt->fetch(PDO::FETCH_ASSOC);
-        $currentQuantity = $cartItem ? $cartItem['quantity'] : 0;
-    }
+    // Update cart item (no inventory reservation on cart update)
+    $success = $customerModel->updateCartItem($customerId, $sessionId, $productId, $quantity);
 
-    // Begin transaction
-    $db->beginTransaction();
-
-    try {
-        // Update cart item
-        $success = $customerModel->updateCartItem($customerId, $sessionId, $productId, $quantity);
-
-        if (!$success) {
-            throw new Exception('Failed to update cart item');
-        }
-
-        // Adjust stock reservation
-        $quantityDifference = $quantity - $currentQuantity;
-        if ($quantityDifference > 0) {
-            // Increasing quantity - reserve more stock
-            reserveStock($db, $productId, $quantityDifference);
-        } elseif ($quantityDifference < 0) {
-            // Decreasing quantity - release some stock
-            releaseStock($db, $productId, abs($quantityDifference));
-        }
-
-        $db->commit();
-
-    } catch (Exception $e) {
-        $db->rollBack();
-        Response::error($e->getMessage(), 500);
+    if (!$success) {
+        Response::error('Failed to update cart item', 500);
     }
 
     // Get updated cart
@@ -318,32 +263,12 @@ function removeFromCart($customerModel, $customerId, $sessionId) {
     $productId = isset($_GET['product_id']) ? (int)$_GET['product_id'] : null;
     $clearAll = isset($_GET['clear']) && $_GET['clear'] === 'true';
 
-    $db = Database::getInstance()->getConnection();
-
     if ($clearAll) {
-        // Get all cart items to release their reservations
-        $cartItems = $customerModel->getCart($customerId, $sessionId);
+        // Clear entire cart (no inventory reservation on cart clear)
+        $success = $customerModel->clearCart($customerId, $sessionId);
 
-        $db->beginTransaction();
-
-        try {
-            // Release all stock reservations
-            foreach ($cartItems as $item) {
-                releaseStock($db, $item['product_id'], $item['quantity']);
-            }
-
-            // Clear entire cart
-            $success = $customerModel->clearCart($customerId, $sessionId);
-
-            if (!$success) {
-                throw new Exception('Failed to clear cart');
-            }
-
-            $db->commit();
-
-        } catch (Exception $e) {
-            $db->rollBack();
-            Response::error($e->getMessage(), 500);
+        if (!$success) {
+            Response::error('Failed to clear cart', 500);
         }
 
         Response::success([
@@ -363,46 +288,11 @@ function removeFromCart($customerModel, $customerId, $sessionId) {
             Response::error('product_id is required to remove item', 400);
         }
 
-        // Get current cart item quantity to release reservation
-        $currentQuantity = 0;
-        if ($customerId) {
-            $cartQuery = "SELECT quantity FROM shopping_cart WHERE customer_id = :customer_id AND product_id = :product_id";
-            $cartStmt = $db->prepare($cartQuery);
-            $cartStmt->bindParam(':customer_id', $customerId, PDO::PARAM_INT);
-            $cartStmt->bindParam(':product_id', $productId, PDO::PARAM_INT);
-            $cartStmt->execute();
-            $cartItem = $cartStmt->fetch(PDO::FETCH_ASSOC);
-            $currentQuantity = $cartItem ? $cartItem['quantity'] : 0;
-        } elseif ($sessionId) {
-            $cartQuery = "SELECT quantity FROM shopping_cart WHERE session_id = :session_id AND product_id = :product_id";
-            $cartStmt = $db->prepare($cartQuery);
-            $cartStmt->bindParam(':session_id', $sessionId);
-            $cartStmt->bindParam(':product_id', $productId, PDO::PARAM_INT);
-            $cartStmt->execute();
-            $cartItem = $cartStmt->fetch(PDO::FETCH_ASSOC);
-            $currentQuantity = $cartItem ? $cartItem['quantity'] : 0;
-        }
+        // Remove from cart (no inventory reservation on cart remove)
+        $success = $customerModel->removeFromCart($customerId, $sessionId, $productId);
 
-        $db->beginTransaction();
-
-        try {
-            // Release stock reservation
-            if ($currentQuantity > 0) {
-                releaseStock($db, $productId, $currentQuantity);
-            }
-
-            // Remove from cart
-            $success = $customerModel->removeFromCart($customerId, $sessionId, $productId);
-
-            if (!$success) {
-                throw new Exception('Failed to remove item from cart');
-            }
-
-            $db->commit();
-
-        } catch (Exception $e) {
-            $db->rollBack();
-            Response::error($e->getMessage(), 500);
+        if (!$success) {
+            Response::error('Failed to remove item from cart', 500);
         }
 
         // Get updated cart
@@ -449,30 +339,3 @@ function calculateCartTotals($cartItems) {
     ];
 }
 
-/**
- * Reserve stock in inventory for cart items
- */
-function reserveStock($db, $productId, $quantity) {
-    $query = "UPDATE inventory
-              SET quantity_reserved = quantity_reserved + :quantity
-              WHERE product_id = :product_id";
-
-    $stmt = $db->prepare($query);
-    $stmt->bindParam(':quantity', $quantity, PDO::PARAM_INT);
-    $stmt->bindParam(':product_id', $productId, PDO::PARAM_INT);
-    $stmt->execute();
-}
-
-/**
- * Release reserved stock in inventory (e.g., when removing from cart)
- */
-function releaseStock($db, $productId, $quantity) {
-    $query = "UPDATE inventory
-              SET quantity_reserved = GREATEST(0, quantity_reserved - :quantity)
-              WHERE product_id = :product_id";
-
-    $stmt = $db->prepare($query);
-    $stmt->bindParam(':quantity', $quantity, PDO::PARAM_INT);
-    $stmt->bindParam(':product_id', $productId, PDO::PARAM_INT);
-    $stmt->execute();
-}

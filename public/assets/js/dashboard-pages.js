@@ -3020,8 +3020,8 @@ function displayProducts(products) {
                 }
             }
 
-        // Use quantity_on_hand from API (not stock_quantity)
-        const stockQty = product.quantity_on_hand || product.quantity_available || 0;
+        // Use available stock for UI to match shop display
+        const stockQty = (product.quantity_available ?? product.quantity_on_hand ?? 0);
         const reorderLevel = product.reorder_level || product.low_stock_threshold || 5;
         const stockStatus = stockQty <= reorderLevel ? 'danger' : stockQty <= (reorderLevel * 2) ? 'warning' : 'success';
         const statusBadge = product.is_active == 1 ? '<span class="badge bg-success">Active</span>' : '<span class="badge bg-secondary">Inactive</span>';
@@ -4523,12 +4523,12 @@ function setupAdjustmentFormInteractivity() {
                     <div class="flex-grow-1">
                         <div class="fw-bold text-truncate">${product.name}</div>
                         <small class="text-muted">
-                            SKU: ${product.sku || 'N/A'} • Stock: ${product.quantity_on_hand || 0} • Price: ₱${product.selling_price || 0}
+                            SKU: ${product.sku || 'N/A'} • Stock: ${(product.quantity_available ?? product.quantity_on_hand ?? 0)} • Price: ₱${product.selling_price || 0}
                         </small>
                     </div>
                     <div class="text-end">
-                        <small class="badge bg-${(product.quantity_on_hand || 0) > 5 ? 'success' : 'warning'}">
-                            ${product.quantity_on_hand || 0} in stock
+                        <small class="badge bg-${((product.quantity_available ?? product.quantity_on_hand ?? 0)) > 5 ? 'success' : 'warning'}">
+                            ${(product.quantity_available ?? product.quantity_on_hand ?? 0)} in stock
                         </small>
                     </div>
                 </div>
@@ -4551,7 +4551,7 @@ function setupAdjustmentFormInteractivity() {
                     productSearchInput.value = product.name;
 
                     // Update current stock display
-                    currentStockDisplay.value = product.quantity_on_hand || 0;
+                    currentStockDisplay.value = (product.quantity_available ?? product.quantity_on_hand ?? 0);
 
                     // Hide search results
                     searchResults.style.display = 'none';
@@ -6391,7 +6391,7 @@ function updateProductDisplay(itemRow) {
         if (displayDiv) {
             displayDiv.innerHTML = `
                 <small class="text-success">✓ Selected: <strong>${selectedProduct}</strong></small>
-                ${product ? `<br><small class="text-muted">Current Stock: ${product.quantity_on_hand || 0}</small>` : ''}
+                ${product ? `<br><small class="text-muted">Current Stock: ${(product.quantity_available ?? product.quantity_on_hand ?? 0)}</small>` : ''}
             `;
         }
     } else {
@@ -6420,7 +6420,7 @@ function showProductSearchResults(query, searchResults, productSelect, itemRow) 
             <div class="d-flex justify-content-between align-items-center">
                 <div>
                     <div class="fw-bold">${product.name}</div>
-                    <small class="text-muted">SKU: ${product.sku} | Stock: ${product.quantity_on_hand || 0} | Price: ₱${product.selling_price}</small>
+                    <small class="text-muted">SKU: ${product.sku} | Stock: ${(product.quantity_available ?? product.quantity_on_hand ?? 0)} | Price: ₱${product.selling_price}</small>
                 </div>
             </div>
         </div>
@@ -10194,8 +10194,8 @@ function setupAdjustmentFormInteractivity() {
                         <small class="text-muted">SKU: ${product.sku || 'N/A'} | Price: ₱${product.selling_price || 0}</small>
                     </div>
                     <div class="text-end">
-                        <small class="badge ${product.quantity_on_hand > 5 ? 'bg-success' : 'bg-warning'}">
-                            ${product.quantity_on_hand || 0} in stock
+                        <small class="badge ${((product.quantity_available ?? product.quantity_on_hand ?? 0)) > 5 ? 'bg-success' : 'bg-warning'}">
+                            ${(product.quantity_available ?? product.quantity_on_hand ?? 0)} in stock
                         </small>
                     </div>
                 </div>
@@ -10213,7 +10213,7 @@ function setupAdjustmentFormInteractivity() {
                 if (product) {
                     // Update selected product
                     selectedProductId = productId;
-                    selectedProductStock = product.quantity_on_hand || 0;
+                    selectedProductStock = (product.quantity_available ?? product.quantity_on_hand ?? 0);
 
                     // Update hidden input
                     productHiddenInput.value = productId;

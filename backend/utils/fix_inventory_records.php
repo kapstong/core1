@@ -65,7 +65,7 @@ try {
         echo "All quantity_available values are correct. ✓\n";
     }
 
-    // Step 3: Verify reserved quantities match cart and orders
+    // Step 3: Verify reserved quantities match pending orders
     echo "\nStep 3: Verifying reserved quantities...\n";
 
     $verifyQuery = "
@@ -74,16 +74,20 @@ try {
             p.sku,
             p.name,
             i.quantity_reserved as current_reserved,
-            COALESCE(cart_reserved.total_cart, 0) as cart_total,
-            COALESCE(cart_reserved.total_cart, 0) as calculated_reserved
+            COALESCE(order_reserved.total_pending, 0) as pending_total,
+            COALESCE(order_reserved.total_pending, 0) as calculated_reserved
         FROM products p
         INNER JOIN inventory i ON p.id = i.product_id
         LEFT JOIN (
-            SELECT product_id, SUM(quantity) as total_cart
-            FROM shopping_cart
-            GROUP BY product_id
-        ) cart_reserved ON p.id = cart_reserved.product_id
-        WHERE i.quantity_reserved != COALESCE(cart_reserved.total_cart, 0)
+            SELECT
+                coi.product_id,
+                SUM(coi.quantity) as total_pending
+            FROM customer_order_items coi
+            INNER JOIN customer_orders co ON coi.order_id = co.id
+            WHERE co.status = 'pending'
+            GROUP BY coi.product_id
+        ) order_reserved ON p.id = order_reserved.product_id
+        WHERE i.quantity_reserved != COALESCE(order_reserved.total_pending, 0)
     ";
 
     $verifyStmt = $db->prepare($verifyQuery);
@@ -97,13 +101,17 @@ try {
         $fixReservedQuery = "
             UPDATE inventory i
             LEFT JOIN (
-                SELECT product_id, SUM(quantity) as total_cart
-                FROM shopping_cart
-                GROUP BY product_id
-            ) cart ON i.product_id = cart.product_id
+                SELECT
+                    coi.product_id,
+                    SUM(coi.quantity) as total_pending
+                FROM customer_order_items coi
+                INNER JOIN customer_orders co ON coi.order_id = co.id
+                WHERE co.status = 'pending'
+                GROUP BY coi.product_id
+            ) pending_orders ON i.product_id = pending_orders.product_id
             SET
-                i.quantity_reserved = COALESCE(cart.total_cart, 0),
-                i.quantity_available = i.quantity_on_hand - COALESCE(cart.total_cart, 0)
+                i.quantity_reserved = COALESCE(pending_orders.total_pending, 0),
+                i.quantity_available = i.quantity_on_hand - COALESCE(pending_orders.total_pending, 0)
         ";
 
         $fixReservedStmt = $db->prepare($fixReservedQuery);

@@ -1,7 +1,7 @@
 <?php
 /**
  * Cleanup Abandoned Shopping Carts
- * This script releases stock reservations for cart items that haven't been updated in over 2 hours
+ * This script removes cart items that haven't been updated in over 2 hours
  *
  * Run this script periodically using a cron job or task scheduler:
  * Example cron: */30 * * * * php /path/to/cleanup_abandoned_carts.php
@@ -22,7 +22,7 @@ try {
     $query = "
         SELECT
             sc.product_id,
-            SUM(sc.quantity) as total_reserved_quantity,
+            SUM(sc.quantity) as total_cart_quantity,
             COUNT(sc.id) as cart_count
         FROM shopping_cart sc
         WHERE sc.updated_at < DATE_SUB(datetime('now'), INTERVAL :hours HOUR)
@@ -46,26 +46,8 @@ try {
     $db->beginTransaction();
 
     try {
-        $totalReleased = 0;
-        $productsUpdated = 0;
-
-        // Release stock reservations for each product
         foreach ($abandonedItems as $item) {
-            $releaseQuery = "
-                UPDATE inventory
-                SET quantity_reserved = GREATEST(0, quantity_reserved - :quantity)
-                WHERE product_id = :product_id
-            ";
-
-            $releaseStmt = $db->prepare($releaseQuery);
-            $releaseStmt->bindParam(':quantity', $item['total_reserved_quantity'], PDO::PARAM_INT);
-            $releaseStmt->bindParam(':product_id', $item['product_id'], PDO::PARAM_INT);
-            $releaseStmt->execute();
-
-            echo "Released {$item['total_reserved_quantity']} units for product ID {$item['product_id']} ({$item['cart_count']} abandoned carts)\n";
-
-            $totalReleased += $item['total_reserved_quantity'];
-            $productsUpdated++;
+            echo "Removing {$item['total_cart_quantity']} units from abandoned carts for product ID {$item['product_id']} ({$item['cart_count']} abandoned carts)\n";
         }
 
         // Delete abandoned cart items
@@ -83,8 +65,6 @@ try {
         $db->commit();
 
         echo "\n=== Cleanup Summary ===\n";
-        echo "Products updated: {$productsUpdated}\n";
-        echo "Total units released: {$totalReleased}\n";
         echo "Cart items deleted: {$deletedCarts}\n";
         echo "=== Cleanup Complete at " . date('Y-m-d H:i:s') . " ===\n";
 
