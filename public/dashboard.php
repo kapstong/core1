@@ -695,7 +695,9 @@
         async function initInactivityMonitor() {
             try {
                 console.log('⚙️ Loading inactivity timeout from settings...');
-                const response = await fetch(`${API_BASE}/settings/index.php`);
+                const response = await fetch(`${API_BASE}/settings/index.php`, {
+                    credentials: 'same-origin'
+                });
                 const data = await response.json();
 
                 // Settings are nested in data.data.settings (not data.settings)

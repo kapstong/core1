@@ -613,31 +613,17 @@ async function loadSettingsPage() {
                 <div class="card mt-4" style="background: var(--bg-card); border: 1px solid var(--border-color);">
                     <div class="card-header d-flex align-items-center justify-content-between" style="background: var(--bg-tertiary); border-color: var(--border-color);">
                         <h5 class="mb-0"><i class="fas fa-archive me-2"></i>Archived Categories</h5>
-                        <button class="btn btn-sm btn-outline-primary" id="refresh-archived-categories">
-                            <i class="fas fa-sync-alt me-1"></i>Refresh
+                        <button class="btn btn-sm btn-outline-primary" id="open-archived-categories">
+                            <i class="fas fa-folder-open me-1"></i>View Archive
                         </button>
                     </div>
                     <div class="card-body">
-                        <p class="text-muted mb-3">Soft-deleted categories are listed here for reference.</p>
-                        <div class="table-responsive">
-                            <table class="table table-hover align-middle mb-0">
-                                <thead>
-                                    <tr>
-                                        <th>Name</th>
-                                        <th>Slug</th>
-                                        <th>Icon</th>
-                                        <th>Updated</th>
-                                    </tr>
-                                </thead>
-                                <tbody id="archived-categories-body">
-                                    <tr>
-                                        <td colspan="4" class="text-muted">Loading archived categories...</td>
-                                    </tr>
-                                </tbody>
-                            </table>
-                        </div>
-                        <div id="archived-categories-empty" class="text-muted mt-3" style="display:none;">
-                            <i class="fas fa-check-circle me-1"></i>No archived categories found.
+                        <p class="text-muted mb-3">Soft-deleted categories are stored in an archive for reference.</p>
+                        <div class="d-flex align-items-center justify-content-between">
+                            <span class="text-muted">Archived items are hidden from active lists.</span>
+                            <button class="btn btn-sm btn-outline-secondary" id="refresh-archived-categories">
+                                <i class="fas fa-sync-alt me-1"></i>Refresh List
+                            </button>
                         </div>
                     </div>
                 </div>
@@ -707,6 +693,45 @@ async function loadSettingsPage() {
                 </div>
             </div>
         </div>
+
+        <div class="modal fade" id="archivedCategoriesModal" tabindex="-1" aria-hidden="true">
+            <div class="modal-dialog modal-lg modal-dialog-scrollable">
+                <div class="modal-content" style="background: var(--bg-card); border: 1px solid var(--border-color);">
+                    <div class="modal-header" style="background: var(--bg-tertiary); border-color: var(--border-color);">
+                        <h5 class="modal-title"><i class="fas fa-archive me-2"></i>Archived Categories</h5>
+                        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+                    <div class="modal-body">
+                        <div class="table-responsive">
+                            <table class="table table-hover align-middle mb-0">
+                                <thead>
+                                    <tr>
+                                        <th>Name</th>
+                                        <th>Slug</th>
+                                        <th>Icon</th>
+                                        <th>Updated</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="archived-categories-body">
+                                    <tr>
+                                        <td colspan="4" class="text-muted">Loading archived categories...</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                        <div id="archived-categories-empty" class="text-muted mt-3" style="display:none;">
+                            <i class="fas fa-check-circle me-1"></i>No archived categories found.
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button class="btn btn-outline-secondary" id="refresh-archived-categories-modal">
+                            <i class="fas fa-sync-alt me-1"></i>Refresh
+                        </button>
+                        <button type="button" class="btn btn-primary" data-bs-dismiss="modal">Close</button>
+                    </div>
+                </div>
+            </div>
+        </div>
     `;
 
     // Wait for DOM to be fully updated before accessing elements
@@ -740,6 +765,22 @@ async function loadSettingsPage() {
             await loadArchivedCategories(true);
         });
     }
+
+    const refreshArchivedModalBtn = document.getElementById('refresh-archived-categories-modal');
+    if (refreshArchivedModalBtn) {
+        refreshArchivedModalBtn.addEventListener('click', async () => {
+            await loadArchivedCategories(true);
+        });
+    }
+
+    const openArchivedBtn = document.getElementById('open-archived-categories');
+    if (openArchivedBtn) {
+        openArchivedBtn.addEventListener('click', async () => {
+            await loadArchivedCategories(true);
+            const modal = new bootstrap.Modal(document.getElementById('archivedCategoriesModal'));
+            modal.show();
+        });
+    }
 }
 
 async function loadArchivedCategories(forceRefresh = false) {
@@ -753,7 +794,9 @@ async function loadArchivedCategories(forceRefresh = false) {
     }
 
     try {
-        const response = await fetch(`${API_BASE}/categories/index.php?active_only=0`);
+        const response = await fetch(`${API_BASE}/categories/index.php?active_only=0`, {
+            credentials: 'same-origin'
+        });
         const result = await response.json();
 
         if (!result.success) {
@@ -782,7 +825,7 @@ async function loadArchivedCategories(forceRefresh = false) {
                 <tr>
                     <td><strong>${category.name || 'Unnamed'}</strong></td>
                     <td><code>${category.slug || ''}</code></td>
-                    <td>${icon}${category.icon || '—'}</td>
+                    <td>${icon}${category.icon || '-'}</td>
                     <td>${updatedAt}</td>
                 </tr>
             `;
@@ -798,7 +841,9 @@ async function loadArchivedCategories(forceRefresh = false) {
 
 async function loadSettingsData() {
     try {
-        const response = await fetch(`${API_BASE}/settings/index.php`);
+        const response = await fetch(`${API_BASE}/settings/index.php`, {
+            credentials: 'same-origin'
+        });
         const data = await response.json();
 
         if (data.success) {
@@ -954,6 +999,7 @@ async function saveBusinessSettings() {
         const response = await fetch(`${API_BASE}/settings/index.php`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
+            credentials: 'same-origin',
             body: JSON.stringify(formData)
         });
 
@@ -992,6 +1038,7 @@ async function saveEmailSettings() {
         const response = await fetch(`${API_BASE}/settings/index.php`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
+            credentials: 'same-origin',
             body: JSON.stringify(formData)
         });
 
@@ -1027,6 +1074,7 @@ async function saveSecuritySettings() {
         const response = await fetch(`${API_BASE}/settings/index.php`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
+            credentials: 'same-origin',
             body: JSON.stringify(formData)
         });
 
@@ -1079,6 +1127,7 @@ async function saveMaintenanceSettings() {
         const response = await fetch(`${API_BASE}/settings/index.php`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
+            credentials: 'same-origin',
             body: JSON.stringify(formData)
         });
 
@@ -1116,7 +1165,8 @@ async function backupDatabase() {
 async function clearCache() {
     try {
         const response = await fetch(`${API_BASE}/settings/clear-cache.php`, {
-            method: 'POST'
+            method: 'POST',
+            credentials: 'same-origin'
         });
 
         if (response.ok) {
@@ -1137,7 +1187,8 @@ async function resetSettings() {
     })) {
         try {
             const response = await fetch(`${API_BASE}/settings/reset.php`, {
-                method: 'POST'
+                method: 'POST',
+                credentials: 'same-origin'
             });
 
             if (response.ok) {
@@ -1172,6 +1223,7 @@ async function toggleMaintenanceMode(enable) {
         const response = await fetch(`${API_BASE}/settings/index.php`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
+            credentials: 'same-origin',
             body: JSON.stringify({
                 maintenance_mode: enable ? 'true' : 'false'
             })
@@ -1213,6 +1265,7 @@ async function saveMaintenanceMessage() {
         const response = await fetch(`${API_BASE}/settings/index.php`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
+            credentials: 'same-origin',
             body: JSON.stringify({
                 maintenance_message: message
             })
@@ -1233,7 +1286,9 @@ async function saveMaintenanceMessage() {
 
 async function loadMaintenanceStatus() {
     try {
-        const response = await fetch(`${API_BASE}/settings/index.php`);
+        const response = await fetch(`${API_BASE}/settings/index.php`, {
+            credentials: 'same-origin'
+        });
         const data = await response.json();
 
         if (data.success) {
@@ -4679,21 +4734,21 @@ function displaySuppliers(suppliers, statusFilter, searchFilter, includePerforma
     tbody.innerHTML = filtered.map(supplier => `
         <tr>
             <td>
-                <strong class="text-primary">${supplier.supplier_code || supplier.code || '—'}</strong>
+                <strong class="text-primary">${supplier.supplier_code || supplier.code || '-'}</strong>
             </td>
             <td>
-                <strong>${supplier.company_name || '—'}</strong>
+                <strong>${supplier.company_name || '-'}</strong>
             </td>
             <td>
-                ${supplier.contact_person || '—'}
+                ${supplier.contact_person || '-'}
             </td>
             <td>
                 <a href="mailto:${supplier.supplier_email || supplier.email}">${supplier.supplier_email || supplier.email}</a>
             </td>
-            <td>${supplier.phone || '—'}</td>
+            <td>${supplier.phone || '-'}</td>
             <td>
                 <div>
-                    ${supplier.city && supplier.country ? `${supplier.city}, ${supplier.country}` : supplier.city || supplier.country || '—'}
+                    ${supplier.city && supplier.country ? `${supplier.city}, ${supplier.country}` : supplier.city || supplier.country || '-'}
                 </div>
             </td>
             <td>
@@ -4739,7 +4794,7 @@ function formatPerformanceData(supplier) {
 }
 
 function formatLastOrder(lastOrderDate) {
-    if (!lastOrderDate) return '—';
+    if (!lastOrderDate) return '-';
     const date = new Date(lastOrderDate);
     const now = new Date();
     const daysDiff = Math.floor((now - date) / (1000 * 60 * 60 * 24));
@@ -5466,7 +5521,7 @@ function displayPurchaseOrders(purchaseOrders) {
                 <strong class="text-primary">${po.po_number}</strong>
             </td>
             <td>${formatDate(po.order_date)}</td>
-            <td>${formatDate(po.expected_delivery_date) || '—'}</td>
+            <td>${formatDate(po.expected_delivery_date) || '-'}</td>
             <td>
                 <div>
                     <div><strong>${po.supplier_name || 'Unknown Supplier'}</strong></div>
@@ -8975,7 +9030,7 @@ function displayUsers(users) {
                 <td>
                     <strong>${user.username}</strong>
                 </td>
-                <td>${user.full_name || '—'}</td>
+                <td>${user.full_name || '-'}</td>
                 <td>
                     <a href="mailto:${user.email}">${user.email}</a>
                 </td>
@@ -9050,11 +9105,11 @@ async function loadPendingSuppliers() {
                     <td>
                         <strong>${supplier.username}</strong>
                     </td>
-                    <td>${supplier.name || '—'}</td>
+                    <td>${supplier.name || '-'}</td>
                     <td>
                         <a href="mailto:${supplier.email}">${supplier.email}</a>
                     </td>
-                    <td>${supplier.phone || '—'}</td>
+                    <td>${supplier.phone || '-'}</td>
                     <td>${formatDate(supplier.created_at)}</td>
                     <td>
                         <div class="btn-group btn-group-sm">
@@ -10198,3 +10253,4 @@ function viewAdjustmentNotes(notes) {
         this.remove();
     });
 }
+
