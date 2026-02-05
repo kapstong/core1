@@ -4843,19 +4843,7 @@ async function loadSuppliersPage() {
 
         <div class="d-flex justify-content-between align-items-center mb-4">
             <div class="d-flex gap-3 flex-wrap">
-                <input type="text" id="supplier-search" class="form-control" placeholder="Search suppliers..." style="width: 200px;">
-                <select id="supplier-status-filter" class="form-select" style="width: 200px;">
-                    <option value="active">Active</option>
-                    <option value="all">All Status</option>
-                    <option value="inactive">Inactive</option>
-                    <option value="pending_approval">Pending Approval</option>
-                </select>
-                <div class="form-check d-flex align-items-center ms-2">
-                    <input class="form-check-input" type="checkbox" id="include-performance-data" checked>
-                    <label class="form-check-label ms-2" for="include-performance-data">
-                        Show Performance Data
-                    </label>
-                </div>
+                <input type="text" id="supplier-search" class="form-control" placeholder="Search suppliers..." style="width: 240px;">
             </div>
             <!-- Add Supplier removed per new supplier flow -->
         </div>
@@ -4913,9 +4901,7 @@ async function loadSuppliersPage() {
     await loadSuppliers();
 
     // Add event listeners
-    document.getElementById('supplier-status-filter').addEventListener('change', () => loadSuppliers());
     document.getElementById('supplier-search').addEventListener('input', debounce(() => loadSuppliers(), 500));
-    document.getElementById('include-performance-data').addEventListener('change', () => loadSuppliers());
 }
 
 let allSuppliers = [];
@@ -4926,10 +4912,8 @@ async function loadSuppliers() {
     const noSuppliersMessage = document.getElementById('no-suppliers-message');
     const tbody = document.getElementById('suppliers-table-body');
     const summary = document.getElementById('suppliers-summary');
-
-    const status = document.getElementById('supplier-status-filter').value;
     const search = document.getElementById('supplier-search').value.trim();
-    const includePerformance = document.getElementById('include-performance-data').checked;
+    const includePerformance = false;
 
     try {
         loadingIndicator.classList.remove('d-none');
@@ -4950,20 +4934,22 @@ async function loadSuppliers() {
         if (data.success && data.data.suppliers && data.data.suppliers.length > 0) {
             allSuppliers = data.data.suppliers;
             // Use the selected status filter
-            displaySuppliers(allSuppliers, status, search, includePerformance);
+            displaySuppliers(allSuppliers, 'all', search, includePerformance);
             content.classList.remove('d-none');
 
             // Update summary based on current filter
             if (summary) {
-                const filteredCount = status === 'all'
-                    ? allSuppliers.length
-                    : allSuppliers.filter(s => {
-                        if (status === 'active') return s.is_active == 1;
-                        if (status === 'inactive') return s.is_active == 0;
-                        if (status === 'pending_approval') return s.supplier_status === 'pending_approval';
-                        return true;
-                    }).length;
-                summary.textContent = `${filteredCount} supplier${filteredCount === 1 ? '' : 's'} (${status})`;
+                const filteredCount = search
+                    ? allSuppliers.filter(s => {
+                        const searchLower = search.toLowerCase();
+                        return (
+                            s.name?.toLowerCase().includes(searchLower) ||
+                            s.email?.toLowerCase().includes(searchLower) ||
+                            s.username?.toLowerCase().includes(searchLower)
+                        );
+                    }).length
+                    : allSuppliers.length;
+                summary.textContent = `${filteredCount} supplier${filteredCount === 1 ? '' : 's'}`;
             }
         } else {
             noSuppliersMessage.classList.remove('d-none');
@@ -5038,18 +5024,15 @@ function displaySuppliers(suppliers, statusFilter, searchFilter, includePerforma
 }
 
 function getSupplierStatusBadge(supplier) {
-    const status = supplier.supplier_status || (supplier.is_active ? 'approved' : 'inactive');
-
-    switch (status) {
-        case 'approved':
-            return '<span class="badge bg-success"><i class="fas fa-check me-1"></i>Approved</span>';
-        case 'pending_approval':
-            return '<span class="badge bg-warning"><i class="fas fa-clock me-1"></i>Pending</span>';
-        case 'rejected':
-            return '<span class="badge bg-danger"><i class="fas fa-times me-1"></i>Rejected</span>';
-        default:
-            return '<span class="badge bg-secondary">Inactive</span>';
+    if (supplier.supplier_status === 'pending_approval') {
+        return '<span class="badge bg-warning"><i class="fas fa-clock me-1"></i>Pending</span>';
     }
+
+    if (supplier.is_active) {
+        return '<span class="badge bg-success"><i class="fas fa-check me-1"></i>Active</span>';
+    }
+
+    return '<span class="badge bg-secondary"><i class="fas fa-ban me-1"></i>Inactive</span>';
 }
 
 function formatPerformanceData(supplier) {
