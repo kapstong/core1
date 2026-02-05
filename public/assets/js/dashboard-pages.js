@@ -451,6 +451,13 @@ async function loadProfilePage() {
                                 <i class="fas fa-key me-2"></i>Change Password
                             </button>
                         </form>
+                        <hr style="border-color: var(--border-color);">
+                        <div class="d-grid gap-2">
+                            <button type="button" class="btn btn-outline-danger" onclick="logoutAllSessions()">
+                                <i class="fas fa-sign-out-alt me-2"></i>Log Out All Sessions
+                            </button>
+                            <small class="text-muted">Logs out all devices and clears trusted 2FA devices so OTP is required again.</small>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -520,6 +527,32 @@ async function loadProfilePage() {
             showError('Failed to change password');
         }
     });
+}
+
+async function logoutAllSessions() {
+    const confirmed = await showConfirm('Log out of all sessions on all devices? This will require OTP again next login.', {
+        title: 'Log Out All Sessions',
+        confirmText: 'Log Out All',
+        cancelText: 'Cancel',
+        type: 'danger',
+        icon: 'fas fa-sign-out-alt'
+    });
+
+    if (!confirmed) return;
+
+    try {
+        const response = await fetch(`${API_BASE}/auth/logout-all.php`, { method: 'POST' });
+        const result = await response.json();
+        if (!result.success) {
+            throw new Error(result.message || 'Failed to log out all sessions');
+        }
+    } catch (error) {
+        showError(error.message || 'Failed to log out all sessions');
+        return;
+    }
+
+    // Redirect to login after server clears sessions
+    window.location.href = `${BASE_PATH}/public/login.php`;
 }
 
 async function loadSettingsPage() {
