@@ -32,9 +32,14 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
 }
 
 try {
-    $data = json_decode(file_get_contents('php://input'), true);
+    $rawInput = file_get_contents('php://input');
+    $data = json_decode($rawInput, true);
 
-    if (!$data) {
+    if (!is_array($data) || empty($data)) {
+        $data = $_POST;
+    }
+
+    if (!is_array($data) || empty($data)) {
         Response::error('Invalid JSON data', 400);
     }
 
@@ -65,7 +70,8 @@ try {
         'slug' => $slug,
         'description' => isset($data['description']) ? trim($data['description']) : '',
         'icon' => isset($data['icon']) ? trim($data['icon']) : '',
-        'sort_order' => isset($data['sort_order']) ? (int)$data['sort_order'] : 0
+        'sort_order' => isset($data['sort_order']) ? (int)$data['sort_order'] : 0,
+        'is_active' => isset($data['is_active']) ? (int)$data['is_active'] : 1
     ];
 
     $newCategory = $categoryModel->create($categoryData);
