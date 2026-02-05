@@ -9,7 +9,6 @@
 error_reporting(E_ALL);
 ini_set('display_errors', '0');
 ini_set('log_errors', '1');
-ini_set('error_log', __DIR__ . '/../../logs/api_errors.log');
 require_once __DIR__ . '/../../config/database.php';
 require_once __DIR__ . '/../../utils/AuditLogger.php';
 require_once __DIR__ . '/../../middleware/Auth.php';
@@ -74,3 +73,4 @@ try {
 } catch (PDOException $e) {
     Response::error('Database error: ' . $e->getMessage(), 500);
 }
+

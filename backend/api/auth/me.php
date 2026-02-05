@@ -8,7 +8,6 @@
 error_reporting(E_ALL);
 ini_set('display_errors', '0');
 ini_set('log_errors', '1');
-ini_set('error_log', __DIR__ . '/../../logs/api_errors.log');
 header('Content-Type: application/json');
 
 // Start session
@@ -60,3 +59,4 @@ try {
     file_put_contents(__DIR__ . '/../../logs/debug.log', "Exception: " . $e->getMessage() . "\n", FILE_APPEND);
     Response::serverError('An error occurred');
 }
+

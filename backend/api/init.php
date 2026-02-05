@@ -11,7 +11,6 @@ error_reporting(E_ALL);
 
 // Log errors to file
 ini_set('log_errors', '1');
-ini_set('error_log', __DIR__ . '/../logs/api_errors.log');
 
 // Set default timezone
 date_default_timezone_set('UTC');
@@ -61,3 +60,4 @@ register_shutdown_function(function() {
         }
     }
 });
+

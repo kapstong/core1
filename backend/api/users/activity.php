@@ -9,7 +9,6 @@
 error_reporting(E_ALL);
 ini_set('display_errors', '0');
 ini_set('log_errors', '1');
-ini_set('error_log', __DIR__ . '/../../logs/api_errors.log');
 require_once __DIR__ . '/../../config/database.php';
 require_once __DIR__ . '/../../middleware/Auth.php';
 require_once __DIR__ . '/../../utils/Response.php';
@@ -222,3 +221,4 @@ function getRelativeTime($timestamp) {
     $years = floor($days / 365);
     return $years == 1 ? '1 year ago' : $years . ' years ago';
 }
+

@@ -11,7 +11,6 @@ error_log('=== Supplier Registration Request Started ===');
 error_reporting(E_ALL);
 ini_set('display_errors', '0');
 ini_set('log_errors', '1');
-ini_set('error_log', __DIR__ . '/../../logs/api_errors.log');
 header('Content-Type: application/json');
 require_once __DIR__ . '/../../config/database.php';
 require_once __DIR__ . '/../../utils/Response.php';
@@ -181,3 +180,4 @@ try {
     error_log('Supplier registration database error: ' . $e->getMessage());
     Response::error('A system error occurred while processing your registration. Please try again later or contact support.', 500);
 }
+

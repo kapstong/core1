@@ -4,7 +4,6 @@
 error_reporting(E_ALL);
 ini_set('display_errors', '0');
 ini_set('log_errors', '1');
-ini_set('error_log', __DIR__ . '/../../logs/api_errors.log');
 require_once '../../config/database.php';
 require_once '../../models/PurchaseOrder.php';
 require_once '../../middleware/Auth.php';
@@ -88,3 +87,4 @@ try {
 } catch (Exception $e) {
     Response::error('An error occurred: ' . $e->getMessage());
 }
+
