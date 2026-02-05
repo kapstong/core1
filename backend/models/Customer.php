@@ -159,7 +159,7 @@ class Customer {
     public function getCart($customerId = null, $sessionId = null) {
         $query = "SELECT sc.*, p.name, p.sku, p.selling_price, p.image_url, i.quantity_available
                   FROM shopping_cart sc
-                  INNER JOIN products p ON sc.product_id = p.id
+                  INNER JOIN products p ON sc.product_id = p.id AND p.deleted_at IS NULL
                   LEFT JOIN inventory i ON sc.product_id = i.product_id
                   WHERE 1=1";
 

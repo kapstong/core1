@@ -41,9 +41,9 @@ try {
             MAX(p.selling_price) as max_price,
             AVG(p.selling_price) as avg_price
         FROM categories c
-        LEFT JOIN products p ON c.id = p.category_id AND p.is_active = 1
+        LEFT JOIN products p ON c.id = p.category_id AND p.is_active = 1 AND p.deleted_at IS NULL
         LEFT JOIN inventory i ON p.id = i.product_id
-        WHERE c.is_active = 1
+        WHERE c.is_active = 1 AND c.deleted_at IS NULL
         GROUP BY c.id, c.name, c.slug, c.description, c.icon
         ORDER BY c.sort_order ASC, c.name ASC
     ";

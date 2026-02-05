@@ -33,7 +33,7 @@ try {
     $db = Database::getInstance()->getConnection();
 
     $query = "SELECT id, username, full_name, email, role, is_active, last_login, created_at
-              FROM users WHERE id = ?";
+              FROM users WHERE id = ? AND deleted_at IS NULL";
 
     $stmt = $db->prepare($query);
     $stmt->execute([$id]);

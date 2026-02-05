@@ -61,7 +61,7 @@ try {
     $conn = $db->getConnection();
 
     // Check if PO exists
-    $stmt = $conn->prepare("SELECT * FROM purchase_orders WHERE id = :id");
+    $stmt = $conn->prepare("SELECT * FROM purchase_orders WHERE id = :id AND deleted_at IS NULL");
     $stmt->execute([':id' => $poId]);
     $po = $stmt->fetch(PDO::FETCH_ASSOC);
 

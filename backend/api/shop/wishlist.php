@@ -214,7 +214,7 @@ function getWishlist() {
         JOIN products p ON cw.product_id = p.id
         LEFT JOIN categories c ON p.category_id = c.id
         LEFT JOIN inventory i ON p.id = i.product_id
-        WHERE cw.customer_id = ?
+        WHERE cw.customer_id = ? AND p.deleted_at IS NULL
         ORDER BY cw.added_at DESC
         LIMIT ? OFFSET ?
     ");

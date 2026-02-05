@@ -132,7 +132,7 @@ function addToCart($customerModel, $customerId, $sessionId) {
     $productQuery = "SELECT p.id, p.name, p.selling_price, i.quantity_available
                      FROM products p
                      LEFT JOIN inventory i ON p.id = i.product_id
-                     WHERE p.id = :product_id AND p.is_active = 1";
+                     WHERE p.id = :product_id AND p.is_active = 1 AND p.deleted_at IS NULL";
 
     $stmt = $db->prepare($productQuery);
     $stmt->bindParam(':product_id', $productId, PDO::PARAM_INT);

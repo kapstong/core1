@@ -61,7 +61,7 @@ try {
         LEFT JOIN users s ON po.supplier_id = s.id
         LEFT JOIN users u ON po.created_by = u.id
         LEFT JOIN users ua ON po.approved_by = ua.id
-        WHERE po.id = :po_id
+        WHERE po.id = :po_id AND po.deleted_at IS NULL
     ";
 
     $stmt = $conn->prepare($poQuery);

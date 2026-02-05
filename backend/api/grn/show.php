@@ -62,7 +62,7 @@ try {
         LEFT JOIN purchase_orders po ON grn.po_id = po.id
         LEFT JOIN users s ON po.supplier_id = s.id
         LEFT JOIN users u ON grn.received_by = u.id
-        WHERE grn.id = :grn_id
+        WHERE grn.id = :grn_id AND grn.deleted_at IS NULL
     ";
 
     $stmt = $conn->prepare($grnQuery);

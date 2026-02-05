@@ -612,16 +612,16 @@ async function loadSettingsPage() {
 
                 <div class="card mt-4" style="background: var(--bg-card); border: 1px solid var(--border-color);">
                     <div class="card-header d-flex align-items-center justify-content-between" style="background: var(--bg-tertiary); border-color: var(--border-color);">
-                        <h5 class="mb-0"><i class="fas fa-archive me-2"></i>Archived Categories</h5>
-                        <button class="btn btn-sm btn-outline-primary" id="open-archived-categories">
-                            <i class="fas fa-folder-open me-1"></i>View Archive
+                        <h5 class="mb-0"><i class="fas fa-trash-restore me-2"></i>Recently Deleted</h5>
+                        <button class="btn btn-sm btn-outline-primary" id="open-recently-deleted">
+                            <i class="fas fa-folder-open me-1"></i>View Recently Deleted
                         </button>
                     </div>
                     <div class="card-body">
-                        <p class="text-muted mb-3">Soft-deleted categories are stored in an archive for reference.</p>
+                        <p class="text-muted mb-3">Soft-deleted items are kept for 30 days before permanent removal.</p>
                         <div class="d-flex align-items-center justify-content-between">
-                            <span class="text-muted">Archived items are hidden from active lists.</span>
-                            <button class="btn btn-sm btn-outline-secondary" id="refresh-archived-categories">
+                            <span class="text-muted">Deleted items are hidden from active lists.</span>
+                            <button class="btn btn-sm btn-outline-secondary" id="refresh-recently-deleted">
                                 <i class="fas fa-sync-alt me-1"></i>Refresh List
                             </button>
                         </div>
@@ -694,47 +694,123 @@ async function loadSettingsPage() {
             </div>
         </div>
 
-        <div class="modal fade" id="archivedCategoriesModal" tabindex="-1" aria-hidden="true">
-            <div class="modal-dialog modal-lg modal-dialog-scrollable">
+        <div class="modal fade" id="recentlyDeletedModal" tabindex="-1" aria-hidden="true">
+            <div class="modal-dialog modal-xl modal-dialog-scrollable">
                 <div class="modal-content" style="background: var(--bg-card); border: 1px solid var(--border-color);">
                     <div class="modal-header" style="background: var(--bg-tertiary); border-color: var(--border-color);">
-                        <h5 class="modal-title"><i class="fas fa-archive me-2"></i>Archived Categories</h5>
+                        <h5 class="modal-title"><i class="fas fa-trash-restore me-2"></i>Recently Deleted</h5>
                         <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
                     </div>
                     <div class="modal-body">
-                        <div class="table-responsive">
-                            <table class="table table-hover align-middle mb-0">
-                                <thead>
-                                    <tr>
-                                        <th style="width: 40px;">
-                                            <input type="checkbox" id="archived-select-all" aria-label="Select all archived categories">
-                                        </th>
-                                        <th>Name</th>
-                                        <th>Slug</th>
-                                        <th>Icon</th>
-                                        <th>Updated</th>
-                                        <th style="width: 120px;">Actions</th>
-                                    </tr>
-                                </thead>
-                                <tbody id="archived-categories-body">
-                                    <tr>
-                                        <td colspan="6" class="text-muted">Loading archived categories...</td>
-                                    </tr>
-                                </tbody>
-                            </table>
-                        </div>
-                        <div id="archived-categories-empty" class="text-muted mt-3" style="display:none;">
-                            <i class="fas fa-check-circle me-1"></i>No archived categories found.
+                        <ul class="nav nav-tabs mb-3" id="recentlyDeletedTabs" role="tablist">
+                            <li class="nav-item" role="presentation">
+                                <button class="nav-link active" id="recently-categories-tab" data-bs-toggle="tab" data-bs-target="#recently-categories" type="button" role="tab">Categories</button>
+                            </li>
+                            <li class="nav-item" role="presentation">
+                                <button class="nav-link" id="recently-products-tab" data-bs-toggle="tab" data-bs-target="#recently-products" type="button" role="tab">Products</button>
+                            </li>
+                            <li class="nav-item" role="presentation">
+                                <button class="nav-link" id="recently-pos-tab" data-bs-toggle="tab" data-bs-target="#recently-pos" type="button" role="tab">Purchase Orders</button>
+                            </li>
+                            <li class="nav-item" role="presentation">
+                                <button class="nav-link" id="recently-grns-tab" data-bs-toggle="tab" data-bs-target="#recently-grns" type="button" role="tab">GRNs</button>
+                            </li>
+                            <li class="nav-item" role="presentation">
+                                <button class="nav-link" id="recently-users-tab" data-bs-toggle="tab" data-bs-target="#recently-users" type="button" role="tab">Users</button>
+                            </li>
+                        </ul>
+                        <div class="tab-content">
+                            <div class="tab-pane fade show active" id="recently-categories" role="tabpanel">
+                                <div class="table-responsive">
+                                    <table class="table table-hover align-middle mb-0">
+                                        <thead>
+                                            <tr>
+                                                <th>Name</th>
+                                                <th>Slug</th>
+                                                <th>Deleted</th>
+                                                <th style="width: 160px;">Actions</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="recently-categories-body">
+                                            <tr><td colspan="4" class="text-muted">Loading categories...</td></tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                            <div class="tab-pane fade" id="recently-products" role="tabpanel">
+                                <div class="table-responsive">
+                                    <table class="table table-hover align-middle mb-0">
+                                        <thead>
+                                            <tr>
+                                                <th>SKU</th>
+                                                <th>Name</th>
+                                                <th>Deleted</th>
+                                                <th style="width: 160px;">Actions</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="recently-products-body">
+                                            <tr><td colspan="4" class="text-muted">Loading products...</td></tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                            <div class="tab-pane fade" id="recently-pos" role="tabpanel">
+                                <div class="table-responsive">
+                                    <table class="table table-hover align-middle mb-0">
+                                        <thead>
+                                            <tr>
+                                                <th>PO Number</th>
+                                                <th>Status</th>
+                                                <th>Total</th>
+                                                <th>Deleted</th>
+                                                <th style="width: 160px;">Actions</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="recently-pos-body">
+                                            <tr><td colspan="5" class="text-muted">Loading purchase orders...</td></tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                            <div class="tab-pane fade" id="recently-grns" role="tabpanel">
+                                <div class="table-responsive">
+                                    <table class="table table-hover align-middle mb-0">
+                                        <thead>
+                                            <tr>
+                                                <th>GRN Number</th>
+                                                <th>Status</th>
+                                                <th>Deleted</th>
+                                                <th style="width: 160px;">Actions</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="recently-grns-body">
+                                            <tr><td colspan="4" class="text-muted">Loading GRNs...</td></tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                            <div class="tab-pane fade" id="recently-users" role="tabpanel">
+                                <div class="table-responsive">
+                                    <table class="table table-hover align-middle mb-0">
+                                        <thead>
+                                            <tr>
+                                                <th>Username</th>
+                                                <th>Name</th>
+                                                <th>Role</th>
+                                                <th>Deleted</th>
+                                                <th style="width: 160px;">Actions</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="recently-users-body">
+                                            <tr><td colspan="5" class="text-muted">Loading users...</td></tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
                         </div>
                     </div>
                     <div class="modal-footer">
-                        <button class="btn btn-outline-success" id="restore-archived-selected" disabled>
-                            <i class="fas fa-undo me-1"></i>Restore Selected
-                        </button>
-                        <button class="btn btn-outline-danger" id="delete-archived-selected" disabled>
-                            <i class="fas fa-trash me-1"></i>Delete Selected
-                        </button>
-                        <button class="btn btn-outline-secondary" id="refresh-archived-categories-modal">
+                        <button class="btn btn-outline-secondary" id="refresh-recently-deleted-modal">
                             <i class="fas fa-sync-alt me-1"></i>Refresh
                         </button>
                         <button type="button" class="btn btn-primary" data-bs-dismiss="modal">Close</button>
@@ -748,7 +824,7 @@ async function loadSettingsPage() {
     setTimeout(async () => {
         // Load current settings
         await loadSettingsData();
-        await loadArchivedCategories();
+        await loadRecentlyDeleted();
     }, 0);
 
     // Business form handler
@@ -769,862 +845,191 @@ async function loadSettingsPage() {
         await saveSecuritySettings();
     });
 
-    const refreshArchivedBtn = document.getElementById('refresh-archived-categories');
-    if (refreshArchivedBtn) {
-        refreshArchivedBtn.addEventListener('click', async () => {
-            await loadArchivedCategories(true);
+    const refreshRecentlyDeletedBtn = document.getElementById('refresh-recently-deleted');
+    if (refreshRecentlyDeletedBtn) {
+        refreshRecentlyDeletedBtn.addEventListener('click', async () => {
+            await loadRecentlyDeleted(true);
         });
     }
 
-    const refreshArchivedModalBtn = document.getElementById('refresh-archived-categories-modal');
-    if (refreshArchivedModalBtn) {
-        refreshArchivedModalBtn.addEventListener('click', async () => {
-            await loadArchivedCategories(true);
+    const refreshRecentlyDeletedModalBtn = document.getElementById('refresh-recently-deleted-modal');
+    if (refreshRecentlyDeletedModalBtn) {
+        refreshRecentlyDeletedModalBtn.addEventListener('click', async () => {
+            await loadRecentlyDeleted(true);
         });
     }
 
-    const openArchivedBtn = document.getElementById('open-archived-categories');
-    if (openArchivedBtn) {
-        openArchivedBtn.addEventListener('click', async () => {
-            await loadArchivedCategories(true);
-            const modal = new bootstrap.Modal(document.getElementById('archivedCategoriesModal'));
+    const openRecentlyDeletedBtn = document.getElementById('open-recently-deleted');
+    if (openRecentlyDeletedBtn) {
+        openRecentlyDeletedBtn.addEventListener('click', async () => {
+            await loadRecentlyDeleted(true);
+            const modal = new bootstrap.Modal(document.getElementById('recentlyDeletedModal'));
             modal.show();
         });
     }
-
-    const restoreSelectedBtn = document.getElementById('restore-archived-selected');
-    if (restoreSelectedBtn) {
-        restoreSelectedBtn.addEventListener('click', async () => {
-            await restoreSelectedArchivedCategories();
-        });
-    }
-
-    const deleteSelectedBtn = document.getElementById('delete-archived-selected');
-    if (deleteSelectedBtn) {
-        deleteSelectedBtn.addEventListener('click', async () => {
-            await deleteSelectedArchivedCategories();
-        });
-    }
 }
 
-async function loadArchivedCategories(forceRefresh = false) {
-    const tableBody = document.getElementById('archived-categories-body');
-    const emptyState = document.getElementById('archived-categories-empty');
-    const selectAll = document.getElementById('archived-select-all');
-    const restoreSelectedBtn = document.getElementById('restore-archived-selected');
-    const deleteSelectedBtn = document.getElementById('delete-archived-selected');
 
-    if (!tableBody) return;
+async function loadRecentlyDeleted(forceRefresh = false) {
+    const categoriesBody = document.getElementById('recently-categories-body');
+    const productsBody = document.getElementById('recently-products-body');
+    const posBody = document.getElementById('recently-pos-body');
+    const grnsBody = document.getElementById('recently-grns-body');
+    const usersBody = document.getElementById('recently-users-body');
+
+    if (!categoriesBody || !productsBody || !posBody || !grnsBody || !usersBody) return;
 
     if (forceRefresh) {
-        tableBody.innerHTML = '<tr><td colspan="6" class="text-muted">Refreshing archived categories...</td></tr>';
+        categoriesBody.innerHTML = '<tr><td colspan="4" class="text-muted">Refreshing categories...</td></tr>';
+        productsBody.innerHTML = '<tr><td colspan="4" class="text-muted">Refreshing products...</td></tr>';
+        posBody.innerHTML = '<tr><td colspan="5" class="text-muted">Refreshing purchase orders...</td></tr>';
+        grnsBody.innerHTML = '<tr><td colspan="4" class="text-muted">Refreshing GRNs...</td></tr>';
+        usersBody.innerHTML = '<tr><td colspan="5" class="text-muted">Refreshing users...</td></tr>';
     }
 
     try {
-        const response = await fetch(`${API_BASE}/categories/index.php?active_only=0`, {
-            credentials: 'same-origin'
-        });
+        const response = await fetch(`${API_BASE}/recently_deleted/list.php`, { credentials: 'same-origin' });
         const result = await response.json();
 
         if (!result.success) {
-            throw new Error(result.message || 'Failed to load archived categories');
+            throw new Error(result.message || 'Failed to load recently deleted items');
         }
 
-        const categories = result.data?.categories || result.categories || [];
-        const archived = categories.filter(category => Number(category.is_active) === 0);
+        const data = result.data?.results || result.results || {};
 
-        if (!archived.length) {
-            tableBody.innerHTML = '';
-            if (emptyState) {
-                emptyState.style.display = 'block';
-            }
-            if (selectAll) {
-                selectAll.checked = false;
-            }
-            if (restoreSelectedBtn) {
-                restoreSelectedBtn.disabled = true;
-            }
-            if (deleteSelectedBtn) {
-                deleteSelectedBtn.disabled = true;
-            }
-            return;
-        }
+        categoriesBody.innerHTML = (data.categories || []).map(item => `
+            <tr>
+                <td><strong>${item.name || 'Unnamed'}</strong></td>
+                <td><code>${item.slug || ''}</code></td>
+                <td>${formatDate(item.deleted_at)}</td>
+                <td>
+                    <div class="d-flex gap-2">
+                        <button class="btn btn-sm btn-outline-success" onclick="restoreRecentlyDeleted('category', ${item.id})"><i class="fas fa-undo me-1"></i>Restore</button>
+                        <button class="btn btn-sm btn-outline-danger" onclick="purgeRecentlyDeleted('category', ${item.id})"><i class="fas fa-trash me-1"></i>Delete</button>
+                    </div>
+                </td>
+            </tr>
+        `).join('') || '<tr><td colspan="4" class="text-muted">No recently deleted categories.</td></tr>';
 
-        if (emptyState) {
-            emptyState.style.display = 'none';
-        }
+        productsBody.innerHTML = (data.products || []).map(item => `
+            <tr>
+                <td><code>${item.sku || ''}</code></td>
+                <td><strong>${item.name || 'Unnamed'}</strong></td>
+                <td>${formatDate(item.deleted_at)}</td>
+                <td>
+                    <div class="d-flex gap-2">
+                        <button class="btn btn-sm btn-outline-success" onclick="restoreRecentlyDeleted('product', ${item.id})"><i class="fas fa-undo me-1"></i>Restore</button>
+                        <button class="btn btn-sm btn-outline-danger" onclick="purgeRecentlyDeleted('product', ${item.id})"><i class="fas fa-trash me-1"></i>Delete</button>
+                    </div>
+                </td>
+            </tr>
+        `).join('') || '<tr><td colspan="4" class="text-muted">No recently deleted products.</td></tr>';
 
-        tableBody.innerHTML = archived.map(category => {
-            const icon = category.icon ? `<i class="${category.icon} me-1"></i>` : '';
-            const updatedAt = category.updated_at ? new Date(category.updated_at).toLocaleString() : 'N/A';
-            return `
-                <tr>
-                    <td>
-                        <input type="checkbox" class="archived-category-checkbox" data-id="${category.id}" aria-label="Select ${category.name || 'category'}">
-                    </td>
-                    <td><strong>${category.name || 'Unnamed'}</strong></td>
-                    <td><code>${category.slug || ''}</code></td>
-                    <td>${icon}${category.icon || '-'}</td>
-                    <td>${updatedAt}</td>
-                    <td>
-                        <div class="d-flex gap-2">
-                            <button class="btn btn-sm btn-outline-success archived-restore-btn" data-id="${category.id}">
-                                <i class="fas fa-undo me-1"></i>Restore
-                            </button>
-                            <button class="btn btn-sm btn-outline-danger archived-delete-btn" data-id="${category.id}">
-                                <i class="fas fa-trash me-1"></i>Delete
-                            </button>
-                        </div>
-                    </td>
-                </tr>
-            `;
-        }).join('');
+        posBody.innerHTML = (data.purchase_orders || []).map(item => `
+            <tr>
+                <td><strong>${item.po_number || ''}</strong></td>
+                <td>${item.status || '-'}</td>
+                <td>?${Number(item.total_amount || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}</td>
+                <td>${formatDate(item.deleted_at)}</td>
+                <td>
+                    <div class="d-flex gap-2">
+                        <button class="btn btn-sm btn-outline-success" onclick="restoreRecentlyDeleted('purchase_order', ${item.id})"><i class="fas fa-undo me-1"></i>Restore</button>
+                        <button class="btn btn-sm btn-outline-danger" onclick="purgeRecentlyDeleted('purchase_order', ${item.id})"><i class="fas fa-trash me-1"></i>Delete</button>
+                    </div>
+                </td>
+            </tr>
+        `).join('') || '<tr><td colspan="5" class="text-muted">No recently deleted purchase orders.</td></tr>';
 
-        if (selectAll) {
-            selectAll.checked = false;
-        }
-        if (restoreSelectedBtn) {
-            restoreSelectedBtn.disabled = true;
-        }
-        if (deleteSelectedBtn) {
-            deleteSelectedBtn.disabled = true;
-        }
+        grnsBody.innerHTML = (data.grns || []).map(item => `
+            <tr>
+                <td><strong>${item.grn_number || ''}</strong></td>
+                <td>${item.inspection_status || '-'}</td>
+                <td>${formatDate(item.deleted_at)}</td>
+                <td>
+                    <div class="d-flex gap-2">
+                        <button class="btn btn-sm btn-outline-success" onclick="restoreRecentlyDeleted('grn', ${item.id})"><i class="fas fa-undo me-1"></i>Restore</button>
+                        <button class="btn btn-sm btn-outline-danger" onclick="purgeRecentlyDeleted('grn', ${item.id})"><i class="fas fa-trash me-1"></i>Delete</button>
+                    </div>
+                </td>
+            </tr>
+        `).join('') || '<tr><td colspan="4" class="text-muted">No recently deleted GRNs.</td></tr>';
 
-        wireArchivedCategoryHandlers();
+        usersBody.innerHTML = (data.users || []).map(item => `
+            <tr>
+                <td><code>${item.username || ''}</code></td>
+                <td>${item.full_name || '-'}</td>
+                <td>${item.role || '-'}</td>
+                <td>${formatDate(item.deleted_at)}</td>
+                <td>
+                    <div class="d-flex gap-2">
+                        <button class="btn btn-sm btn-outline-success" onclick="restoreRecentlyDeleted('user', ${item.id})"><i class="fas fa-undo me-1"></i>Restore</button>
+                        <button class="btn btn-sm btn-outline-danger" onclick="purgeRecentlyDeleted('user', ${item.id})"><i class="fas fa-trash me-1"></i>Delete</button>
+                    </div>
+                </td>
+            </tr>
+        `).join('') || '<tr><td colspan="5" class="text-muted">No recently deleted users.</td></tr>';
+
     } catch (error) {
-        tableBody.innerHTML = '<tr><td colspan="6" class="text-danger">Failed to load archived categories.</td></tr>';
-        if (emptyState) {
-            emptyState.style.display = 'none';
-        }
-        devLog('Error loading archived categories:', error);
+        devLog('Error loading recently deleted:', error);
+        if (categoriesBody) categoriesBody.innerHTML = '<tr><td colspan="4" class="text-danger">Failed to load.</td></tr>';
+        if (productsBody) productsBody.innerHTML = '<tr><td colspan="4" class="text-danger">Failed to load.</td></tr>';
+        if (posBody) posBody.innerHTML = '<tr><td colspan="5" class="text-danger">Failed to load.</td></tr>';
+        if (grnsBody) grnsBody.innerHTML = '<tr><td colspan="4" class="text-danger">Failed to load.</td></tr>';
+        if (usersBody) usersBody.innerHTML = '<tr><td colspan="5" class="text-danger">Failed to load.</td></tr>';
     }
 }
 
-function wireArchivedCategoryHandlers() {
-    const selectAll = document.getElementById('archived-select-all');
-    const restoreSelectedBtn = document.getElementById('restore-archived-selected');
-    const checkboxes = Array.from(document.querySelectorAll('.archived-category-checkbox'));
-    const restoreButtons = Array.from(document.querySelectorAll('.archived-restore-btn'));
-    const deleteSelectedBtn = document.getElementById('delete-archived-selected');
-    const deleteButtons = Array.from(document.querySelectorAll('.archived-delete-btn'));
-
-    if (selectAll) {
-        selectAll.addEventListener('change', () => {
-            checkboxes.forEach(cb => {
-                cb.checked = selectAll.checked;
-            });
-            if (restoreSelectedBtn) {
-                restoreSelectedBtn.disabled = !checkboxes.some(cb => cb.checked);
-            }
-            if (deleteSelectedBtn) {
-                deleteSelectedBtn.disabled = !checkboxes.some(cb => cb.checked);
-            }
-        });
-    }
-
-    checkboxes.forEach(cb => {
-        cb.addEventListener('change', () => {
-            if (selectAll) {
-                selectAll.checked = checkboxes.length > 0 && checkboxes.every(item => item.checked);
-            }
-            if (restoreSelectedBtn) {
-                restoreSelectedBtn.disabled = !checkboxes.some(item => item.checked);
-            }
-            if (deleteSelectedBtn) {
-                deleteSelectedBtn.disabled = !checkboxes.some(item => item.checked);
-            }
-        });
-    });
-
-    restoreButtons.forEach(btn => {
-        btn.addEventListener('click', async () => {
-            const categoryId = btn.dataset.id;
-            if (!categoryId) return;
-            await restoreArchivedCategory(categoryId);
-        });
-    });
-
-    deleteButtons.forEach(btn => {
-        btn.addEventListener('click', async () => {
-            const categoryId = btn.dataset.id;
-            if (!categoryId) return;
-            await deleteArchivedCategory(categoryId);
-        });
-    });
-}
-
-async function restoreArchivedCategory(categoryId) {
-    if (!await showConfirm('Restore this category back to active list?', {
-        title: 'Restore Category',
-        confirmText: 'Restore',
-        type: 'success',
-        icon: 'fas fa-undo'
-    })) {
+async function restoreRecentlyDeleted(type, id) {
+    if (!await showConfirm('Restore this item?', { title: 'Restore Item', confirmText: 'Restore', type: 'success' })) {
         return;
     }
 
     try {
-        const formData = new FormData();
-        formData.append('is_active', 1);
-
-        const response = await fetch(`${API_BASE}/categories/update.php?id=${categoryId}`, {
+        const response = await fetch(`${API_BASE}/recently_deleted/restore.php`, {
             method: 'POST',
-            credentials: 'same-origin',
-            body: formData
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ type, id })
         });
-
         const result = await response.json();
         if (result.success) {
-            showSuccess('Category restored successfully');
-            await loadArchivedCategories(true);
-            await loadCategories();
+            showSuccess('Item restored successfully');
+            await loadRecentlyDeleted(true);
         } else {
-            showError(result.message || 'Failed to restore category');
+            showError(result.message || 'Failed to restore item');
         }
     } catch (error) {
-        devLog('Error restoring category:', error);
-        showError('Failed to restore category');
+        devLog('Error restoring item:', error);
+        showError('Failed to restore item');
     }
 }
 
-async function restoreSelectedArchivedCategories() {
-    const selected = Array.from(document.querySelectorAll('.archived-category-checkbox:checked'))
-        .map(cb => cb.dataset.id)
-        .filter(Boolean);
-
-    if (selected.length === 0) {
-        showError('Select at least one category to restore.');
-        return;
-    }
-
-    if (!await showConfirm(`Restore ${selected.length} archived categor${selected.length === 1 ? 'y' : 'ies'}?`, {
-        title: 'Restore Selected',
-        confirmText: 'Restore',
-        type: 'success',
-        icon: 'fas fa-undo'
-    })) {
-        return;
-    }
-
-    try {
-        const restorePromises = selected.map(id => {
-            const formData = new FormData();
-            formData.append('is_active', 1);
-            return fetch(`${API_BASE}/categories/update.php?id=${id}`, {
-                method: 'POST',
-                credentials: 'same-origin',
-                body: formData
-            }).then(res => res.json());
-        });
-
-        const results = await Promise.all(restorePromises);
-        const failures = results.filter(result => !result.success);
-
-        if (failures.length) {
-            showError(`${failures.length} restore${failures.length === 1 ? '' : 's'} failed.`);
-        } else {
-            showSuccess('Selected categories restored successfully');
-        }
-
-        await loadArchivedCategories(true);
-        await loadCategories();
-    } catch (error) {
-        devLog('Error restoring selected categories:', error);
-        showError('Failed to restore selected categories');
-    }
-}
-
-async function deleteArchivedCategory(categoryId) {
-    if (!await showConfirm('This will permanently delete the category. Continue?', {
-        title: 'Permanent Delete',
+async function purgeRecentlyDeleted(type, id) {
+    if (!await showConfirm('Permanently delete this item? This cannot be undone.', {
+        title: 'Delete Permanently',
         confirmText: 'Delete',
-        type: 'danger',
-        icon: 'fas fa-trash'
-    })) {
-        return;
-    }
-
-    try {
-        const response = await fetch(`${API_BASE}/categories/delete.php`, {
-            method: 'DELETE',
-            headers: { 'Content-Type': 'application/json' },
-            credentials: 'same-origin',
-            body: JSON.stringify({ id: categoryId })
-        });
-
-        const result = await response.json();
-        if (result.success) {
-            showSuccess('Category permanently deleted');
-            await loadArchivedCategories(true);
-            await loadCategories();
-        } else {
-            showError(result.message || 'Failed to delete category');
-        }
-    } catch (error) {
-        devLog('Error deleting category:', error);
-        showError('Failed to delete category');
-    }
-}
-
-async function deleteSelectedArchivedCategories() {
-    const selected = Array.from(document.querySelectorAll('.archived-category-checkbox:checked'))
-        .map(cb => cb.dataset.id)
-        .filter(Boolean);
-
-    if (selected.length === 0) {
-        showError('Select at least one category to delete.');
-        return;
-    }
-
-    if (!await showConfirm(`Permanently delete ${selected.length} categor${selected.length === 1 ? 'y' : 'ies'}?`, {
-        title: 'Permanent Delete',
-        confirmText: 'Delete',
-        type: 'danger',
-        icon: 'fas fa-trash'
-    })) {
-        return;
-    }
-
-    try {
-        const deletePromises = selected.map(id =>
-            fetch(`${API_BASE}/categories/delete.php`, {
-                method: 'DELETE',
-                headers: { 'Content-Type': 'application/json' },
-                credentials: 'same-origin',
-                body: JSON.stringify({ id })
-            }).then(res => res.json())
-        );
-
-        const results = await Promise.all(deletePromises);
-        const failures = results.filter(result => !result.success);
-
-        if (failures.length) {
-            showError(`${failures.length} delete${failures.length === 1 ? '' : 's'} failed.`);
-        } else {
-            showSuccess('Selected categories permanently deleted');
-        }
-
-        await loadArchivedCategories(true);
-        await loadCategories();
-    } catch (error) {
-        devLog('Error deleting selected categories:', error);
-        showError('Failed to delete selected categories');
-    }
-}
-
-async function loadSettingsData() {
-    try {
-        const response = await fetch(`${API_BASE}/settings/index.php`, {
-            credentials: 'same-origin'
-        });
-        const data = await response.json();
-
-        if (data.success) {
-            // Convert settings array to object for easier access
-            const settings = {};
-            // Settings are nested in data.data.settings (not data.settings)
-            const settingsArray = data.data?.settings || data.settings || [];
-
-            if (Array.isArray(settingsArray)) {
-                settingsArray.forEach(setting => {
-                    settings[setting.setting_key] = setting.parsed_value !== undefined ? setting.parsed_value : setting.setting_value;
-                });
-                console.log('✅ Loaded', settingsArray.length, 'settings from database');
-            } else {
-                console.warn('⚠️ No settings array found in response');
-            }
-
-            // Helper function to safely set element value
-            const setElementValue = (id, value) => {
-                const element = document.getElementById(id);
-                if (element) {
-                    if (element.type === 'checkbox') {
-                        element.checked = value;
-                    } else {
-                        element.value = value || '';
-                    }
-                }
-            };
-
-            // Business settings
-            setElementValue('business-name', settings.store_name);
-            setElementValue('business-email', settings.store_email);
-            setElementValue('business-phone', settings.store_phone);
-            setElementValue('tax-rate', settings.tax_rate);
-            setElementValue('business-address', settings.store_address);
-
-            // Email settings
-            setElementValue('smtp-host', settings.smtp_host);
-            setElementValue('smtp-port', settings.smtp_port);
-            setElementValue('smtp-username', settings.smtp_username);
-            setElementValue('smtp-password', settings.smtp_password);
-            setElementValue('smtp-ssl', settings.smtp_ssl || false);
-
-            // Security settings - Load from settings table
-            const inactivityTimeout = settings.inactivity_timeout || 30;
-            console.log('🔐 Loading inactivity_timeout from settings table:', inactivityTimeout);
-            console.log('📋 All settings:', settings);
-            setElementValue('inactivity-timeout', inactivityTimeout);
-
-            // Update status message
-            const statusEl = document.getElementById('timeout-status');
-            if (statusEl) {
-                if (inactivityTimeout === 0) {
-                    statusEl.innerHTML = '<span class="text-muted">⚠ Auto-logout is DISABLED</span>';
-                } else {
-                    statusEl.innerHTML = `<span class="text-info">📌 Current value from settings table: ${inactivityTimeout} minutes</span>`;
-                }
-            }
-
-            // Note: Inactivity monitor is initialized on page load (dashboard.php)
-            // Only re-initialize when user saves new setting (see saveSecuritySettings)
-
-            // Maintenance mode settings
-            const maintenanceEnabled = settings.maintenance_mode === 'true' || settings.maintenance_mode === true;
-            setElementValue('maintenance-mode', maintenanceEnabled);
-            setElementValue('maintenance-message', settings.maintenance_message);
-
-            // Update maintenance status badge
-            const statusBadge = document.getElementById('maintenance-status');
-            if (statusBadge) {
-                if (maintenanceEnabled) {
-                    statusBadge.className = 'badge bg-warning';
-                    statusBadge.textContent = 'Active';
-                } else {
-                    statusBadge.className = 'badge bg-success';
-                    statusBadge.textContent = 'Disabled';
-                }
-            }
-        }
-    } catch (error) {
-        devLog('Error loading settings:', error);
-    }
-}
-
-// Helper function to show maintenance message preview
-function showMessagePreview(message) {
-	const preview = document.getElementById('maintenance-preview');
-	const previewText = document.getElementById('maintenance-message-preview');
-	
-	if (preview && previewText) {
-		if (message && message.trim()) {
-			previewText.textContent = message;
-			preview.classList.remove('d-none');
-		} else {
-			preview.classList.add('d-none');
-		}
-	}
-}
-
-// Helper function to update maintenance mode UI
-function updateMaintenanceUI(isEnabled) {
-	const statusBadge = document.getElementById('maintenance-status');
-	const statusIcon = document.getElementById('maintenance-icon');
-	const enableBtn = document.getElementById('enable-maintenance-btn');
-	const disableBtn = document.getElementById('disable-maintenance-btn');
-
-	if (statusBadge) {
-		if (isEnabled) {
-			statusBadge.className = 'badge bg-warning';
-			statusBadge.textContent = 'ACTIVE';
-		} else {
-			statusBadge.className = 'badge bg-success';
-			statusBadge.textContent = 'DISABLED';
-		}
-	}
-
-	if (statusIcon) {
-		if (isEnabled) {
-			statusIcon.className = 'fas fa-exclamation-triangle fa-2x';
-			statusIcon.style.color = '#ffc107';
-		} else {
-			statusIcon.className = 'fas fa-check-circle fa-2x';
-			statusIcon.style.color = '#22c55e';
-		}
-	}
-
-	// Update button states
-	if (enableBtn) enableBtn.disabled = isEnabled;
-	if (disableBtn) disableBtn.disabled = !isEnabled;
-}
-
-async function saveBusinessSettings() {
-    const businessNameEl = document.getElementById('business-name');
-    const businessEmailEl = document.getElementById('business-email');
-    const businessPhoneEl = document.getElementById('business-phone');
-    const taxRateEl = document.getElementById('tax-rate');
-    const businessAddressEl = document.getElementById('business-address');
-
-    if (!businessNameEl || !businessEmailEl || !businessPhoneEl || !taxRateEl || !businessAddressEl) {
-        showError('Could not find business settings form elements');
-        return;
-    }
-
-    const formData = {
-        business_name: businessNameEl.value,
-        business_email: businessEmailEl.value,
-        business_phone: businessPhoneEl.value,
-        tax_rate: taxRateEl.value,
-        business_address: businessAddressEl.value
-    };
-
-    try {
-        const response = await fetch(`${API_BASE}/settings/index.php`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            credentials: 'same-origin',
-            body: JSON.stringify(formData)
-        });
-
-        const result = await response.json();
-        if (result.success) {
-            showSuccess('Business settings saved successfully');
-        } else {
-            showError(result.message || 'Failed to save business settings');
-        }
-    } catch (error) {
-        showError('Failed to save business settings');
-    }
-}
-
-async function saveEmailSettings() {
-    const smtpHostEl = document.getElementById('smtp-host');
-    const smtpPortEl = document.getElementById('smtp-port');
-    const smtpUsernameEl = document.getElementById('smtp-username');
-    const smtpPasswordEl = document.getElementById('smtp-password');
-    const smtpSslEl = document.getElementById('smtp-ssl');
-
-    if (!smtpHostEl || !smtpPortEl || !smtpUsernameEl || !smtpPasswordEl || !smtpSslEl) {
-        showError('Could not find email settings form elements');
-        return;
-    }
-
-    const formData = {
-        smtp_host: smtpHostEl.value,
-        smtp_port: smtpPortEl.value,
-        smtp_username: smtpUsernameEl.value,
-        smtp_password: smtpPasswordEl.value,
-        smtp_ssl: smtpSslEl.checked
-    };
-
-    try {
-        const response = await fetch(`${API_BASE}/settings/index.php`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            credentials: 'same-origin',
-            body: JSON.stringify(formData)
-        });
-
-        const result = await response.json();
-        if (result.success) {
-            showSuccess('Email settings saved successfully');
-        } else {
-            showError(result.message || 'Failed to save email settings');
-        }
-    } catch (error) {
-        showError('Failed to save email settings');
-    }
-}
-
-async function saveSecuritySettings() {
-    const inactivityTimeoutEl = document.getElementById('inactivity-timeout');
-
-    if (!inactivityTimeoutEl) {
-        showError('Could not find security settings form elements');
-        return;
-    }
-
-    const timeoutValue = parseInt(inactivityTimeoutEl.value) || 0;
-
-    console.log('💾 Saving inactivity timeout to settings:', { inactivity_timeout: timeoutValue });
-
-    const formData = {
-        inactivity_timeout: timeoutValue.toString()
-    };
-
-    try {
-        // Save to global settings table
-        const response = await fetch(`${API_BASE}/settings/index.php`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            credentials: 'same-origin',
-            body: JSON.stringify(formData)
-        });
-
-        const result = await response.json();
-        console.log('💾 Save response:', result);
-
-        if (result.success) {
-            showSuccess('Security settings saved successfully');
-            console.log('✓ Settings saved, re-initializing monitor with', timeoutValue, 'minutes');
-
-            // Reinitialize inactivity monitor with new timeout
-            if (typeof initializeInactivityMonitor === 'function') {
-                initializeInactivityMonitor(timeoutValue);
-            }
-
-            // Update status message
-            const statusEl = document.getElementById('timeout-status');
-            if (statusEl) {
-                if (timeoutValue === 0) {
-                    statusEl.innerHTML = '<span class="text-muted">⚠ Auto-logout disabled</span>';
-                } else {
-                    statusEl.innerHTML = `<span class="text-success">✓ Auto-logout after ${timeoutValue} minutes of inactivity</span>`;
-                }
-            }
-        } else {
-            console.error('❌ Save failed:', result.message);
-            showError(result.message || 'Failed to save preference');
-        }
-    } catch (error) {
-        console.error('❌ Save error:', error);
-        showError('Failed to save preference');
-    }
-}
-
-async function saveMaintenanceSettings() {
-    const maintenanceModeEl = document.getElementById('maintenance-mode');
-    const maintenanceMessageEl = document.getElementById('maintenance-message');
-
-    if (!maintenanceModeEl || !maintenanceMessageEl) {
-        showError('Could not find maintenance settings elements');
-        return;
-    }
-
-    const formData = {
-        maintenance_mode: maintenanceModeEl.checked ? 'true' : 'false',
-        maintenance_message: maintenanceMessageEl.value
-    };
-
-    try {
-        const response = await fetch(`${API_BASE}/settings/index.php`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            credentials: 'same-origin',
-            body: JSON.stringify(formData)
-        });
-
-        const result = await response.json();
-        if (result.success) {
-            showSuccess('Maintenance settings saved successfully');
-            if (formData.maintenance_mode === 'true') {
-                showAlert('<strong>Maintenance Mode Enabled!</strong> Customers cannot access the shop until you disable this mode.', 'warning');
-            }
-        } else {
-            showError(result.message || 'Failed to save maintenance settings');
-        }
-    } catch (error) {
-        showError('Failed to save maintenance settings');
-    }
-}
-
-function applyThemeSettings() {
-    const themeMode = document.getElementById('theme-mode').value;
-    const accentColor = document.getElementById('accent-color').value;
-
-    // Apply theme (this would need CSS variable updates)
-    showSuccess('Theme settings applied (visual changes require page refresh)');
-}
-
-async function backupDatabase() {
-    try {
-        showSuccess('Database backup initiated. Download will start shortly.');
-        // Implementation would depend on backend API
-    } catch (error) {
-        showError('Failed to backup database');
-    }
-}
-
-async function clearCache() {
-    try {
-        const response = await fetch(`${API_BASE}/settings/clear-cache.php`, {
-            method: 'POST',
-            credentials: 'same-origin'
-        });
-
-        if (response.ok) {
-            showSuccess('Cache cleared successfully');
-        } else {
-            showError('Failed to clear cache');
-        }
-    } catch (error) {
-        showError('Failed to clear cache');
-    }
-}
-
-async function resetSettings() {
-    if (await showConfirm('Are you sure you want to reset all settings to defaults? This cannot be undone.', {
-        title: 'Reset Settings',
-        confirmText: 'Reset',
         type: 'danger'
     })) {
-        try {
-            const response = await fetch(`${API_BASE}/settings/reset.php`, {
-                method: 'POST',
-                credentials: 'same-origin'
-            });
-
-            if (response.ok) {
-                showSuccess('Settings reset to defaults');
-                loadSettingsData();
-            } else {
-                showError('Failed to reset settings');
-            }
-        } catch (error) {
-            showError('Failed to reset settings');
-        }
-    }
-}
-
-// Maintenance Mode Functions
-async function toggleMaintenanceMode(enable) {
-    const action = enable ? 'enable' : 'disable';
-    const confirmMessage = enable
-        ? 'Are you sure you want to enable maintenance mode? This will prevent customers from accessing the shop.'
-        : 'Are you sure you want to disable maintenance mode? This will allow customers to access the shop again.';
-
-    if (!await showConfirm(confirmMessage, {
-        title: `${enable ? 'Enable' : 'Disable'} Maintenance Mode`,
-        confirmText: enable ? 'Enable' : 'Disable',
-        type: enable ? 'warning' : 'success',
-        icon: enable ? 'fas fa-wrench' : 'fas fa-check'
-    })) {
         return;
     }
 
     try {
-        const response = await fetch(`${API_BASE}/settings/index.php`, {
+        const response = await fetch(`${API_BASE}/recently_deleted/purge.php`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            credentials: 'same-origin',
-            body: JSON.stringify({
-                maintenance_mode: enable ? 'true' : 'false'
-            })
+            body: JSON.stringify({ type, id })
         });
-
-        // Debug: Log response status
-        console.log(`Maintenance mode ${action} - Response Status:`, response.status, response.statusText);
-
-        // Check if response is OK first (200-299)
-        if (!response.ok) {
-            const errorData = await response.json().catch(() => ({ message: 'Unknown error' }));
-            console.error('Response not OK:', errorData);
-            showError(errorData.message || `Failed to ${action} maintenance mode (HTTP ${response.status})`);
-            return;
-        }
-
-        const result = await response.json();
-        console.log('Maintenance mode API response:', result);
-
-        // Check for success in response
-        if (result && result.success) {
-            showSuccess(`Maintenance mode ${enable ? 'enabled' : 'disabled'} successfully`);
-            // Refresh the status display
-            loadMaintenanceStatus();
-        } else {
-            console.error('API returned success=false:', result);
-            showError(result.message || `Failed to ${action} maintenance mode`);
-        }
-    } catch (error) {
-        console.error('Maintenance mode toggle error:', error);
-        showError(`Failed to ${action} maintenance mode: ${error.message || 'Unknown error'}`);
-    }
-}
-
-async function saveMaintenanceMessage() {
-    const message = document.getElementById('maintenance-message').value;
-
-    try {
-        const response = await fetch(`${API_BASE}/settings/index.php`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            credentials: 'same-origin',
-            body: JSON.stringify({
-                maintenance_message: message
-            })
-        });
-
         const result = await response.json();
         if (result.success) {
-            showSuccess('Maintenance message saved successfully');
-            // Refresh the status display
-            loadMaintenanceStatus();
+            showSuccess('Item permanently deleted');
+            await loadRecentlyDeleted(true);
         } else {
-            showError(result.message || 'Failed to save maintenance message');
+            showError(result.message || 'Failed to delete item');
         }
     } catch (error) {
-        showError('Failed to save maintenance message');
+        devLog('Error deleting item:', error);
+        showError('Failed to delete item');
     }
 }
-
-async function loadMaintenanceStatus() {
-    try {
-        const response = await fetch(`${API_BASE}/settings/index.php`, {
-            credentials: 'same-origin'
-        });
-        const data = await response.json();
-
-        if (data.success) {
-            // Convert settings array to object for easier access
-            const settings = {};
-            if (data.settings && Array.isArray(data.settings)) {
-                data.settings.forEach(setting => {
-                    settings[setting.setting_key] = setting.parsed_value !== undefined ? setting.parsed_value : setting.setting_value;
-                });
-            }
-
-            const maintenanceEnabled = settings.maintenance_mode === 'true' || settings.maintenance_mode === true;
-            const statusElement = document.getElementById('maintenance-status');
-
-            if (statusElement) {
-                statusElement.className = `badge ${maintenanceEnabled ? 'bg-warning' : 'bg-success'}`;
-                statusElement.textContent = maintenanceEnabled ? 'Enabled' : 'Disabled';
-            }
-
-            // Update message display
-            const messageElement = document.getElementById('maintenance-message-display');
-            if (messageElement) {
-                const currentMessage = settings.maintenance_message || 'We are currently performing scheduled maintenance. Please check back later.';
-                messageElement.innerHTML = `
-                    <div class="alert alert-info">
-                        <strong>Current Message:</strong><br>
-                        ${currentMessage}
-                    </div>
-                `;
-            }
-        }
-    } catch (error) {
-        console.error('Error loading maintenance status:', error);
-    }
-}
-
-// Helper functions
-function formatDate(dateString) {
-    if (!dateString || dateString === 'null' || dateString === 'undefined') {
-        return null;
-    }
-    const date = new Date(dateString);
-    if (isNaN(date.getTime())) {
-        return null;
-    }
-    return date.toLocaleDateString();
-}
-
-function formatCurrency(amount) {
-    return `₱${parseFloat(amount).toLocaleString('en-US', { minimumFractionDigits: 2 })}`;
-}
-
-function getStatusColor(status) {
-    const colors = {
-        'pending': 'warning',
-        'approved': 'success',
-        'rejected': 'danger',
-        'completed': 'primary'
-    };
-    return colors[status] || 'secondary';
-}
-
-// Supplier-specific settings page
 async function loadSupplierSettingsPage() {
     const content = document.getElementById('page-content');
     content.innerHTML = `

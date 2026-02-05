@@ -69,13 +69,6 @@ try {
         Response::error('Can only delete purchase orders in draft status', 400);
     }
 
-    // Start transaction
-    $conn->beginTransaction();
-
-    // Delete PO items first (cascade will handle this, but being explicit)
-    $stmt = $conn->prepare("DELETE FROM purchase_order_items WHERE po_id = :po_id");
-    $stmt->execute([':po_id' => $poId]);
-
     // Get PO details for logging before deletion
     $poQuery = "
         SELECT po.*, s.full_name as supplier_name, u.full_name as created_by_name
@@ -88,18 +81,12 @@ try {
     $stmt->execute([':po_id' => $poId]);
     $poDetails = $stmt->fetch(PDO::FETCH_ASSOC);
 
-    // Delete PO items first (cascade will handle this, but being explicit)
-    $stmt = $conn->prepare("DELETE FROM purchase_order_items WHERE po_id = :po_id");
-    $stmt->execute([':po_id' => $poId]);
-
-    // Delete the purchase order
-    $stmt = $conn->prepare("DELETE FROM purchase_orders WHERE id = :id");
+    // Soft delete the purchase order
+    $stmt = $conn->prepare("UPDATE purchase_orders SET deleted_at = NOW() WHERE id = :id");
     $stmt->execute([':id' => $poId]);
 
-    $conn->commit();
-
     // Log PO deletion to audit logs
-    AuditLogger::logDelete('purchase_order', $poId, "Purchase order {$poDetails['po_number']} deleted", [
+    AuditLogger::logDelete('purchase_order', $poId, "Purchase order {$poDetails['po_number']} soft-deleted", [
         'po_number' => $poDetails['po_number'],
         'supplier_id' => $poDetails['supplier_id'],
         'supplier_name' => $poDetails['supplier_name'],

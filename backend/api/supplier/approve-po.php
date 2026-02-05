@@ -68,7 +68,7 @@ try {
     $stmt = $conn->prepare("
         SELECT id, po_number, status
         FROM purchase_orders
-        WHERE id = :po_id AND supplier_id = :supplier_id
+        WHERE id = :po_id AND supplier_id = :supplier_id AND deleted_at IS NULL
         LIMIT 1
     ");
     $stmt->execute([
@@ -115,7 +115,7 @@ try {
         FROM purchase_orders po
         LEFT JOIN users u ON po.created_by = u.id
         LEFT JOIN users ua ON po.approved_by = ua.id
-        WHERE po.id = :po_id
+        WHERE po.id = :po_id AND po.deleted_at IS NULL
     ");
     $stmt->execute([':po_id' => $poId]);
     $updatedPO = $stmt->fetch(PDO::FETCH_ASSOC);

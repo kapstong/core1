@@ -23,7 +23,7 @@ class Product {
                   FROM {$this->table} p
                   LEFT JOIN categories c ON p.category_id = c.id
                   LEFT JOIN inventory i ON p.id = i.product_id
-                  WHERE 1=1";
+                  WHERE p.deleted_at IS NULL";
 
         $params = [];
 
@@ -96,7 +96,7 @@ class Product {
                   FROM {$this->table} p
                   LEFT JOIN categories c ON p.category_id = c.id
                   LEFT JOIN inventory i ON p.id = i.product_id
-                  WHERE p.id = :id";
+                  WHERE p.id = :id AND p.deleted_at IS NULL";
 
         $stmt = $this->db->prepare($query);
         $stmt->bindParam(':id', $id, PDO::PARAM_INT);
@@ -114,7 +114,7 @@ class Product {
                   FROM {$this->table} p
                   LEFT JOIN categories c ON p.category_id = c.id
                   LEFT JOIN inventory i ON p.id = i.product_id
-                  WHERE p.sku = :sku";
+                  WHERE p.sku = :sku AND p.deleted_at IS NULL";
 
         $stmt = $this->db->prepare($query);
         $stmt->bindParam(':sku', $sku);
@@ -132,7 +132,7 @@ class Product {
                   FROM {$this->table} p
                   LEFT JOIN categories c ON p.category_id = c.id
                   LEFT JOIN inventory i ON p.id = i.product_id
-                  WHERE p.name = :name AND p.is_active = 1";
+                  WHERE p.name = :name AND p.is_active = 1 AND p.deleted_at IS NULL";
 
         if ($categoryId) {
             $query .= " AND p.category_id = :category_id";
@@ -285,7 +285,9 @@ class Product {
      * Delete product (hard delete)
      */
     public function delete($id) {
-        $query = "DELETE FROM {$this->table} WHERE id = :id";
+        $query = "UPDATE {$this->table}
+                  SET is_active = 0, deleted_at = NOW()
+                  WHERE id = :id";
         $stmt = $this->db->prepare($query);
         $stmt->bindParam(':id', $id, PDO::PARAM_INT);
         return $stmt->execute();
@@ -295,7 +297,7 @@ class Product {
      * Check if SKU exists (only for active products)
      */
     public function skuExists($sku, $excludeId = null) {
-        $query = "SELECT COUNT(*) as count FROM {$this->table} WHERE sku = :sku AND is_active = 1";
+        $query = "SELECT COUNT(*) as count FROM {$this->table} WHERE sku = :sku AND is_active = 1 AND deleted_at IS NULL";
 
         if ($excludeId) {
             $query .= " AND id != :id";
@@ -323,7 +325,7 @@ class Product {
                   FROM {$this->table} p
                   LEFT JOIN categories c ON p.category_id = c.id
                   LEFT JOIN inventory i ON p.id = i.product_id
-                  WHERE p.is_active = 1 AND i.quantity_available <= p.reorder_level
+                  WHERE p.is_active = 1 AND p.deleted_at IS NULL AND i.quantity_available <= p.reorder_level
                   ORDER BY i.quantity_available ASC";
 
         $stmt = $this->db->prepare($query);

@@ -62,7 +62,7 @@ function deleteGRN($user) {
         $grnQuery = "SELECT g.*, po.po_number
                      FROM goods_received_notes g
                      INNER JOIN purchase_orders po ON g.po_id = po.id
-                     WHERE g.id = :id";
+                     WHERE g.id = :id AND g.deleted_at IS NULL";
         $grnStmt = $db->prepare($grnQuery);
         $grnStmt->bindParam(':id', $grnId, PDO::PARAM_INT);
         $grnStmt->execute();
@@ -176,14 +176,8 @@ function deleteGRN($user) {
         $updatePOStmt->bindParam(':po_id', $grn['po_id'], PDO::PARAM_INT);
         $updatePOStmt->execute();
 
-        // Delete GRN items
-        $deleteItemsQuery = "DELETE FROM grn_items WHERE grn_id = :grn_id";
-        $deleteItemsStmt = $db->prepare($deleteItemsQuery);
-        $deleteItemsStmt->bindParam(':grn_id', $grnId, PDO::PARAM_INT);
-        $deleteItemsStmt->execute();
-
-        // Delete GRN
-        $deleteGRNQuery = "DELETE FROM goods_received_notes WHERE id = :id";
+        // Soft delete GRN (keep items for archive)
+        $deleteGRNQuery = "UPDATE goods_received_notes SET deleted_at = NOW() WHERE id = :id";
         $deleteGRNStmt = $db->prepare($deleteGRNQuery);
         $deleteGRNStmt->bindParam(':id', $grnId, PDO::PARAM_INT);
         $deleteGRNStmt->execute();
@@ -191,7 +185,7 @@ function deleteGRN($user) {
         $db->commit();
 
         // Log GRN deletion
-        AuditLogger::logDelete('grn', $grnId, "GRN {$grn['grn_number']} deleted - Inventory reversed", [
+        AuditLogger::logDelete('grn', $grnId, "GRN {$grn['grn_number']} soft-deleted - Inventory reversed", [
             'grn_number' => $grn['grn_number'],
             'po_number' => $grn['po_number'],
             'items_reversed' => count($items),

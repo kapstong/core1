@@ -62,7 +62,7 @@ try {
             s.updated_at as supplier_updated_at
         FROM suppliers s
         INNER JOIN users u ON s.user_id = u.id AND u.role = 'supplier'
-        WHERE 1=1" . ($activeOnly ? " AND u.is_active = 1" : "") . "
+        WHERE u.deleted_at IS NULL" . ($activeOnly ? " AND u.is_active = 1" : "") . "
         ORDER BY u.created_at DESC
     ";
 
@@ -82,6 +82,7 @@ try {
     foreach ($suppliers as $supplier) {
         $orderQuery = "SELECT COUNT(*) as total_orders FROM purchase_orders
                       WHERE supplier_id = :supplier_id
+                      AND deleted_at IS NULL
                       AND status IN ('approved', 'ordered', 'partially_received', 'received')";
         $stmt = $conn->prepare($orderQuery);
         $stmt->execute(['supplier_id' => $supplier['id']]);

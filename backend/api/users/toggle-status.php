@@ -46,7 +46,7 @@ try {
     $conn = $db->getConnection();
 
     // Check if target user exists
-    $checkStmt = $conn->prepare("SELECT id, username, role, is_active FROM users WHERE id = ?");
+    $checkStmt = $conn->prepare("SELECT id, username, role, is_active FROM users WHERE id = ? AND deleted_at IS NULL");
     $checkStmt->execute([$targetUserId]);
     $targetUser = $checkStmt->fetch(PDO::FETCH_ASSOC);
 

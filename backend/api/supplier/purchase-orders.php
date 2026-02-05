@@ -62,7 +62,7 @@ try {
         FROM purchase_orders po
         LEFT JOIN users u ON po.created_by = u.id
         LEFT JOIN purchase_order_items poi ON po.id = poi.po_id
-        WHERE po.supplier_id = :supplier_id
+        WHERE po.supplier_id = :supplier_id AND po.deleted_at IS NULL
         GROUP BY po.id
         ORDER BY po.created_at DESC
     ";

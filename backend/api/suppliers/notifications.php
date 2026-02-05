@@ -51,7 +51,7 @@ try {
         $stmt = $db->prepare("
             SELECT po.id, po.po_number, po.status, po.order_date, po.total_amount, po.created_at
             FROM purchase_orders po
-            WHERE po.supplier_id = :supplier_id AND po.status IN ('pending_supplier', 'approved')
+            WHERE po.supplier_id = :supplier_id AND po.status IN ('pending_supplier', 'approved') AND po.deleted_at IS NULL
             ORDER BY po.created_at DESC
             LIMIT 10
         ");

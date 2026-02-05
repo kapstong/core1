@@ -53,6 +53,11 @@ try {
     $result = $categoryModel->delete($categoryId);
 
     if ($result) {
+        AuditLogger::logDelete('category', $categoryId, "Category '{$existingCategory['name']}' soft-deleted", [
+            'name' => $existingCategory['name'],
+            'slug' => $existingCategory['slug'],
+            'deleted_by' => Auth::user()['full_name'] ?? 'Unknown'
+        ]);
         Response::success(null, 'Category deleted successfully');
     } else {
         Response::error('Failed to delete category', 500);

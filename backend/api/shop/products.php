@@ -92,7 +92,7 @@ try {
         FROM products p
         INNER JOIN categories c ON p.category_id = c.id
         LEFT JOIN inventory i ON p.id = i.product_id
-        WHERE p.is_active = 1 AND c.is_active = 1
+        WHERE p.is_active = 1 AND p.deleted_at IS NULL AND c.is_active = 1
     ";
 
     $params = [];
@@ -159,7 +159,7 @@ try {
         FROM products p
         INNER JOIN categories c ON p.category_id = c.id
         LEFT JOIN inventory i ON p.id = i.product_id
-        WHERE p.is_active = 1 AND c.is_active = 1
+        WHERE p.is_active = 1 AND p.deleted_at IS NULL AND c.is_active = 1
     ";
 
     if (!empty($conditions)) {
@@ -179,7 +179,7 @@ try {
         FROM products p
         INNER JOIN categories c ON p.category_id = c.id
         LEFT JOIN inventory i ON p.id = i.product_id
-        WHERE p.is_active = 1 AND c.is_active = 1 AND p.brand IS NOT NULL AND p.brand != ''
+        WHERE p.is_active = 1 AND p.deleted_at IS NULL AND c.is_active = 1 AND p.brand IS NOT NULL AND p.brand != ''
     ";
 
     if (!empty($conditions)) {

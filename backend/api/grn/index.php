@@ -30,6 +30,8 @@ try {
     $where = [];
     $params = [];
 
+    $where[] = "grn.deleted_at IS NULL";
+
     // Role-based access
     if ($user['role'] === 'staff') {
         Response::error('Access denied', 403);

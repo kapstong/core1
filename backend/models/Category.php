@@ -14,10 +14,10 @@ class Category {
     }
 
     public function getAll($activeOnly = false) {
-        $query = "SELECT * FROM {$this->table}";
+        $query = "SELECT * FROM {$this->table} WHERE deleted_at IS NULL";
 
         if ($activeOnly) {
-            $query .= " WHERE is_active = 1";
+            $query .= " AND is_active = 1";
         }
 
         $query .= " ORDER BY name ASC";
@@ -28,7 +28,7 @@ class Category {
     }
 
     public function findById($id) {
-        $query = "SELECT * FROM {$this->table} WHERE id = :id";
+        $query = "SELECT * FROM {$this->table} WHERE id = :id AND deleted_at IS NULL";
         $stmt = $this->db->prepare($query);
         $stmt->bindParam(':id', $id, PDO::PARAM_INT);
         $stmt->execute();
@@ -36,7 +36,7 @@ class Category {
     }
 
     public function findBySlug($slug) {
-        $query = "SELECT * FROM {$this->table} WHERE slug = :slug";
+        $query = "SELECT * FROM {$this->table} WHERE slug = :slug AND deleted_at IS NULL";
         $stmt = $this->db->prepare($query);
         $stmt->bindParam(':slug', $slug);
         $stmt->execute();
@@ -87,7 +87,9 @@ class Category {
     }
 
     public function delete($id) {
-        $query = "DELETE FROM {$this->table} WHERE id = :id";
+        $query = "UPDATE {$this->table}
+                  SET is_active = 0, deleted_at = NOW()
+                  WHERE id = :id";
         $stmt = $this->db->prepare($query);
         $stmt->bindParam(':id', $id, PDO::PARAM_INT);
         return $stmt->execute();

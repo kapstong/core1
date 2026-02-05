@@ -39,6 +39,8 @@ try {
     $where = [];
     $params = [];
 
+    $where[] = "po.deleted_at IS NULL";
+
     if (isset($_GET['status'])) {
         $where[] = "po.status = :status";
         $params[':status'] = $_GET['status'];

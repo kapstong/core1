@@ -67,7 +67,7 @@ try {
             u.email as created_by_email
         FROM purchase_orders po
         LEFT JOIN users u ON po.created_by = u.id
-        WHERE po.id = :po_id AND po.supplier_id = :supplier_id
+        WHERE po.id = :po_id AND po.supplier_id = :supplier_id AND po.deleted_at IS NULL
         LIMIT 1
     ";
 

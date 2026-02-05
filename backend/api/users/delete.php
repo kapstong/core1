@@ -46,7 +46,7 @@ try {
     $db = Database::getInstance()->getConnection();
 
     // Check if user exists and get their role
-    $check = $db->prepare("SELECT id, role FROM users WHERE id = ?");
+    $check = $db->prepare("SELECT id, role, username, full_name, email, is_active FROM users WHERE id = ?");
     $check->execute([$data['id']]);
     $userToDelete = $check->fetch();
     if (!$userToDelete) {
@@ -58,9 +58,17 @@ try {
         Response::error('Cannot delete admin accounts', 403);
     }
 
-    // Delete user
-    $stmt = $db->prepare("DELETE FROM users WHERE id = ?");
+    // Soft delete user
+    $stmt = $db->prepare("UPDATE users SET is_active = 0, deleted_at = NOW() WHERE id = ?");
     $stmt->execute([$data['id']]);
+
+    AuditLogger::logDelete('user', (int)$data['id'], "User '{$userToDelete['username']}' soft-deleted", [
+        'username' => $userToDelete['username'],
+        'full_name' => $userToDelete['full_name'],
+        'email' => $userToDelete['email'],
+        'role' => $userToDelete['role'],
+        'deleted_by' => $_SESSION['username'] ?? 'Unknown'
+    ]);
 
     Response::success(['message' => 'User deleted successfully']);
 } catch (PDOException $e) {

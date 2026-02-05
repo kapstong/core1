@@ -24,7 +24,7 @@ try {
     $sql = "SELECT po.*, s.full_name as supplier_name
             FROM purchase_orders po
             LEFT JOIN users s ON po.supplier_id = s.id AND s.role = 'supplier'
-            WHERE po.supplier_id = :supplier_id ";
+            WHERE po.supplier_id = :supplier_id AND po.deleted_at IS NULL ";
 
     $params = [':supplier_id' => $supplier_id];
 

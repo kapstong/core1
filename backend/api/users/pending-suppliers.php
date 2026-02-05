@@ -68,6 +68,7 @@ try {
               WHERE
                 role = 'supplier'
                 AND is_active = 0
+                AND deleted_at IS NULL
               ORDER BY
                 created_at DESC";
 

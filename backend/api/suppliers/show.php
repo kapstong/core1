@@ -60,7 +60,7 @@ try {
             s.updated_at as supplier_updated_at
         FROM users u
         LEFT JOIN suppliers s ON u.id = s.user_id
-        WHERE u.id = :id AND u.role = 'supplier'
+        WHERE u.id = :id AND u.role = 'supplier' AND u.deleted_at IS NULL
     ";
     $stmt = $conn->prepare($query);
     $stmt->execute([':id' => $supplierId]);
@@ -82,6 +82,7 @@ try {
             MAX(CASE WHEN status IN ('approved', 'partially_received', 'received') THEN updated_at END) as last_order_date
         FROM purchase_orders
         WHERE supplier_id = :supplier_id
+        AND deleted_at IS NULL
     ";
 
     $statsStmt = $conn->prepare($statsQuery);

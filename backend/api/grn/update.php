@@ -70,7 +70,7 @@ function updateGRN() {
     // Check if GRN exists and can be edited
     $existingQuery = "SELECT grn.*, po.status as po_status FROM goods_received_notes grn
                       INNER JOIN purchase_orders po ON grn.po_id = po.id
-                      WHERE grn.id = :id";
+                      WHERE grn.id = :id AND grn.deleted_at IS NULL";
     $existingStmt = $db->prepare($existingQuery);
     $existingStmt->bindParam(':id', $grnId, PDO::PARAM_INT);
     $existingStmt->execute();
@@ -89,7 +89,7 @@ function updateGRN() {
     // Validate GRN number if provided
     $grnNumber = $input['grn_number'] ?? $grn['grn_number'];
     if ($grnNumber !== $grn['grn_number']) {
-        $checkStmt = $db->prepare("SELECT COUNT(*) as count FROM goods_received_notes WHERE grn_number = :grn_number AND id != :id");
+        $checkStmt = $db->prepare("SELECT COUNT(*) as count FROM goods_received_notes WHERE grn_number = :grn_number AND id != :id AND deleted_at IS NULL");
         $checkStmt->execute([':grn_number' => $grnNumber, ':id' => $grnId]);
         if ($checkStmt->fetch(PDO::FETCH_ASSOC)['count'] > 0) {
             Response::error('GRN number already exists', 400);
