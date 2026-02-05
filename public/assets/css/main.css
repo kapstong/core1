@@ -1079,6 +1079,29 @@ input[type="date"]:focus-visible {
     background: rgba(0, 245, 255, 0.15);
 }
 
+/* Dark theme tabs (fix white tab buttons) */
+.nav-tabs .nav-link {
+    color: var(--text-primary) !important;
+    background: transparent !important;
+    border-color: transparent !important;
+}
+
+.nav-tabs .nav-link:hover {
+    color: var(--text-primary) !important;
+    background: rgba(0, 245, 255, 0.1) !important;
+    border-color: rgba(0, 245, 255, 0.35) !important;
+}
+
+.nav-tabs .nav-link.active {
+    color: var(--accent) !important;
+    background: rgba(0, 245, 255, 0.18) !important;
+    border-color: rgba(0, 245, 255, 0.45) !important;
+}
+
+.nav-tabs {
+    border-bottom: 1px solid var(--border-color) !important;
+}
+
 /* ============================================
    PRODUCT GRID
    ============================================ */
