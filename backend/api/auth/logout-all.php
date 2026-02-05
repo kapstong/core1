@@ -52,9 +52,9 @@ try {
         // Ignore if table doesn't exist
     }
 
-    // Clear active login sessions
+    // Clear login sessions (force OTP on next login)
     try {
-        $stmt = $db->prepare("UPDATE login_sessions SET is_active = 0, logout_time = NOW() WHERE user_id = ?");
+        $stmt = $db->prepare("DELETE FROM login_sessions WHERE user_id = ?");
         $stmt->execute([$userId]);
     } catch (Exception $e) {
         // Ignore if table doesn't exist
