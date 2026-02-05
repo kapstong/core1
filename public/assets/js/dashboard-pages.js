@@ -179,6 +179,23 @@ const moneyMasking = {
     }
 };
 
+// Currency formatter (define if missing)
+if (typeof window.formatCurrency !== 'function') {
+    window.formatCurrency = function formatCurrency(value) {
+        let numberValue = value;
+        if (typeof numberValue === 'string') {
+            numberValue = parseFloat(numberValue.replace(/[^0-9.-]/g, ''));
+        }
+        if (!Number.isFinite(numberValue)) {
+            numberValue = 0;
+        }
+        return `₱${numberValue.toLocaleString('en-PH', {
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2
+        })}`;
+    };
+}
+
 // Dashboard page loading functions
 
 async function loadSupplierHomePage() {
