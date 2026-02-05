@@ -639,7 +639,7 @@
     <script src="assets/js/inactivity-monitor.js?v=3.3"></script>
 
     <!-- Include all page loaders -->
-    <script src="assets/js/dashboard-pages.js?v=2.9"></script>
+    <script src="assets/js/dashboard-pages.js?v=3.0"></script>
 
     <!-- NEW: Complete GRN Management System -->
     <script src="assets/js/grn-new.js?v=3.5"></script>
