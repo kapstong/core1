@@ -3819,18 +3819,19 @@ async function loadStockAdjustments(page = 1) {
 
         loadingIndicator.classList.add('d-none');
 
-        if (data.success && data.data.adjustments && data.data.adjustments.length > 0) {
-            displayStockAdjustments(data.data.adjustments);
+        const adjustments = data.data?.adjustments || data.adjustments || [];
+        if (data.success && adjustments.length > 0) {
+            displayStockAdjustments(adjustments);
             content.classList.remove('d-none');
 
             // Update summary
             if (summary) {
-                summary.textContent = `Showing ${data.data.adjustments.length} adjustment${data.data.adjustments.length === 1 ? '' : 's'}`;
+                summary.textContent = `Showing ${adjustments.length} adjustment${adjustments.length === 1 ? '' : 's'}`;
             }
 
             // Show pagination if needed
             const pagination = document.getElementById('adjustments-pagination');
-            if (data.data.adjustments.length >= itemsPerPage) {
+            if (adjustments.length >= itemsPerPage) {
                 pagination.style.display = 'block';
             } else {
                 pagination.style.display = 'none';
@@ -4594,8 +4595,9 @@ async function loadSuppliers() {
 
         loadingIndicator.classList.add('d-none');
 
-        if (data.success && data.data.suppliers && data.data.suppliers.length > 0) {
-            allSuppliers = data.data.suppliers;
+        const suppliers = data.data?.suppliers || data.suppliers || [];
+        if (data.success && suppliers.length > 0) {
+            allSuppliers = suppliers;
             // Use the selected status filter
             displaySuppliers(allSuppliers, status, search, includePerformance);
             content.classList.remove('d-none');
@@ -4954,8 +4956,9 @@ async function loadSuppliersForPOFilter() {
         const response = await fetch(`${API_BASE}/suppliers/index.php`);
         const data = await response.json();
 
-        if (data.success && data.data.suppliers) {
-            allSuppliersForPO = data.data.suppliers;
+        const suppliers = data.data?.suppliers || data.suppliers || [];
+        if (data.success && suppliers.length > 0) {
+            allSuppliersForPO = suppliers;
             const select = document.getElementById('po-supplier-filter');
             select.innerHTML = '<option value="all">All Suppliers</option>';
 
@@ -4990,7 +4993,7 @@ async function loadPurchaseOrders() {
         let url = `${API_BASE}/purchase_orders/index.php`;
         const params = [];
 
-        if (statusFilter !== 'all') params.push(`status=${encodeURIComponent(statusFilter)}`);
+        if (statusFilter !== 'all') params.push(`inspection_status=${encodeURIComponent(statusFilter)}`);
         if (supplierFilter !== 'all') params.push(`supplier_id=${supplierFilter}`);
 
         if (params.length > 0) url += '?' + params.join('&');
@@ -5369,8 +5372,9 @@ async function loadSuppliersForPOModal() {
         const response = await fetch(`${API_BASE}/suppliers/index.php`);
         const data = await response.json();
 
-        if (data.success && data.data && data.data.suppliers) {
-            allSuppliersForPO = data.data.suppliers;
+        const suppliers = data.data?.suppliers || data.suppliers || [];
+        if (data.success && suppliers.length > 0) {
+            allSuppliersForPO = suppliers;
         }
     } catch (error) {
         console.error('Error loading suppliers for PO:', error);
@@ -6270,9 +6274,11 @@ async function loadPOsForGRNFilter() {
         const response = await fetch(`${API_BASE}/purchase_orders/index.php?status=approved`);
         const data = await response.json();
 
-        if (data.success && data.purchase_orders) {
-            allPOsForGRN = data.purchase_orders;
+        const purchaseOrders = data.data?.purchase_orders || data.purchase_orders || [];
+        if (data.success && purchaseOrders.length > 0) {
+            allPOsForGRN = purchaseOrders;
             const select = document.getElementById('grn-po-filter');
+            if (!select) return;
             select.innerHTML = '<option value="all">All Purchase Orders</option>';
 
             allPOsForGRN.forEach(po => {
@@ -6316,8 +6322,9 @@ async function loadGRNs() {
 
         loadingIndicator.classList.add('d-none');
 
-        if (data.success && data.grns && data.grns.length > 0) {
-            allGRNs = data.grns;
+        const grns = data.data?.grns || data.grns || [];
+        if (data.success && grns.length > 0) {
+            allGRNs = grns;
 
             // Apply client-side filtering
             let filtered = allGRNs;
@@ -6541,9 +6548,11 @@ async function loadApprovedPOsForGRN() {
         const response = await fetch(`${API_BASE}/purchase_orders/index.php?status=approved`);
         const data = await response.json();
 
-        if (data.success && data.purchase_orders) {
-            approvedPOsForGRN = data.purchase_orders;
+        const purchaseOrders = data.data?.purchase_orders || data.purchase_orders || [];
+        if (data.success && purchaseOrders.length > 0) {
+            approvedPOsForGRN = purchaseOrders;
             const select = document.getElementById('grn-po');
+            if (!select) return;
             select.innerHTML = '<option value="">Select Purchase Order</option>';
 
             approvedPOsForGRN.forEach(po => {
@@ -6572,8 +6581,9 @@ async function loadPOItemsForGRN() {
         const response = await fetch(`${API_BASE}/purchase_orders/show.php?id=${poId}`);
         const data = await response.json();
 
-        if (data.success && data.purchase_order) {
-            const po = data.purchase_order;
+        const purchaseOrder = data.data?.purchase_order || data.purchase_order;
+        if (data.success && purchaseOrder) {
+            const po = purchaseOrder;
             currentGRNItems = po.items || [];
 
             // Display PO items for inspection
@@ -8621,8 +8631,9 @@ async function loadPendingSuppliers() {
 
         loadingIndicator.classList.add('d-none');
 
-        if (data.success && data.data && data.data.suppliers && data.data.suppliers.length > 0) {
-            tbody.innerHTML = data.data.suppliers.map(supplier => `
+        const pendingSuppliers = data.data?.suppliers || data.suppliers || [];
+        if (data.success && pendingSuppliers.length > 0) {
+            tbody.innerHTML = pendingSuppliers.map(supplier => `
                 <tr>
                     <td>
                         <strong>${supplier.username}</strong>
@@ -9130,18 +9141,19 @@ async function loadStockAdjustments(page = 1) {
 
         loadingIndicator.classList.add('d-none');
 
-        if (data.success && data.data.adjustments && data.data.adjustments.length > 0) {
-            displayStockAdjustments(data.data.adjustments);
+        const adjustments = data.data?.adjustments || data.adjustments || [];
+        if (data.success && adjustments.length > 0) {
+            displayStockAdjustments(adjustments);
             content.classList.remove('d-none');
 
             // Update summary
             if (summary) {
-                summary.textContent = `Showing ${data.data.adjustments.length} adjustment${data.data.adjustments.length === 1 ? '' : 's'}`;
+                summary.textContent = `Showing ${adjustments.length} adjustment${adjustments.length === 1 ? '' : 's'}`;
             }
 
             // Show pagination if needed
             const pagination = document.getElementById('adjustments-pagination');
-            if (data.data.adjustments.length >= itemsPerPage) {
+            if (adjustments.length >= itemsPerPage) {
                 pagination.style.display = 'block';
             } else {
                 pagination.style.display = 'none';
