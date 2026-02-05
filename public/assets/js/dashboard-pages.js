@@ -4843,7 +4843,13 @@ async function loadSuppliersPage() {
 
         <div class="d-flex justify-content-between align-items-center mb-4">
             <div class="d-flex gap-3 flex-wrap">
-                <input type="text" id="supplier-search" class="form-control" placeholder="Search suppliers..." style="width: 240px;">
+                <input type="text" id="supplier-search" class="form-control" placeholder="Search suppliers..." style="width: 320px;">
+                <select id="supplier-status-filter" class="form-select" style="width: 220px;">
+                    <option value="active">Active</option>
+                    <option value="all">All</option>
+                    <option value="inactive">Inactive</option>
+                    <option value="pending">Pending</option>
+                </select>
             </div>
             <!-- Add Supplier removed per new supplier flow -->
         </div>
@@ -4902,6 +4908,7 @@ async function loadSuppliersPage() {
 
     // Add event listeners
     document.getElementById('supplier-search').addEventListener('input', debounce(() => loadSuppliers(), 500));
+    document.getElementById('supplier-status-filter').addEventListener('change', () => loadSuppliers());
 }
 
 let allSuppliers = [];
@@ -4913,6 +4920,7 @@ async function loadSuppliers() {
     const tbody = document.getElementById('suppliers-table-body');
     const summary = document.getElementById('suppliers-summary');
     const search = document.getElementById('supplier-search').value.trim();
+    const status = document.getElementById('supplier-status-filter').value;
     const includePerformance = false;
 
     try {
@@ -4934,21 +4942,29 @@ async function loadSuppliers() {
         if (data.success && data.data.suppliers && data.data.suppliers.length > 0) {
             allSuppliers = data.data.suppliers;
             // Use the selected status filter
-            displaySuppliers(allSuppliers, 'all', search, includePerformance);
+            displaySuppliers(allSuppliers, status, search, includePerformance);
             content.classList.remove('d-none');
 
             // Update summary based on current filter
             if (summary) {
-                const filteredCount = search
-                    ? allSuppliers.filter(s => {
+                const filteredCount = allSuppliers.filter(s => {
+                    if (status !== 'all') {
+                        if (status === 'active' && !s.is_active) return false;
+                        if (status === 'inactive' && s.is_active) return false;
+                        if (status === 'pending' && s.supplier_status !== 'pending_approval') return false;
+                    }
+                    if (search) {
                         const searchLower = search.toLowerCase();
-                        return (
+                        if (!(
                             s.name?.toLowerCase().includes(searchLower) ||
                             s.email?.toLowerCase().includes(searchLower) ||
                             s.username?.toLowerCase().includes(searchLower)
-                        );
-                    }).length
-                    : allSuppliers.length;
+                        )) {
+                            return false;
+                        }
+                    }
+                    return true;
+                }).length;
                 summary.textContent = `${filteredCount} supplier${filteredCount === 1 ? '' : 's'}`;
             }
         } else {
