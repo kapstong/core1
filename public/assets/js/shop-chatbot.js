@@ -772,6 +772,8 @@
             }));
             if (data.meta && data.meta.response_source === 'llm') {
                 setAssistantStatus('AI online', 'ready');
+            } else if (data.meta && data.meta.scope === 'out_of_scope') {
+                setAssistantStatus('Scope guard', 'warning');
             } else {
                 setAssistantStatus('Fallback mode', 'warning');
             }

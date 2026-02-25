@@ -91,6 +91,8 @@ function buildChatbotReply(PDO $db, string $message, array $context, ?int $custo
     $meta['scope'] = $scope;
 
     if ($scope === 'out_of_scope') {
+        $meta['response_source'] = 'rules';
+        $meta['scope_guard'] = true;
         return [
             'reply' => 'Sorry, that prompt/request is out-of-scope to my purpose.',
             'quick_replies' => ['Checkout instructions', 'Find a product', 'Track order', 'Payment methods'],
@@ -110,6 +112,17 @@ function buildChatbotReply(PDO $db, string $message, array $context, ?int $custo
         $replyText = 'Hi! I can help with product recommendations, stock availability, checkout, shipping, returns, and orders.';
         $quickReplies = ['Browse categories', 'Find a product', 'Shipping info', 'Payment methods'];
         $links[] = navLink('Shop Home', 'index.php');
+    } elseif ($intent === 'assistant_identity') {
+        $replyText = "I'm the AI Shop Assistant for PC Parts Central.\n\n" .
+            "I can help you with:\n" .
+            "- Product recommendations and availability\n" .
+            "- Checkout and payment questions\n" .
+            "- Shipping, returns, and warranty info\n" .
+            "- Order tracking and account guidance\n\n" .
+            "Tell me what you need, and I'll help.";
+        $quickReplies = ['Find a product', 'Checkout instructions', 'Track order', 'Payment methods'];
+        $links[] = navLink('Shop Home', 'index.php');
+        $links[] = navLink('My Orders', 'orders.php');
     } elseif ($intent === 'clarification') {
         $lastAssistantIntent = (string)($historyContext['last_assistant_intent'] ?? '');
         $lastUserMessage = trim((string)($historyContext['last_user_message'] ?? ''));
@@ -406,6 +419,10 @@ function detectIntent(string $normalized): string {
 
     if (containsAny($normalized, ['hello', 'hi', 'hey', 'good morning', 'good afternoon', 'good evening'])) {
         return 'greeting';
+    }
+
+    if (containsAny($normalized, ['who are you', 'what are you', 'what can you do', 'introduce yourself'])) {
+        return 'assistant_identity';
     }
 
     if (isClarificationRequest($normalized)) {
