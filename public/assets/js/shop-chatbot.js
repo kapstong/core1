@@ -11,6 +11,7 @@
     var TYPING_MESSAGE_ID = '__typing__';
     var state = {
         open: false,
+        maximized: false,
         pending: false,
         messages: []
     };
@@ -66,6 +67,7 @@
             return;
         }
         state.open = !!parsed.open;
+        state.maximized = !!parsed.maximized;
         state.messages = parsed.messages.slice(-MAX_HISTORY).filter(function (message) {
             return message && typeof message === 'object' && (message.role === 'user' || message.role === 'bot');
         });
@@ -78,6 +80,7 @@
         try {
             sessionStorage.setItem(STORAGE_KEY, JSON.stringify({
                 open: state.open,
+                maximized: state.maximized,
                 messages: state.messages.slice(-MAX_HISTORY)
             }));
         } catch (error) {
@@ -161,6 +164,7 @@
         toggle: null,
         toggleLabel: null,
         closeBtn: null,
+        maximizeBtn: null,
         clearBtn: null,
         statusDot: null,
         statusText: null,
@@ -194,6 +198,9 @@
             '      <span class="ppc-chatbot-status-text" data-chatbot-status-text>Ready</span>',
             '    </div>',
             '    <div class="ppc-chatbot-header-actions">',
+            '      <button type="button" class="ppc-chatbot-icon-btn" data-chatbot-action="maximize" title="Expand chat" aria-label="Expand chat">',
+            '        <i class="fas fa-expand"></i>',
+            '      </button>',
             '      <button type="button" class="ppc-chatbot-icon-btn" data-chatbot-action="clear" title="Clear chat" aria-label="Clear chat">',
             '        <i class="fas fa-trash-alt"></i>',
             '      </button>',
@@ -227,6 +234,7 @@
         refs.toggle = root.querySelector('.ppc-chatbot-toggle');
         refs.toggleLabel = root.querySelector('.ppc-chatbot-toggle-label');
         refs.closeBtn = root.querySelector('[data-chatbot-action="close"]');
+        refs.maximizeBtn = root.querySelector('[data-chatbot-action="maximize"]');
         refs.clearBtn = root.querySelector('[data-chatbot-action="clear"]');
         refs.statusDot = root.querySelector('[data-chatbot-status-dot]');
         refs.statusText = root.querySelector('[data-chatbot-status-text]');
@@ -257,6 +265,17 @@
             renderOpenState();
         });
 
+        if (refs.maximizeBtn) {
+            refs.maximizeBtn.addEventListener('click', function () {
+                state.maximized = !state.maximized;
+                saveState();
+                renderPanelModeState();
+                if (state.open) {
+                    scrollMessagesToBottom();
+                }
+            });
+        }
+
         refs.clearBtn.addEventListener('click', function () {
             state.messages = [];
             saveState();
@@ -281,6 +300,7 @@
             return;
         }
         refs.panel.classList.toggle('is-open', !!state.open);
+        refs.panel.classList.toggle('is-opening', !!state.open);
         refs.panel.setAttribute('aria-hidden', state.open ? 'false' : 'true');
         refs.toggle.setAttribute('aria-expanded', state.open ? 'true' : 'false');
         if (refs.toggleLabel) {
@@ -289,6 +309,28 @@
         refs.toggle.innerHTML = state.open
             ? '<span class="ppc-chatbot-toggle-glow" aria-hidden="true"></span><i class="fas fa-minus"></i>'
             : '<span class="ppc-chatbot-toggle-glow" aria-hidden="true"></span><i class="fas fa-comments"></i>';
+        renderPanelModeState();
+    }
+
+    function renderPanelModeState() {
+        if (!refs.root || !refs.panel) {
+            return;
+        }
+
+        var canMaximize = !!state.open;
+        var shouldMaximize = canMaximize && !!state.maximized;
+
+        refs.root.classList.toggle('is-panel-maximized', shouldMaximize);
+        refs.panel.classList.toggle('is-maximized', shouldMaximize);
+
+        if (refs.maximizeBtn) {
+            refs.maximizeBtn.classList.toggle('is-active', shouldMaximize);
+            refs.maximizeBtn.title = shouldMaximize ? 'Restore chat size' : 'Expand chat';
+            refs.maximizeBtn.setAttribute('aria-label', shouldMaximize ? 'Restore chat size' : 'Expand chat');
+            refs.maximizeBtn.innerHTML = shouldMaximize
+                ? '<i class="fas fa-compress"></i>'
+                : '<i class="fas fa-expand"></i>';
+        }
     }
 
     function scrollMessagesToBottom() {
@@ -378,7 +420,12 @@
         var wrapper = document.createElement('div');
         wrapper.className = 'ppc-chatbot-typing';
         wrapper.setAttribute('aria-label', 'Assistant is typing');
-        wrapper.innerHTML = '<span></span><span></span><span></span>';
+        wrapper.innerHTML = [
+            '<span class="ppc-chatbot-typing-text">Typing</span>',
+            '<span class="ppc-chatbot-typing-dots" aria-hidden="true">',
+            '  <span></span><span></span><span></span>',
+            '</span>'
+        ].join('');
         parentBubble.appendChild(wrapper);
     }
 

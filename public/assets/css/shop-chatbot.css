@@ -81,16 +81,68 @@
     overflow: hidden;
     margin-bottom: 0;
     position: relative;
+    transform-origin: bottom right;
+    will-change: transform, opacity;
 }
 
 .ppc-chatbot-panel.is-open {
     display: flex;
+    animation: ppc-chatbot-panel-open 0.22s cubic-bezier(0.2, 0.9, 0.22, 1) both;
+}
+
+.ppc-chatbot-panel.is-open.is-maximized {
+    animation: ppc-chatbot-panel-open-centered 0.22s cubic-bezier(0.2, 0.9, 0.22, 1) both;
+}
+
+.ppc-chatbot-panel.is-maximized {
+    position: fixed;
+    left: 50%;
+    top: 50%;
+    width: min(920px, calc(100vw - 4rem));
+    height: min(780px, calc(100vh - 4rem));
+    max-height: calc(100vh - 2rem);
+    margin: 0;
+    border-radius: 22px;
+    transform: translate(-50%, -50%);
+    box-shadow: 0 32px 72px rgba(0, 0, 0, 0.58);
+    z-index: 1200;
+}
+
+.ppc-chatbot-root.is-panel-maximized .ppc-chatbot-toggle-label {
+    display: none;
+}
+
+@keyframes ppc-chatbot-panel-open {
+    0% {
+        opacity: 0;
+        transform: translateY(10px) scale(0.985);
+    }
+    100% {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
+}
+
+@keyframes ppc-chatbot-panel-open-centered {
+    0% {
+        opacity: 0;
+        transform: translate(-50%, calc(-50% + 10px)) scale(0.985);
+    }
+    100% {
+        opacity: 1;
+        transform: translate(-50%, -50%) scale(1);
+    }
 }
 
 @supports (height: 100dvh) {
     .ppc-chatbot-panel {
         height: min(640px, calc(100dvh - 10rem));
         max-height: calc(100dvh - 5.5rem);
+    }
+
+    .ppc-chatbot-panel.is-maximized {
+        height: min(780px, calc(100dvh - 4rem));
+        max-height: calc(100dvh - 2rem);
     }
 }
 
@@ -212,10 +264,18 @@
     cursor: pointer;
     touch-action: manipulation;
     -webkit-tap-highlight-color: transparent;
+    transition: background 0.16s ease, transform 0.16s ease, color 0.16s ease, box-shadow 0.16s ease;
 }
 
 .ppc-chatbot-icon-btn:hover {
     background: rgba(148, 163, 184, 0.2);
+    transform: translateY(-1px);
+}
+
+.ppc-chatbot-icon-btn.is-active {
+    background: rgba(0, 245, 255, 0.14);
+    color: #a5f3fc;
+    box-shadow: inset 0 0 0 1px rgba(0, 245, 255, 0.18);
 }
 
 .ppc-chatbot-messages {
@@ -467,10 +527,26 @@
 .ppc-chatbot-typing {
     display: inline-flex;
     align-items: center;
-    gap: 0.25rem;
+    gap: 0.32rem;
+    color: #cbd5e1;
+    font-size: 0.82rem;
+    line-height: 1;
 }
 
-.ppc-chatbot-typing span {
+.ppc-chatbot-typing-text {
+    letter-spacing: 0.02em;
+    opacity: 0.9;
+    animation: ppc-chatbot-typing-text 1.25s ease-in-out infinite;
+}
+
+.ppc-chatbot-typing-dots {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.2rem;
+    min-width: 22px;
+}
+
+.ppc-chatbot-typing-dots span {
     width: 6px;
     height: 6px;
     border-radius: 50%;
@@ -479,12 +555,21 @@
     animation: ppc-chatbot-typing 1.2s infinite ease-in-out;
 }
 
-.ppc-chatbot-typing span:nth-child(2) {
+.ppc-chatbot-typing-dots span:nth-child(2) {
     animation-delay: 0.15s;
 }
 
-.ppc-chatbot-typing span:nth-child(3) {
+.ppc-chatbot-typing-dots span:nth-child(3) {
     animation-delay: 0.3s;
+}
+
+@keyframes ppc-chatbot-typing-text {
+    0%, 100% {
+        opacity: 0.72;
+    }
+    50% {
+        opacity: 1;
+    }
 }
 
 @keyframes ppc-chatbot-typing {
@@ -577,10 +662,22 @@
         margin-bottom: 0.55rem;
     }
 
+    .ppc-chatbot-panel.is-maximized {
+        width: min(720px, calc(100vw - 1.25rem));
+        height: min(88vh, 700px);
+        max-height: calc(100vh - 1.1rem);
+        border-radius: 18px;
+    }
+
     @supports (height: 100dvh) {
         .ppc-chatbot-panel {
             height: min(76dvh, 560px);
             max-height: calc(100dvh - 5rem);
+        }
+
+        .ppc-chatbot-panel.is-maximized {
+            height: min(88dvh, 700px);
+            max-height: calc(100dvh - 1.1rem);
         }
     }
 
@@ -644,10 +741,22 @@
         max-height: calc(100vh - 4.2rem);
     }
 
+    .ppc-chatbot-panel.is-maximized {
+        width: calc(100vw - 0.7rem);
+        height: min(92vh, 760px);
+        max-height: calc(100vh - 0.7rem);
+        border-radius: 16px;
+    }
+
     @supports (height: 100dvh) {
         .ppc-chatbot-panel {
             height: min(78dvh, 580px);
             max-height: calc(100dvh - 4.2rem);
+        }
+
+        .ppc-chatbot-panel.is-maximized {
+            height: min(92dvh, 760px);
+            max-height: calc(100dvh - 0.7rem);
         }
     }
 
@@ -681,10 +790,20 @@
         max-height: calc(100vh - 2.8rem);
     }
 
+    .ppc-chatbot-panel.is-maximized {
+        height: min(95vh, 560px);
+        max-height: calc(100vh - 0.7rem);
+    }
+
     @supports (height: 100dvh) {
         .ppc-chatbot-panel {
             height: min(82dvh, 460px);
             max-height: calc(100dvh - 2.8rem);
+        }
+
+        .ppc-chatbot-panel.is-maximized {
+            height: min(95dvh, 560px);
+            max-height: calc(100dvh - 0.7rem);
         }
     }
 }
