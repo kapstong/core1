@@ -435,6 +435,9 @@ function searchProductsForChatbot(PDO $db, string $query, int $limit = 5, ?float
         return [];
     }
 
+    $searchLike = '%' . $query . '%';
+    $prefixLike = $query . '%';
+
     $sql = "
         SELECT
             p.id,
@@ -452,11 +455,11 @@ function searchProductsForChatbot(PDO $db, string $query, int $limit = 5, ?float
           AND p.deleted_at IS NULL
           AND c.is_active = 1
           AND (
-              p.name LIKE :search
-              OR COALESCE(p.description, '') LIKE :search
-              OR COALESCE(p.brand, '') LIKE :search
-              OR c.name LIKE :search
-              OR COALESCE(p.sku, '') LIKE :search
+              p.name LIKE :search_name
+              OR COALESCE(p.description, '') LIKE :search_description
+              OR COALESCE(p.brand, '') LIKE :search_brand
+              OR c.name LIKE :search_category
+              OR COALESCE(p.sku, '') LIKE :search_sku
           )
     ";
 
@@ -473,8 +476,12 @@ function searchProductsForChatbot(PDO $db, string $query, int $limit = 5, ?float
     ";
 
     $stmt = $db->prepare($sql);
-    $stmt->bindValue(':search', '%' . $query . '%');
-    $stmt->bindValue(':prefix_search', $query . '%');
+    $stmt->bindValue(':search_name', $searchLike);
+    $stmt->bindValue(':search_description', $searchLike);
+    $stmt->bindValue(':search_brand', $searchLike);
+    $stmt->bindValue(':search_category', $searchLike);
+    $stmt->bindValue(':search_sku', $searchLike);
+    $stmt->bindValue(':prefix_search', $prefixLike);
     if ($budget !== null) {
         $stmt->bindValue(':budget', $budget);
     }
