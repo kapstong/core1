@@ -86,14 +86,66 @@ function buildChatbotReply(PDO $db, string $message, array $context, ?int $custo
         'intent' => $intent,
         'page' => isset($context['page']) ? (string)$context['page'] : null
     ];
+    $historyContext = extractChatHistoryContext($history);
 
     if ($intent === 'thanks') {
-        $replyText = 'You\'re welcome! I can help with products, orders, checkout, shipping, returns, and payment questions.';
+        $replyText = 'You\'re welcome. If you want, I can also help you compare products, check stock, or guide you through checkout.';
         $quickReplies = ['Find products', 'Shipping info', 'Return policy', 'Order help'];
     } elseif ($intent === 'greeting') {
-        $replyText = 'Hi! I\'m the shop assistant. Ask me about products, stock availability, checkout, shipping, returns, or your orders.';
+        $replyText = 'Hi! I can help with product recommendations, stock availability, checkout, shipping, returns, and orders.';
         $quickReplies = ['Browse categories', 'Find a product', 'Shipping info', 'Payment methods'];
         $links[] = navLink('Shop Home', 'index.php');
+    } elseif ($intent === 'availability_filter') {
+        $source = 'none';
+        $priorProducts = filterInStockProductMatches($historyContext['last_assistant_products'] ?? []);
+
+        if (!empty($priorProducts)) {
+            $productMatches = array_slice($priorProducts, 0, 5);
+            $source = 'history_products';
+        } else {
+            $previousUserMessage = (string)($historyContext['last_user_message'] ?? '');
+            $previousNormalized = normalizeMessage($previousUserMessage);
+            $previousSearchQuery = extractProductSearchTerm($previousUserMessage, $previousNormalized);
+            $previousBudget = extractBudgetValue($previousNormalized);
+
+            if ($previousSearchQuery !== '') {
+                $candidateMatches = searchProductsForChatbot($db, $previousSearchQuery, 8, $previousBudget);
+                $productMatches = array_slice(filterInStockProductMatches($candidateMatches), 0, 5);
+                if (!empty($productMatches)) {
+                    $source = 'previous_search';
+                    $meta['availability_search_query'] = $previousSearchQuery;
+                    if ($previousBudget !== null) {
+                        $meta['budget'] = $previousBudget;
+                    }
+                }
+            }
+        }
+
+        if (empty($productMatches)) {
+            $productMatches = fetchFeaturedInStockProducts($db, 5);
+            if (!empty($productMatches)) {
+                $source = 'featured_in_stock';
+            }
+        }
+
+        $meta['availability_source'] = $source;
+        $meta['availability_query'] = true;
+
+        if (!empty($productMatches)) {
+            if ($source === 'history_products') {
+                $replyText = 'Absolutely. Here are the items from the last list that are currently in stock.';
+            } elseif ($source === 'previous_search') {
+                $replyText = 'Sure. I filtered the previous search and kept only the items that are currently in stock.';
+            } else {
+                $replyText = 'Sure. Here are some products that are currently in stock right now.';
+            }
+            $quickReplies = ['Show cheaper options', 'Browse categories', 'Cart', 'Checkout'];
+            $links[] = navLink('Browse Products', 'index.php#products');
+        } else {
+            $replyText = 'I can filter for in-stock items, but I need a product type or keyword first. Try something like "SSD in stock", "GPU in stock", or "Find Ryzen under 10000".';
+            $quickReplies = ['Find SSD', 'Find GPU', 'Browse categories', 'Payment methods'];
+            $links[] = navLink('Shop Home', 'index.php');
+        }
     } elseif ($intent === 'categories') {
         $categories = fetchCategorySummaries($db, 8);
         if (!empty($categories)) {
@@ -110,12 +162,12 @@ function buildChatbotReply(PDO $db, string $message, array $context, ?int $custo
         }
         $quickReplies = ['Processors', 'Graphics cards', 'Storage', 'Cooling'];
     } elseif ($intent === 'shipping') {
-        $replyText = 'We support delivery and in-store pickup. Shipping fees and delivery time depend on your location and selected shipping option during checkout.';
+        $replyText = 'We support delivery and in-store pickup. Shipping cost and delivery time depend on your location and the option you choose during checkout.';
         $quickReplies = ['Checkout help', 'Payment methods', 'Track my order', 'Return policy'];
         $links[] = navLink('Go to Checkout', 'checkout.php');
         $links[] = navLink('My Orders', 'orders.php');
     } elseif ($intent === 'payment') {
-        $replyText = 'Common payment options in the shop include cash (for pickup/COD where applicable), cards, bank transfer, and supported digital wallets. Available methods are shown during checkout.';
+        $replyText = 'Payment options usually include cash (pickup/COD where available), cards, bank transfer, and supported digital wallets. The final available options are shown during checkout.';
         $quickReplies = ['Checkout help', 'Shipping info', 'Is my order confirmed?', 'Return policy'];
         $links[] = navLink('Checkout', 'checkout.php');
     } elseif ($intent === 'returns') {
@@ -132,12 +184,12 @@ function buildChatbotReply(PDO $db, string $message, array $context, ?int $custo
         $links[] = navLink('Cart', 'cart.php');
         $links[] = navLink('Checkout', 'checkout.php');
     } elseif ($intent === 'checkout') {
-        $replyText = 'At checkout, fill in billing/shipping details, choose a payment method, review the order summary, then place your order. I can also help explain shipping or payment options.';
+        $replyText = 'At checkout, enter billing/shipping details, choose a payment method, review the order summary, then place your order. I can also help with shipping or payment questions.';
         $quickReplies = ['Shipping info', 'Payment methods', 'Order help', 'Cart'];
         $links[] = navLink('Checkout', 'checkout.php');
         $links[] = navLink('Cart', 'cart.php');
     } elseif ($intent === 'auth') {
-        $replyText = 'For account access, you can log in, register, or reset your password from the customer account pages. If you already ordered, use the same email to track your order history.';
+        $replyText = 'For account access, you can log in, register, or reset your password on the customer account pages. If you already placed an order, use the same email so you can see your order history.';
         $quickReplies = ['Login', 'Register', 'Reset password', 'My orders'];
         $links[] = navLink('Customer Login', 'login.php');
         $links[] = navLink('Register', 'register.php');
@@ -165,21 +217,29 @@ function buildChatbotReply(PDO $db, string $message, array $context, ?int $custo
         $quickReplies = ['My orders', 'Order details', 'Cancel an order', 'Return policy'];
         $links[] = navLink('My Orders', 'orders.php');
     } elseif ($intent === 'contact') {
-        $replyText = 'For account-specific or urgent concerns, please contact the shop team directly. You can also use the help/FAQ sections while browsing products and orders.';
+        $replyText = 'For account-specific or urgent concerns, please contact the shop team directly. I can still help with product search, checkout steps, shipping, and order guidance.';
         $quickReplies = ['Order help', 'Return policy', 'Shipping info', 'Find products'];
         $links[] = navLink('Shop Home', 'index.php');
         $links[] = navLink('My Profile', 'profile.php');
     } elseif ($intent === 'compatibility') {
-        $replyText = 'I can help you find parts, but compatibility should still be verified (socket, motherboard chipset, RAM type/speed, PSU wattage, case clearance, and GPU length). Tell me the component you need and your budget.';
+        $replyText = 'I can help you shortlist parts, but compatibility should still be verified (socket, chipset, RAM type, PSU wattage, case clearance, GPU length). Tell me what part you need and your budget.';
         $quickReplies = ['Find CPU', 'Find GPU', 'Find motherboard', 'Find RAM'];
         $links[] = navLink('Browse Products', 'index.php#products');
     } else {
         $searchQuery = extractProductSearchTerm($message, $normalized);
         $budget = extractBudgetValue($normalized);
+        $availabilityOnly = isAvailabilityRequest($normalized);
         $productMatches = searchProductsForChatbot($db, $searchQuery, 5, $budget);
 
+        if ($availabilityOnly) {
+            $productMatches = filterInStockProductMatches($productMatches);
+            $meta['availability_query'] = true;
+        }
+
         if (!empty($productMatches)) {
-            $replyText = 'I found some products that match';
+            $replyText = $availabilityOnly
+                ? 'Here are matching items that are currently in stock'
+                : 'I found a few products that match';
             if ($searchQuery !== '') {
                 $replyText .= ' "' . $searchQuery . '"';
             }
@@ -187,22 +247,23 @@ function buildChatbotReply(PDO $db, string $message, array $context, ?int $custo
                 $replyText .= ' under ' . formatCurrency($budget);
             }
             $replyText .= '.';
+            if ($availabilityOnly) {
+                $replyText .= ' You can open any item below for details.';
+            }
 
             $links[] = navLink('Browse More Products', 'index.php#products');
             $quickReplies = ['Show in-stock items', 'Browse categories', 'Cart', 'Checkout'];
             $meta['budget'] = $budget;
         } else {
-            if ($searchQuery !== '') {
-                $replyText = 'I couldn\'t find a direct product match for "' . $searchQuery . '". Try a broader keyword (brand, category, or part type), like "RTX", "Ryzen", "SSD", or "motherboard".';
+            if (isAvailabilityQuickReplyRequest($normalized)) {
+                $replyText = 'I can do that. Tell me what kind of item you want in stock (for example: SSD, GPU, motherboard, or Ryzen CPU), and I\'ll filter it for you.';
+            } elseif ($searchQuery !== '') {
+                $replyText = 'I couldn\'t find a direct match for "' . $searchQuery . '". Try a broader keyword like "RTX", "Ryzen", "SSD", or "motherboard", and I can narrow it down from there.';
             } else {
-                $replyText = 'I can help with product search, stock questions, checkout, shipping, returns, payments, and order help. Try asking: "Find SSD under 5000" or "What are your payment methods?"';
+                $replyText = 'I can help with product search, stock questions, checkout, shipping, returns, payments, and orders. Try "Find SSD under 5000" or "What payment methods are available?"';
             }
             $quickReplies = ['Find SSD', 'Browse categories', 'Payment methods', 'Shipping info'];
             $links[] = navLink('Shop Home', 'index.php');
-        }
-
-        if (containsAny($normalized, ['in stock', 'available stock', 'available'])) {
-            $meta['availability_query'] = true;
         }
     }
 
@@ -274,6 +335,10 @@ function detectIntent(string $normalized): string {
         return 'compatibility';
     }
 
+    if (isAvailabilityRequest($normalized)) {
+        return 'availability_filter';
+    }
+
     if (containsAny($normalized, ['find', 'search', 'looking for', 'show me', 'recommend', 'suggest'])) {
         return 'product_search';
     }
@@ -300,6 +365,28 @@ function containsAny(string $text, array $needles): bool {
         }
     }
     return false;
+}
+
+function isAvailabilityRequest(string $normalized): bool {
+    return containsAny($normalized, [
+        'in stock',
+        'in-stock',
+        'available stock',
+        'available items',
+        'available products',
+        'show in-stock items',
+        'show in stock items',
+        'stock available'
+    ]);
+}
+
+function isAvailabilityQuickReplyRequest(string $normalized): bool {
+    return containsAny($normalized, [
+        'show in-stock items',
+        'show in stock items',
+        'in-stock items',
+        'in stock items'
+    ]);
 }
 
 function defaultQuickReplies(): array {
@@ -345,6 +432,82 @@ function dedupeLinks(array $links): array {
     return $deduped;
 }
 
+function extractChatHistoryContext(array $history): array {
+    $lastAssistantProducts = [];
+    $lastUserMessage = '';
+    $lastAssistantIntent = null;
+
+    for ($i = count($history) - 1; $i >= 0; $i--) {
+        $item = $history[$i];
+        if (!is_array($item)) {
+            continue;
+        }
+
+        $role = strtolower(trim((string)($item['role'] ?? '')));
+
+        if ($role === 'user' && $lastUserMessage === '') {
+            $candidate = trim((string)($item['text'] ?? ''));
+            if ($candidate !== '') {
+                $lastUserMessage = $candidate;
+            }
+        }
+
+        if (($role === 'bot' || $role === 'assistant') && empty($lastAssistantProducts)) {
+            if (isset($item['products']) && is_array($item['products'])) {
+                $lastAssistantProducts = normalizeHistoryProductMatches($item['products']);
+            }
+            if (isset($item['meta']) && is_array($item['meta']) && isset($item['meta']['intent'])) {
+                $lastAssistantIntent = (string)$item['meta']['intent'];
+            }
+        }
+
+        if ($lastUserMessage !== '' && !empty($lastAssistantProducts)) {
+            break;
+        }
+    }
+
+    return [
+        'last_user_message' => $lastUserMessage,
+        'last_assistant_products' => $lastAssistantProducts,
+        'last_assistant_intent' => $lastAssistantIntent
+    ];
+}
+
+function normalizeHistoryProductMatches(array $products): array {
+    $normalized = [];
+
+    foreach ($products as $product) {
+        if (!is_array($product)) {
+            continue;
+        }
+
+        if (empty($product['name']) || empty($product['url'])) {
+            continue;
+        }
+
+        $normalized[] = [
+            'id' => isset($product['id']) ? (int)$product['id'] : null,
+            'name' => (string)$product['name'],
+            'brand' => isset($product['brand']) && $product['brand'] !== null ? (string)$product['brand'] : null,
+            'sku' => isset($product['sku']) && $product['sku'] !== null ? (string)$product['sku'] : null,
+            'category' => isset($product['category']) && $product['category'] !== null ? (string)$product['category'] : null,
+            'price' => isset($product['price']) ? (float)$product['price'] : null,
+            'price_formatted' => isset($product['price_formatted']) ? (string)$product['price_formatted'] : null,
+            'in_stock' => !empty($product['in_stock']),
+            'quantity_available' => isset($product['quantity_available']) ? (int)$product['quantity_available'] : 0,
+            'url' => (string)$product['url']
+        ];
+    }
+
+    return $normalized;
+}
+
+function filterInStockProductMatches(array $products): array {
+    return array_values(array_filter($products, function ($product) {
+        return is_array($product) && !empty($product['in_stock']);
+    }));
+}
+
 function fetchCategorySummaries(PDO $db, int $limit = 8): array {
     $sql = "
         SELECT
@@ -374,6 +537,50 @@ function fetchCategorySummaries(PDO $db, int $limit = 8): array {
             'id' => (int)$row['id'],
             'name' => (string)$row['name'],
             'product_count' => (int)$row['product_count']
+        ];
+    }, $rows);
+}
+
+function fetchFeaturedInStockProducts(PDO $db, int $limit = 5): array {
+    $sql = "
+        SELECT
+            p.id,
+            p.name,
+            p.brand,
+            p.sku,
+            p.selling_price,
+            c.name AS category_name,
+            COALESCE(i.quantity_available, 0) AS quantity_available
+        FROM products p
+        INNER JOIN categories c ON c.id = p.category_id
+        LEFT JOIN inventory i ON i.product_id = p.id
+        WHERE p.is_active = 1
+          AND p.deleted_at IS NULL
+          AND c.is_active = 1
+          AND COALESCE(i.quantity_available, 0) > 0
+        ORDER BY COALESCE(i.quantity_available, 0) DESC, p.selling_price ASC
+        LIMIT :limit
+    ";
+
+    $stmt = $db->prepare($sql);
+    $stmt->bindValue(':limit', max(1, min(10, $limit)), PDO::PARAM_INT);
+    $stmt->execute();
+
+    $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+    return array_map(function ($row) {
+        $qty = (int)$row['quantity_available'];
+        return [
+            'id' => (int)$row['id'],
+            'name' => (string)$row['name'],
+            'brand' => $row['brand'] ? (string)$row['brand'] : null,
+            'sku' => $row['sku'] ? (string)$row['sku'] : null,
+            'category' => (string)$row['category_name'],
+            'price' => (float)$row['selling_price'],
+            'price_formatted' => formatCurrency((float)$row['selling_price']),
+            'in_stock' => $qty > 0,
+            'quantity_available' => $qty,
+            'url' => 'product.php?id=' . (int)$row['id']
         ];
     }, $rows);
 }
@@ -639,6 +846,9 @@ function buildShopAssistantSystemPrompt(array $llmConfig): string {
     $basePrompt = implode("\n", [
         'You are the customer-facing AI assistant for PC Parts Central (an online PC parts shop).',
         'You help with product questions, stock, checkout, shipping, payment methods, returns, warranties, and order guidance.',
+        'Speak like a helpful store staff member: warm, natural, and professional (not robotic).',
+        'Acknowledge the user\'s request briefly, then answer directly.',
+        'When the user is vague, ask one short clarifying question instead of guessing.',
         'Stay within shop-related support. If the user asks unrelated questions, redirect politely to shop support topics.',
         'Do not invent policies, stock, order status, prices, or delivery times. Use the provided context. If a detail is missing, say it is not available and direct the user to the relevant page or support staff.',
         'Be concise, clear, and helpful. Prefer short paragraphs or bullet-like sentences, but return plain text only.',

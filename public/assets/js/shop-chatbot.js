@@ -573,10 +573,35 @@
             })
             .slice(-8)
             .map(function (message) {
-                return {
+                var item = {
                     role: message.role,
                     text: String(message.text || '')
                 };
+                if (message.role === 'bot') {
+                    if (Array.isArray(message.products) && message.products.length) {
+                        item.products = message.products.slice(0, 5).map(function (product) {
+                            return {
+                                id: product.id,
+                                name: product.name,
+                                brand: product.brand,
+                                sku: product.sku,
+                                category: product.category,
+                                price: product.price,
+                                price_formatted: product.price_formatted,
+                                in_stock: product.in_stock,
+                                quantity_available: product.quantity_available,
+                                url: product.url
+                            };
+                        });
+                    }
+                    if (message.meta && typeof message.meta === 'object') {
+                        item.meta = {
+                            intent: message.meta.intent || null,
+                            response_source: message.meta.response_source || null
+                        };
+                    }
+                }
+                return item;
             });
     }
 
