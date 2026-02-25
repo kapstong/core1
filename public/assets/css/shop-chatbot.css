@@ -333,6 +333,31 @@
     margin-top: 0.45rem;
 }
 
+.ppc-chatbot-bubble ul,
+.ppc-chatbot-bubble ol {
+    margin: 0.4rem 0 0 1.1rem;
+    padding: 0;
+}
+
+.ppc-chatbot-bubble p + ul,
+.ppc-chatbot-bubble p + ol,
+.ppc-chatbot-bubble ul + p,
+.ppc-chatbot-bubble ol + p,
+.ppc-chatbot-bubble ul + ul,
+.ppc-chatbot-bubble ol + ol,
+.ppc-chatbot-bubble ul + ol,
+.ppc-chatbot-bubble ol + ul {
+    margin-top: 0.45rem;
+}
+
+.ppc-chatbot-bubble li {
+    margin: 0;
+}
+
+.ppc-chatbot-bubble li + li {
+    margin-top: 0.18rem;
+}
+
 .ppc-chatbot-products {
     margin-top: 0.55rem;
     display: grid;

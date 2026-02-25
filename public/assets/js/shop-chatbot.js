@@ -305,22 +305,73 @@
     }
 
     function appendTextParagraphs(container, text) {
-        var parts = String(text || '').split(/\n+/).map(function (part) {
-            return part.trim();
-        }).filter(Boolean);
+        var lines = String(text || '').replace(/\r\n/g, '\n').split('\n');
+        var hasContent = lines.some(function (line) {
+            return line.trim() !== '';
+        });
 
-        if (parts.length === 0) {
+        if (!hasContent) {
             var empty = document.createElement('p');
             empty.textContent = '';
             container.appendChild(empty);
             return;
         }
 
-        parts.forEach(function (part) {
+        var i = 0;
+        while (i < lines.length) {
+            var line = (lines[i] || '').trim();
+
+            if (!line) {
+                i += 1;
+                continue;
+            }
+
+            var bulletMatch = line.match(/^[-*•]\s+(.+)$/);
+            if (bulletMatch) {
+                var ul = document.createElement('ul');
+                while (i < lines.length) {
+                    var bulletLine = (lines[i] || '').trim();
+                    var bulletItemMatch = bulletLine.match(/^[-*•]\s+(.+)$/);
+                    if (!bulletItemMatch) {
+                        break;
+                    }
+                    var li = document.createElement('li');
+                    li.textContent = bulletItemMatch[1];
+                    ul.appendChild(li);
+                    i += 1;
+                }
+                container.appendChild(ul);
+                continue;
+            }
+
+            var numberedMatch = line.match(/^(\d+)[\.\)]\s+(.+)$/);
+            if (numberedMatch) {
+                var ol = document.createElement('ol');
+                var startValue = parseInt(numberedMatch[1], 10);
+                if (!Number.isNaN(startValue) && startValue > 1) {
+                    ol.start = startValue;
+                }
+
+                while (i < lines.length) {
+                    var numberedLine = (lines[i] || '').trim();
+                    var numberedItemMatch = numberedLine.match(/^(\d+)[\.\)]\s+(.+)$/);
+                    if (!numberedItemMatch) {
+                        break;
+                    }
+                    var oli = document.createElement('li');
+                    oli.textContent = numberedItemMatch[2];
+                    ol.appendChild(oli);
+                    i += 1;
+                }
+                container.appendChild(ol);
+                continue;
+            }
+
             var p = document.createElement('p');
-            p.textContent = part;
+            p.textContent = line;
             container.appendChild(p);
-        });
+            i += 1;
+        }
     }
 
     function renderTypingBubble(parentBubble) {
