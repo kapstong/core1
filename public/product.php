@@ -1188,5 +1188,6 @@ if (MaintenanceMode::handle()) {
             loadProduct();
         });
     </script>
+<?php include __DIR__ . '/includes/shop-chatbot.php'; ?>
 </body>
 </html>

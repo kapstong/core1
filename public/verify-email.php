@@ -397,5 +397,6 @@ if (!empty($token)) {
         }, 1000);
         <?php endif; ?>
     </script>
+<?php include __DIR__ . '/includes/shop-chatbot.php'; ?>
 </body>
 </html>

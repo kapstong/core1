@@ -1309,5 +1309,6 @@ if (MaintenanceMode::handle()) {
 
     <!-- User Manual System -->
     <script src="assets/js/user-manual.js"></script>
+<?php include __DIR__ . '/includes/shop-chatbot.php'; ?>
 </body>
 </html>

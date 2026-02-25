@@ -471,5 +471,6 @@ if (!isset($_SESSION['customer_id'])) {
             loadOrders();
         });
     </script>
+<?php include __DIR__ . '/includes/shop-chatbot.php'; ?>
 </body>
 </html>

@@ -1353,5 +1353,6 @@ if (isset($_SESSION['user_id']) && isset($_SESSION['user_role'])) {
             }
         });
     </script>
+<?php include __DIR__ . '/includes/shop-chatbot.php'; ?>
 </body>
 </html>
