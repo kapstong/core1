@@ -309,10 +309,11 @@
     display: flex;
     align-items: flex-end;
     gap: 0.55rem;
+    width: 100%;
 }
 
 .ppc-chatbot-row.user {
-    justify-content: flex-end;
+    justify-content: flex-start;
     flex-direction: row-reverse;
 }
 
