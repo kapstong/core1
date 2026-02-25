@@ -159,8 +159,11 @@
         root: null,
         panel: null,
         toggle: null,
+        toggleLabel: null,
         closeBtn: null,
         clearBtn: null,
+        statusDot: null,
+        statusText: null,
         messages: null,
         form: null,
         input: null,
@@ -177,13 +180,18 @@
         root.className = 'ppc-chatbot-root';
         root.innerHTML = [
             '<section class="ppc-chatbot-panel" aria-label="Shop assistant chat panel" aria-hidden="true">',
+            '  <div class="ppc-chatbot-panel-accent" aria-hidden="true"></div>',
             '  <div class="ppc-chatbot-header">',
             '    <div class="ppc-chatbot-title">',
             '      <div class="ppc-chatbot-title-badge" aria-hidden="true"><i class="fas fa-robot"></i></div>',
             '      <div class="ppc-chatbot-title-text">',
-            '        <strong>Shop Assistant</strong>',
-            '        <span>Product, order, and checkout help</span>',
+            '        <strong>AI Shop Assistant</strong>',
+            '        <span>Products, orders, checkout, and support help</span>',
             '      </div>',
+            '    </div>',
+            '    <div class="ppc-chatbot-status" title="Assistant status">',
+            '      <span class="ppc-chatbot-status-dot" data-chatbot-status-dot></span>',
+            '      <span class="ppc-chatbot-status-text" data-chatbot-status-text>Ready</span>',
             '    </div>',
             '    <div class="ppc-chatbot-header-actions">',
             '      <button type="button" class="ppc-chatbot-icon-btn" data-chatbot-action="clear" title="Clear chat" aria-label="Clear chat">',
@@ -205,7 +213,9 @@
             '    <div class="ppc-chatbot-footer-hint">Tip: Try "Find SSD under 5000" or "What payment methods are available?"</div>',
             '  </div>',
             '</section>',
+            '<div class="ppc-chatbot-toggle-label" aria-hidden="true">Need help?</div>',
             '<button type="button" class="ppc-chatbot-toggle" aria-expanded="false" aria-controls="ppc-shop-chatbot-root" aria-label="Open shop assistant">',
+            '  <span class="ppc-chatbot-toggle-glow" aria-hidden="true"></span>',
             '  <i class="fas fa-comments"></i>',
             '</button>'
         ].join('');
@@ -215,8 +225,11 @@
         refs.root = root;
         refs.panel = root.querySelector('.ppc-chatbot-panel');
         refs.toggle = root.querySelector('.ppc-chatbot-toggle');
+        refs.toggleLabel = root.querySelector('.ppc-chatbot-toggle-label');
         refs.closeBtn = root.querySelector('[data-chatbot-action="close"]');
         refs.clearBtn = root.querySelector('[data-chatbot-action="clear"]');
+        refs.statusDot = root.querySelector('[data-chatbot-status-dot]');
+        refs.statusText = root.querySelector('[data-chatbot-status-text]');
         refs.messages = root.querySelector('.ppc-chatbot-messages');
         refs.form = root.querySelector('.ppc-chatbot-form');
         refs.input = root.querySelector('.ppc-chatbot-input');
@@ -270,9 +283,12 @@
         refs.panel.classList.toggle('is-open', !!state.open);
         refs.panel.setAttribute('aria-hidden', state.open ? 'false' : 'true');
         refs.toggle.setAttribute('aria-expanded', state.open ? 'true' : 'false');
+        if (refs.toggleLabel) {
+            refs.toggleLabel.classList.toggle('ppc-chatbot-hidden', !!state.open);
+        }
         refs.toggle.innerHTML = state.open
-            ? '<i class="fas fa-minus"></i>'
-            : '<i class="fas fa-comments"></i>';
+            ? '<span class="ppc-chatbot-toggle-glow" aria-hidden="true"></span><i class="fas fa-minus"></i>'
+            : '<span class="ppc-chatbot-toggle-glow" aria-hidden="true"></span><i class="fas fa-comments"></i>';
     }
 
     function scrollMessagesToBottom() {
@@ -313,6 +329,17 @@
         wrapper.setAttribute('aria-label', 'Assistant is typing');
         wrapper.innerHTML = '<span></span><span></span><span></span>';
         parentBubble.appendChild(wrapper);
+    }
+
+    function formatMessageTime(isoString) {
+        if (!isoString) {
+            return '';
+        }
+        var date = new Date(isoString);
+        if (Number.isNaN(date.getTime())) {
+            return '';
+        }
+        return date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
     }
 
     function renderMessageExtras(bubble, message) {
@@ -443,6 +470,16 @@
             var row = document.createElement('div');
             row.className = 'ppc-chatbot-row ' + message.role;
 
+            var avatar = document.createElement('div');
+            avatar.className = 'ppc-chatbot-avatar ' + message.role;
+            avatar.setAttribute('aria-hidden', 'true');
+            avatar.innerHTML = message.role === 'bot'
+                ? '<i class="fas fa-robot"></i>'
+                : '<i class="fas fa-user"></i>';
+
+            var stack = document.createElement('div');
+            stack.className = 'ppc-chatbot-message-stack';
+
             var bubble = document.createElement('div');
             bubble.className = 'ppc-chatbot-bubble';
 
@@ -453,7 +490,31 @@
                 renderMessageExtras(bubble, message);
             }
 
-            row.appendChild(bubble);
+            stack.appendChild(bubble);
+
+            if (message.id !== TYPING_MESSAGE_ID) {
+                var meta = document.createElement('div');
+                meta.className = 'ppc-chatbot-message-meta';
+                var metaParts = [];
+                if (message.role === 'bot') {
+                    if (message.meta && message.meta.response_source === 'llm') {
+                        metaParts.push('AI');
+                    } else {
+                        metaParts.push('Assistant');
+                    }
+                } else {
+                    metaParts.push('You');
+                }
+                var timeLabel = formatMessageTime(message.ts);
+                if (timeLabel) {
+                    metaParts.push(timeLabel);
+                }
+                meta.textContent = metaParts.join(' • ');
+                stack.appendChild(meta);
+            }
+
+            row.appendChild(avatar);
+            row.appendChild(stack);
             refs.messages.appendChild(row);
         });
 
@@ -467,6 +528,20 @@
         }
         refs.input.disabled = !!state.pending;
         refs.sendBtn.disabled = !!state.pending;
+    }
+
+    function setAssistantStatus(text, mode) {
+        if (refs.statusText) {
+            refs.statusText.textContent = text || 'Ready';
+        }
+        if (refs.statusDot) {
+            refs.statusDot.classList.remove('is-thinking', 'is-warning');
+            if (mode === 'thinking') {
+                refs.statusDot.classList.add('is-thinking');
+            } else if (mode === 'warning') {
+                refs.statusDot.classList.add('is-warning');
+            }
+        }
     }
 
     function normalizeHref(url) {
@@ -491,7 +566,21 @@
         };
     }
 
-    async function requestChatbotReply(messageText) {
+    function getConversationHistoryForApi() {
+        return state.messages
+            .filter(function (message) {
+                return message && message.id !== TYPING_MESSAGE_ID && (message.role === 'user' || message.role === 'bot');
+            })
+            .slice(-8)
+            .map(function (message) {
+                return {
+                    role: message.role,
+                    text: String(message.text || '')
+                };
+            });
+    }
+
+    async function requestChatbotReply(messageText, history) {
         var response = await fetch(getApiUrl(), {
             method: 'POST',
             headers: {
@@ -500,7 +589,8 @@
             credentials: 'same-origin',
             body: JSON.stringify({
                 message: messageText,
-                context: getPageContext()
+                context: getPageContext(),
+                history: Array.isArray(history) ? history : []
             })
         });
 
@@ -519,6 +609,9 @@
     function setPending(pending) {
         state.pending = !!pending;
         updateSendState();
+        if (state.pending) {
+            setAssistantStatus('Thinking...', 'thinking');
+        }
     }
 
     function addTypingMessage() {
@@ -541,11 +634,12 @@
             renderOpenState();
         }
 
+        var historyForApi = getConversationHistoryForApi();
         addMessage(createMessage('user', clean));
         setPending(true);
         addTypingMessage();
 
-        requestChatbotReply(clean).then(function (data) {
+        requestChatbotReply(clean, historyForApi).then(function (data) {
             removeTypingMessage();
             addMessage(createMessage('bot', data.reply || 'I can help with shop-related questions.', {
                 quickReplies: Array.isArray(data.quick_replies) ? data.quick_replies : [],
@@ -553,6 +647,11 @@
                 products: Array.isArray(data.product_matches) ? data.product_matches : [],
                 meta: data.meta && typeof data.meta === 'object' ? data.meta : {}
             }));
+            if (data.meta && data.meta.response_source === 'llm') {
+                setAssistantStatus('AI online', 'ready');
+            } else {
+                setAssistantStatus('Fallback mode', 'warning');
+            }
         }).catch(function (error) {
             removeTypingMessage();
             addMessage(createMessage(
@@ -566,6 +665,7 @@
                     ]
                 }
             ));
+            setAssistantStatus('Offline fallback', 'warning');
         }).finally(function () {
             setPending(false);
             if (refs.input) {
@@ -582,6 +682,7 @@
         loadState();
         ensureWelcomeMessage();
         buildUi();
+        setAssistantStatus('Ready', 'ready');
 
         if (state.open) {
             renderOpenState();
