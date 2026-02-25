@@ -87,6 +87,21 @@ function buildChatbotReply(PDO $db, string $message, array $context, ?int $custo
         'page' => isset($context['page']) ? (string)$context['page'] : null
     ];
     $historyContext = extractChatHistoryContext($history);
+    $scope = determinePromptScope($normalized, $intent, $historyContext);
+    $meta['scope'] = $scope;
+
+    if ($scope === 'out_of_scope') {
+        return [
+            'reply' => 'Sorry, that prompt/request is out-of-scope to my purpose.',
+            'quick_replies' => ['Checkout instructions', 'Find a product', 'Track order', 'Payment methods'],
+            'suggested_links' => dedupeLinks([
+                navLink('Shop Home', 'index.php'),
+                navLink('My Orders', 'orders.php')
+            ]),
+            'product_matches' => [],
+            'meta' => $meta
+        ];
+    }
 
     if ($intent === 'thanks') {
         $replyText = 'You\'re welcome. If you want, I can also help you compare products, check stock, or guide you through checkout.';
@@ -116,7 +131,7 @@ function buildChatbotReply(PDO $db, string $message, array $context, ?int $custo
                 "- Registration\n" .
                 "- Password reset\n" .
                 "- Email verification\n\n" .
-                "Tell me which one you need, and I’ll give you step-by-step instructions.";
+                "Tell me which one you need, and I'll give you step-by-step instructions.";
             $quickReplies = ['Login', 'Register', 'Reset password', 'My orders'];
             $links[] = navLink('Customer Login', 'login.php');
             $links[] = navLink('Register', 'register.php');
@@ -129,7 +144,7 @@ function buildChatbotReply(PDO $db, string $message, array $context, ?int $custo
                 "- Returns and refunds\n" .
                 "- Account login / password reset\n" .
                 "- Choosing PC parts\n\n" .
-                "Tell me which one you want help with, and I’ll guide you.";
+                "Tell me which one you want help with, and I'll guide you.";
             $quickReplies = ['Checkout instructions', 'Track order', 'Payment methods', 'Find a product'];
             $links[] = navLink('Shop Home', 'index.php');
             $links[] = navLink('My Orders', 'orders.php');
@@ -310,7 +325,7 @@ function buildChatbotReply(PDO $db, string $message, array $context, ?int $custo
             "- Step-by-step instructions (checkout, account, orders)\n" .
             "- Product recommendations and stock checks\n" .
             "- Shipping, payment methods, returns, and order questions\n\n" .
-            "Tell me what you want help with, and I’ll guide you.";
+            "Tell me what you want help with, and I'll guide you.";
         $quickReplies = ['Checkout instructions', 'Track order', 'Find a product', 'Payment methods'];
         $links[] = navLink('Shop Home', 'index.php');
         $links[] = navLink('My Orders', 'orders.php');
@@ -418,6 +433,197 @@ function containsAny(string $text, array $needles): bool {
         }
     }
     return false;
+}
+
+function determinePromptScope(string $normalized, string $intent, array $historyContext): string {
+    if ($normalized === '') {
+        return 'shop_related';
+    }
+
+    if (in_array($intent, ['greeting', 'thanks'], true)) {
+        return 'shop_related';
+    }
+
+    if ($intent !== 'fallback') {
+        return 'shop_related';
+    }
+
+    if (looksLikeShopFollowUp($normalized, $historyContext)) {
+        return 'shop_related';
+    }
+
+    if (containsAny($normalized, shopScopeKeywords())) {
+        return 'shop_related';
+    }
+
+    if (containsAny($normalized, outOfScopeKeywords())) {
+        return 'out_of_scope';
+    }
+
+    // Generic unsupported requests default to out-of-scope unless clearly tied to shop context.
+    return 'out_of_scope';
+}
+
+function looksLikeShopFollowUp(string $normalized, array $historyContext): bool {
+    $hasHistoryAnchor =
+        !empty($historyContext['last_assistant_products']) ||
+        !empty($historyContext['last_user_message']) ||
+        !empty($historyContext['last_assistant_intent']);
+
+    if (!$hasHistoryAnchor) {
+        return false;
+    }
+
+    if (containsAny($normalized, shopScopeKeywords())) {
+        return true;
+    }
+
+    return containsAny($normalized, [
+        'this',
+        'that',
+        'these',
+        'those',
+        'it',
+        'them',
+        'one',
+        'ones',
+        'cheaper',
+        'more expensive',
+        'better',
+        'similar',
+        'alternative',
+        'another',
+        'same',
+        'which one',
+        'what about',
+        'how about this'
+    ]);
+}
+
+function shopScopeKeywords(): array {
+    return [
+        'shop',
+        'store',
+        'product',
+        'products',
+        'item',
+        'items',
+        'catalog',
+        'category',
+        'categories',
+        'stock',
+        'in stock',
+        'available',
+        'availability',
+        'price',
+        'pricing',
+        'budget',
+        'discount',
+        'promo',
+        'promotion',
+        'checkout',
+        'cart',
+        'order',
+        'orders',
+        'track order',
+        'payment',
+        'shipping',
+        'delivery',
+        'pickup',
+        'return',
+        'refund',
+        'warranty',
+        'account',
+        'login',
+        'register',
+        'password',
+        'profile',
+        'address',
+        'support',
+        'contact',
+        'location',
+        'store hours',
+        'business hours',
+        'open',
+        'close',
+        'instruction',
+        'instructions',
+        'guide',
+        'guidance',
+        'how to',
+        'how do i',
+        'pc parts',
+        'pc build',
+        'cpu',
+        'processor',
+        'gpu',
+        'graphics card',
+        'ssd',
+        'nvme',
+        'hdd',
+        'ram',
+        'memory',
+        'motherboard',
+        'psu',
+        'power supply',
+        'case',
+        'cooler',
+        'cooling',
+        'fan',
+        'monitor',
+        'intel',
+        'amd',
+        'nvidia',
+        'ryzen'
+    ];
+}
+
+function outOfScopeKeywords(): array {
+    return [
+        'weather',
+        'temperature today',
+        'forecast',
+        'news',
+        'politics',
+        'president',
+        'election',
+        'stocks',
+        'stock market',
+        'crypto',
+        'bitcoin',
+        'ethereum',
+        'sports',
+        'nba',
+        'nfl',
+        'score',
+        'match result',
+        'movie',
+        'series',
+        'anime',
+        'celebrity',
+        'lyrics',
+        'song',
+        'poem',
+        'joke',
+        'story',
+        'essay',
+        'homework',
+        'math',
+        'algebra',
+        'calculus',
+        'physics',
+        'chemistry',
+        'code',
+        'programming',
+        'python script',
+        'javascript function',
+        'translate',
+        'translation',
+        'horoscope',
+        'zodiac',
+        'recipe',
+        'cooking'
+    ];
 }
 
 function isAvailabilityRequest(string $normalized): bool {
@@ -941,6 +1147,7 @@ function buildShopAssistantSystemPrompt(array $llmConfig): string {
         'Acknowledge the user\'s request briefly, then answer directly.',
         'When the user is vague, ask one short clarifying question instead of guessing.',
         'Stay within shop-related support. If the user asks unrelated questions, redirect politely to shop support topics.',
+        'If a prompt/request is clearly unrelated to the shop, reply exactly: "Sorry, that prompt/request is out-of-scope to my purpose."',
         'Do not invent policies, stock, order status, prices, or delivery times. Use the provided context. If a detail is missing, say it is not available and direct the user to the relevant page or support staff.',
         'Be concise, clear, and helpful. Return plain text only (no markdown code fences).',
         'Use short bullets for options, recommendations, or lists.',
