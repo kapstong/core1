@@ -110,6 +110,59 @@ function buildChatbotReply(PDO $db, string $message, array $context, ?int $custo
         $replyText = 'Hi! I can help with product recommendations, stock availability, checkout, shipping, returns, and orders.';
         $quickReplies = ['Browse categories', 'Find a product', 'Shipping info', 'Payment methods'];
         $links[] = navLink('Shop Home', 'index.php');
+    } elseif ($intent === 'clarification') {
+        $lastAssistantIntent = (string)($historyContext['last_assistant_intent'] ?? '');
+        $lastUserMessage = trim((string)($historyContext['last_user_message'] ?? ''));
+        $hasProductContext = !empty($historyContext['last_assistant_products']);
+
+        if ($hasProductContext) {
+            $replyText = "No problem, let me clarify.\n\n" .
+                "If you're referring to the last product list, I can narrow it down by:\n" .
+                "- Budget (example: under 5000)\n" .
+                "- Brand (AMD, Intel, NVIDIA, etc.)\n" .
+                "- Availability (in stock only)\n" .
+                "- Use case (gaming, editing, office)\n\n" .
+                "Tell me which filter you want, and I'll refine it.";
+            $quickReplies = ['Show in-stock items', 'Show cheaper options', 'Find a product', 'Browse categories'];
+            $links[] = navLink('Browse Products', 'index.php#products');
+        } elseif (in_array($lastAssistantIntent, ['checkout', 'cart', 'payment', 'shipping', 'orders', 'auth', 'instructions'], true)) {
+            $topicMap = [
+                'checkout' => 'checkout steps',
+                'cart' => 'cart actions',
+                'payment' => 'payment methods',
+                'shipping' => 'shipping and delivery',
+                'orders' => 'order tracking / order help',
+                'auth' => 'login / account access',
+                'instructions' => 'step-by-step instructions'
+            ];
+            $topicLabel = $topicMap[$lastAssistantIntent] ?? 'shop support';
+            $replyText = "Sure, I can explain that more clearly.\n\n" .
+                "I was referring to " . $topicLabel . ". Tell me which part you want me to break down:\n" .
+                "- Requirements (what you need first)\n" .
+                "- Step-by-step process\n" .
+                "- Common issues / what to check\n" .
+                "- Where to click in the shop\n\n" .
+                "If you want, I can give a short step-by-step version right away.";
+            $quickReplies = ['Checkout instructions', 'Track order', 'Payment methods', 'Shipping info'];
+            $links[] = navLink('Shop Home', 'index.php');
+            if (in_array($lastAssistantIntent, ['orders', 'auth'], true)) {
+                $links[] = navLink('My Orders', 'orders.php');
+            }
+        } else {
+            $replyText = "No worries. I can explain things in a simpler way.\n\n" .
+                "I can help with:\n" .
+                "- Product recommendations and stock checks\n" .
+                "- Checkout and payment steps\n" .
+                "- Shipping, returns, and order tracking\n" .
+                "- Account login and password reset\n\n" .
+                "Tell me what you want to do in the shop, and I'll guide you step by step.";
+            if ($lastUserMessage !== '') {
+                $meta['clarifying_previous_user_message'] = $lastUserMessage;
+            }
+            $quickReplies = ['Find a product', 'Checkout instructions', 'Track order', 'Payment methods'];
+            $links[] = navLink('Shop Home', 'index.php');
+            $links[] = navLink('My Orders', 'orders.php');
+        }
     } elseif ($intent === 'instructions') {
         $currentPage = strtolower((string)($meta['page'] ?? ''));
 
@@ -355,6 +408,10 @@ function detectIntent(string $normalized): string {
         return 'greeting';
     }
 
+    if (isClarificationRequest($normalized)) {
+        return 'clarification';
+    }
+
     if (containsAny($normalized, ['category', 'categories', 'catalog'])) {
         return 'categories';
     }
@@ -440,7 +497,7 @@ function determinePromptScope(string $normalized, string $intent, array $history
         return 'shop_related';
     }
 
-    if (in_array($intent, ['greeting', 'thanks'], true)) {
+    if (in_array($intent, ['greeting', 'thanks', 'clarification'], true)) {
         return 'shop_related';
     }
 
@@ -496,7 +553,14 @@ function looksLikeShopFollowUp(string $normalized, array $historyContext): bool 
         'same',
         'which one',
         'what about',
-        'how about this'
+        'how about this',
+        'huh',
+        'not clear',
+        'confused',
+        'can you explain',
+        'explain that',
+        'say that again',
+        'what do you mean'
     ]);
 }
 
@@ -646,6 +710,31 @@ function isAvailabilityQuickReplyRequest(string $normalized): bool {
         'in-stock items',
         'in stock items'
     ]);
+}
+
+function isClarificationRequest(string $normalized): bool {
+    if ($normalized === '') {
+        return false;
+    }
+
+    if (containsAny($normalized, [
+        'what do you mean',
+        'can you explain',
+        'explain more',
+        'explain that',
+        'not clear',
+        'i do not understand',
+        "i don't understand",
+        'confused',
+        'say that again',
+        'repeat that',
+        'clarify',
+        'can you clarify'
+    ])) {
+        return true;
+    }
+
+    return (bool)preg_match('/^(huh|sorry|pardon|come again|what)[\?\!\.\s]*$/i', $normalized);
 }
 
 function shouldAttemptProductSearch(string $normalized): bool {
@@ -1146,6 +1235,7 @@ function buildShopAssistantSystemPrompt(array $llmConfig): string {
         'Speak like a helpful store staff member: warm, natural, and professional (not robotic).',
         'Acknowledge the user\'s request briefly, then answer directly.',
         'When the user is vague, ask one short clarifying question instead of guessing.',
+        'If the user sends a short reaction like "huh?", "what?", or "not clear", restate your last point in simpler words and offer 2-4 shop-related options.',
         'Stay within shop-related support. If the user asks unrelated questions, redirect politely to shop support topics.',
         'If a prompt/request is clearly unrelated to the shop, reply exactly: "Sorry, that prompt/request is out-of-scope to my purpose."',
         'Do not invent policies, stock, order status, prices, or delivery times. Use the provided context. If a detail is missing, say it is not available and direct the user to the relevant page or support staff.',
