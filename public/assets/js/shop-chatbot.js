@@ -669,7 +669,8 @@
             .filter(function (message) {
                 return message && message.id !== TYPING_MESSAGE_ID && (message.role === 'user' || message.role === 'bot');
             })
-            .slice(-8)
+            // Slightly longer history improves follow-up accuracy without sending full session logs.
+            .slice(-12)
             .map(function (message) {
                 var item = {
                     role: message.role,
@@ -693,9 +694,15 @@
                         });
                     }
                     if (message.meta && typeof message.meta === 'object') {
+                        // Forward compact intent metadata so backend memory can anchor follow-up questions.
                         item.meta = {
                             intent: message.meta.intent || null,
-                            response_source: message.meta.response_source || null
+                            response_source: message.meta.response_source || null,
+                            search_query: message.meta.search_query || null,
+                            budget: typeof message.meta.budget === 'number' ? message.meta.budget : null,
+                            message_act: message.meta.message_act || null,
+                            needs_clarification: message.meta.needs_clarification === true,
+                            fallback_reason: message.meta.fallback_reason || null
                         };
                     }
                 }
@@ -770,12 +777,14 @@
                 products: Array.isArray(data.product_matches) ? data.product_matches : [],
                 meta: data.meta && typeof data.meta === 'object' ? data.meta : {}
             }));
-            if (data.meta && data.meta.response_source === 'llm') {
-                setAssistantStatus('AI online', 'ready');
-            } else if (data.meta && data.meta.scope === 'out_of_scope') {
+            if (data.meta && data.meta.scope === 'out_of_scope') {
                 setAssistantStatus('Scope guard', 'warning');
+            } else if (data.meta && data.meta.needs_clarification === true) {
+                setAssistantStatus('Need details', 'warning');
+            } else if (data.meta && data.meta.response_source === 'llm') {
+                setAssistantStatus('AI online', 'ready');
             } else {
-                setAssistantStatus('Fallback mode', 'warning');
+                setAssistantStatus('Assistant ready', 'ready');
             }
         }).catch(function (error) {
             removeTypingMessage();

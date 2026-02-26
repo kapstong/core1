@@ -78,22 +78,38 @@ try {
 function buildChatbotReply(PDO $db, string $message, array $context, ?int $customerId, array $history = []): array {
     $normalized = normalizeMessage($message);
     $intent = detectIntent($normalized);
+    $messageAct = detectMessageAct($message, $normalized);
     $productMatches = [];
     $links = [];
     $quickReplies = defaultQuickReplies();
     $replyText = '';
+    // Session memory complements client-provided history so follow-up intent stays coherent.
+    $sessionMemory = getChatbotSessionMemory();
+    $historyContext = hydrateHistoryContextWithSessionMemory(extractChatHistoryContext($history), $sessionMemory);
+    $customerProfile = [];
+    $predictedIntent = null;
+    if ($customerId !== null) {
+        $customerProfile = loadCustomerChatPreferenceProfile($db, $customerId);
+        $predictedIntent = predictLikelyIntentFromProfile($normalized, $intent, $historyContext, $customerProfile);
+    }
     $meta = [
         'intent' => $intent,
+        'message_act' => $messageAct,
         'page' => isset($context['page']) ? (string)$context['page'] : null
     ];
-    $historyContext = extractChatHistoryContext($history);
+    $meta['memory_last_intent'] = isset($historyContext['last_assistant_intent']) ? (string)$historyContext['last_assistant_intent'] : null;
+    $meta['memory_last_product_query'] = isset($historyContext['last_product_query']) ? (string)$historyContext['last_product_query'] : null;
+    $meta['memory_last_reply'] = truncateForMemory((string)($historyContext['last_assistant_reply'] ?? ''), 220);
+    $meta['customer_profile_enabled'] = $customerId !== null;
+    $meta['predicted_intent'] = $predictedIntent;
+    $meta['customer_profile_summary'] = summarizeCustomerChatProfile($customerProfile);
     $scope = determinePromptScope($normalized, $intent, $historyContext);
     $meta['scope'] = $scope;
 
     if ($scope === 'out_of_scope') {
         $meta['response_source'] = 'rules';
         $meta['scope_guard'] = true;
-        return [
+        return finalizeChatbotReply($db, $message, $normalized, $intent, $messageAct, $context, $customerId, $history, $historyContext, [
             'reply' => 'Sorry, that prompt/request is out-of-scope to my purpose.',
             'quick_replies' => ['Checkout instructions', 'Find a product', 'Track order', 'Payment methods'],
             'suggested_links' => dedupeLinks([
@@ -102,7 +118,7 @@ function buildChatbotReply(PDO $db, string $message, array $context, ?int $custo
             ]),
             'product_matches' => [],
             'meta' => $meta
-        ];
+        ], $customerProfile);
     }
 
     if ($intent === 'thanks') {
@@ -228,6 +244,14 @@ function buildChatbotReply(PDO $db, string $message, array $context, ?int $custo
             $previousSearchQuery = extractProductSearchTerm($previousUserMessage, $previousNormalized);
             $previousBudget = extractBudgetValue($previousNormalized);
 
+            if ($previousSearchQuery === '' && !empty($historyContext['last_product_query'])) {
+                $previousSearchQuery = (string)$historyContext['last_product_query'];
+                if ($previousBudget === null && isset($historyContext['last_budget']) && is_numeric($historyContext['last_budget'])) {
+                    $previousBudget = (float)$historyContext['last_budget'];
+                }
+                $meta['availability_memory_used'] = true;
+            }
+
             if ($previousSearchQuery !== '') {
                 $candidateMatches = searchProductsForChatbot($db, $previousSearchQuery, 8, $previousBudget);
                 $productMatches = array_slice(filterInStockProductMatches($candidateMatches), 0, 5);
@@ -348,7 +372,24 @@ function buildChatbotReply(PDO $db, string $message, array $context, ?int $custo
     } elseif ($intent === 'product_search' || shouldAttemptProductSearch($normalized)) {
         $searchQuery = extractProductSearchTerm($message, $normalized);
         $budget = extractBudgetValue($normalized);
+        if ($budget === null && isset($historyContext['last_budget']) && is_numeric($historyContext['last_budget']) && shouldUseMemorySearchQuery($normalized, $historyContext)) {
+            $budget = (float)$historyContext['last_budget'];
+            $meta['budget_source'] = 'memory';
+        }
+        if ($searchQuery === '' && shouldUseMemorySearchQuery($normalized, $historyContext)) {
+            $searchQuery = (string)$historyContext['last_product_query'];
+            $meta['search_query_source'] = 'memory';
+        } elseif ($searchQuery === '' && $customerId !== null) {
+            $preferredTopic = inferPreferredProductTopicFromProfile($customerProfile);
+            if ($preferredTopic !== '') {
+                $searchQuery = $preferredTopic;
+                $meta['search_query_source'] = 'customer_profile';
+            }
+        }
         $availabilityOnly = isAvailabilityRequest($normalized);
+        if ($searchQuery !== '') {
+            $meta['search_query'] = $searchQuery;
+        }
         $productMatches = searchProductsForChatbot($db, $searchQuery, 5, $budget);
 
         if ($availabilityOnly) {
@@ -385,8 +426,31 @@ function buildChatbotReply(PDO $db, string $message, array $context, ?int $custo
             $quickReplies = ['Find SSD', 'Browse categories', 'Payment methods', 'Shipping info'];
             $links[] = navLink('Shop Home', 'index.php');
         }
+    } elseif ($intent === 'fallback') {
+        // Ask focused follow-up questions for ambiguous prompts instead of generic responses.
+        if (shouldAskFollowUpQuestion($normalized, $messageAct, $historyContext)) {
+            $clarifyingResponse = [];
+            if ($predictedIntent !== null && $predictedIntent !== 'fallback') {
+                $clarifyingResponse = buildPredictedIntentFallbackReply($predictedIntent, $historyContext, $customerProfile, $customerId !== null);
+            }
+            if (empty($clarifyingResponse)) {
+                $clarifyingResponse = buildSmartClarifyingReply($historyContext);
+            }
+            $replyText = $clarifyingResponse['reply'];
+            $quickReplies = $clarifyingResponse['quick_replies'];
+            $links = array_merge($links, $clarifyingResponse['links']);
+            $meta['needs_clarification'] = true;
+            $meta['fallback_reason'] = !empty($clarifyingResponse['source']) ? (string)$clarifyingResponse['source'] : 'ambiguous_input';
+        } else {
+            $replyText = "I can help with shop support, but I need a bit more detail.\n\n" .
+                "Tell me what you want to do (for example: product search, checkout, shipping, payment, returns, or orders), and I'll guide you.";
+            $quickReplies = ['Find a product', 'Checkout instructions', 'Shipping info', 'Track order'];
+            $links[] = navLink('Shop Home', 'index.php');
+            $links[] = navLink('My Orders', 'orders.php');
+            $meta['fallback_reason'] = 'unknown_shop_query';
+        }
     } else {
-        $replyText = "I’d be happy to help.\n\n" .
+        $replyText = "I'd be happy to help.\n\n" .
             "I can assist with:\n" .
             "- Step-by-step instructions (checkout, account, orders)\n" .
             "- Product recommendations and stock checks\n" .
@@ -397,6 +461,14 @@ function buildChatbotReply(PDO $db, string $message, array $context, ?int $custo
         $links[] = navLink('My Orders', 'orders.php');
     }
 
+    if ($customerId !== null && !empty($customerProfile)) {
+        $personalizedQuickReplies = personalizeQuickRepliesByPredictedIntent($quickReplies, $predictedIntent);
+        if ($personalizedQuickReplies !== $quickReplies) {
+            $quickReplies = $personalizedQuickReplies;
+            $meta['personalized_quick_replies'] = true;
+        }
+    }
+
     $result = [
         'reply' => $replyText,
         'quick_replies' => array_values(array_unique($quickReplies)),
@@ -405,7 +477,7 @@ function buildChatbotReply(PDO $db, string $message, array $context, ?int $custo
         'meta' => $meta
     ];
 
-    return maybeEnhanceReplyWithLlm($message, $context, $customerId, $history, $result);
+    return finalizeChatbotReply($db, $message, $normalized, $intent, $messageAct, $context, $customerId, $history, $historyContext, $result, $customerProfile);
 }
 
 function detectIntent(string $normalized): string {
@@ -488,6 +560,30 @@ function detectIntent(string $normalized): string {
     return 'fallback';
 }
 
+function detectMessageAct(string $message, string $normalized): string {
+    if ($normalized === '') {
+        return 'unclear';
+    }
+
+    if (isClarificationRequest($normalized)) {
+        return 'clarification';
+    }
+
+    if ((bool)preg_match('/\?\s*$/', trim($message)) || (bool)preg_match('/^(what|which|who|where|when|why|how|can|could|would|is|are|do|does|did|may)\b/i', $normalized)) {
+        return 'question';
+    }
+
+    if ((bool)preg_match('/^(show|find|search|list|compare|track|check|open|go|filter|sort|add|remove|recommend|suggest)\b/i', $normalized)) {
+        return 'command';
+    }
+
+    if ((bool)preg_match('/\b(please|can you|could you|i need|i want|help me)\b/i', $normalized)) {
+        return 'request';
+    }
+
+    return 'statement';
+}
+
 function normalizeMessage(string $message): string {
     $message = strtolower(trim($message));
     $message = preg_replace('/\s+/', ' ', $message);
@@ -526,6 +622,10 @@ function determinePromptScope(string $normalized, string $intent, array $history
         return 'shop_related';
     }
 
+    if (isGenericShopAssistancePrompt($normalized)) {
+        return 'shop_related';
+    }
+
     if (containsAny($normalized, shopScopeKeywords())) {
         return 'shop_related';
     }
@@ -536,6 +636,399 @@ function determinePromptScope(string $normalized, string $intent, array $history
 
     // Generic unsupported requests default to out-of-scope unless clearly tied to shop context.
     return 'out_of_scope';
+}
+
+function isGenericShopAssistancePrompt(string $normalized): bool {
+    if (!containsAny($normalized, ['help', 'assist', 'support', 'question', 'can you help', 'need help'])) {
+        return false;
+    }
+
+    if (containsAny($normalized, outOfScopeKeywords())) {
+        return false;
+    }
+
+    return countWords($normalized) <= 6;
+}
+
+function countWords(string $normalized): int {
+    $words = preg_split('/\s+/', trim($normalized));
+    if (!is_array($words)) {
+        return 0;
+    }
+
+    $count = 0;
+    foreach ($words as $word) {
+        if ($word !== '') {
+            $count++;
+        }
+    }
+
+    return $count;
+}
+
+function ensureCustomerChatProfileTable(PDO $db): void {
+    static $initialized = false;
+    if ($initialized) {
+        return;
+    }
+
+    $db->exec("
+        CREATE TABLE IF NOT EXISTS customer_chatbot_profiles (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            customer_id INT NOT NULL UNIQUE,
+            intent_scores LONGTEXT NULL,
+            topic_scores LONGTEXT NULL,
+            recent_messages LONGTEXT NULL,
+            last_product_query VARCHAR(255) NULL,
+            last_budget DECIMAL(12, 2) NULL,
+            last_message_act VARCHAR(40) NULL,
+            last_detected_intent VARCHAR(80) NULL,
+            last_predicted_intent VARCHAR(80) NULL,
+            turn_count INT NOT NULL DEFAULT 0,
+            created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            KEY idx_customer_id (customer_id)
+        )
+    ");
+
+    $initialized = true;
+}
+
+function decodeScoreMap($value): array {
+    if (!is_string($value) || trim($value) === '') {
+        return [];
+    }
+
+    $decoded = json_decode($value, true);
+    if (!is_array($decoded)) {
+        return [];
+    }
+
+    $normalized = [];
+    foreach ($decoded as $key => $score) {
+        $name = trim((string)$key);
+        if ($name === '' || !is_numeric($score)) {
+            continue;
+        }
+        $normalized[$name] = (float)$score;
+    }
+
+    return $normalized;
+}
+
+function encodeScoreMap(array $scores): string {
+    $clean = [];
+    foreach ($scores as $key => $score) {
+        $name = trim((string)$key);
+        if ($name === '' || !is_numeric($score)) {
+            continue;
+        }
+        $value = round((float)$score, 4);
+        if ($value <= 0.0001) {
+            continue;
+        }
+        $clean[$name] = $value;
+    }
+
+    if (empty($clean)) {
+        return '{}';
+    }
+
+    arsort($clean);
+    return (string)json_encode($clean, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_INVALID_UTF8_SUBSTITUTE);
+}
+
+function decayScoreMap(array $scores, float $decayFactor): array {
+    $factor = max(0.50, min(0.999, $decayFactor));
+    $next = [];
+    foreach ($scores as $key => $score) {
+        if (!is_numeric($score)) {
+            continue;
+        }
+        $value = (float)$score * $factor;
+        if ($value >= 0.05) {
+            $next[(string)$key] = $value;
+        }
+    }
+    return $next;
+}
+
+function extractIntentCueFromMessage(string $normalized): ?string {
+    if (containsAny($normalized, ['checkout', 'place order', 'billing'])) {
+        return 'checkout';
+    }
+    if (containsAny($normalized, ['payment', 'card', 'wallet', 'gcash', 'bank transfer'])) {
+        return 'payment';
+    }
+    if (containsAny($normalized, ['shipping', 'delivery', 'pickup'])) {
+        return 'shipping';
+    }
+    if (containsAny($normalized, ['order status', 'track order', 'my order', 'orders'])) {
+        return 'orders';
+    }
+    if (containsAny($normalized, ['return', 'refund', 'replace'])) {
+        return 'returns';
+    }
+    if (containsAny($normalized, ['login', 'register', 'password'])) {
+        return 'auth';
+    }
+    if (containsAny($normalized, ['category', 'catalog'])) {
+        return 'categories';
+    }
+    if (containsAny($normalized, ['compatibility', 'build', 'bottleneck'])) {
+        return 'compatibility';
+    }
+    if (containsAny($normalized, ['find', 'search', 'recommend', 'show me'])) {
+        return 'product_search';
+    }
+
+    return null;
+}
+
+function predictLikelyIntentFromProfile(string $normalized, string $detectedIntent, array $historyContext, array $profile): ?string {
+    if ($detectedIntent !== 'fallback') {
+        return $detectedIntent;
+    }
+
+    $intentScores = isset($profile['intent_scores']) && is_array($profile['intent_scores']) ? $profile['intent_scores'] : [];
+    if (empty($intentScores)) {
+        return null;
+    }
+
+    $workingScores = $intentScores;
+    $lastAssistantIntent = trim((string)($historyContext['last_assistant_intent'] ?? ''));
+    if ($lastAssistantIntent !== '' && isset($workingScores[$lastAssistantIntent])) {
+        $workingScores[$lastAssistantIntent] += 0.70;
+    }
+
+    if (looksLikeProductFollowUp($normalized)) {
+        $workingScores['product_search'] = (float)($workingScores['product_search'] ?? 0) + 0.90;
+    }
+
+    $cueIntent = extractIntentCueFromMessage($normalized);
+    if ($cueIntent !== null) {
+        $workingScores[$cueIntent] = (float)($workingScores[$cueIntent] ?? 0) + 1.10;
+    }
+
+    arsort($workingScores);
+    $topIntent = (string)array_key_first($workingScores);
+    $topScore = (float)($workingScores[$topIntent] ?? 0);
+    if ($topIntent === '' || $topScore < 0.75) {
+        return null;
+    }
+
+    return $topIntent;
+}
+
+function summarizeCustomerChatProfile(array $profile): array {
+    if (empty($profile)) {
+        return [];
+    }
+
+    $summary = [
+        'turn_count' => isset($profile['turn_count']) ? (int)$profile['turn_count'] : 0
+    ];
+
+    if (!empty($profile['intent_scores']) && is_array($profile['intent_scores'])) {
+        $intentScores = $profile['intent_scores'];
+        arsort($intentScores);
+        $summary['top_intents'] = array_slice(array_keys($intentScores), 0, 3);
+    }
+
+    if (!empty($profile['topic_scores']) && is_array($profile['topic_scores'])) {
+        $topicScores = $profile['topic_scores'];
+        arsort($topicScores);
+        $summary['top_topics'] = array_slice(array_keys($topicScores), 0, 4);
+    }
+
+    if (!empty($profile['last_product_query'])) {
+        $summary['last_product_query'] = (string)$profile['last_product_query'];
+    }
+
+    if (!empty($profile['last_budget']) && is_numeric($profile['last_budget'])) {
+        $summary['last_budget'] = (float)$profile['last_budget'];
+    }
+
+    return $summary;
+}
+
+function inferPreferredProductTopicFromProfile(array $profile): string {
+    $topicScores = isset($profile['topic_scores']) && is_array($profile['topic_scores']) ? $profile['topic_scores'] : [];
+    if (empty($topicScores)) {
+        return '';
+    }
+
+    $preferredTopics = [
+        'cpu',
+        'gpu',
+        'ssd',
+        'ram',
+        'motherboard',
+        'psu',
+        'case',
+        'cooling',
+        'monitor'
+    ];
+
+    arsort($topicScores);
+    foreach ($topicScores as $topic => $score) {
+        if ((float)$score < 0.15) {
+            continue;
+        }
+        if (in_array((string)$topic, $preferredTopics, true)) {
+            return (string)$topic;
+        }
+    }
+
+    return '';
+}
+
+function buildPredictedIntentFallbackReply(string $predictedIntent, array $historyContext, array $customerProfile, bool $isLoggedIn): array {
+    if ($predictedIntent === 'product_search' || $predictedIntent === 'availability_filter') {
+        $topicHint = inferPreferredProductTopicFromProfile($customerProfile);
+        $topicText = $topicHint !== '' ? ' (for example: ' . strtoupper($topicHint) . ')' : '';
+        return [
+            'reply' => 'I can help you narrow products quickly. What are you looking for today' . $topicText . '?',
+            'quick_replies' => ['Find a product', 'Show in-stock items', 'Show cheaper options', 'Browse categories'],
+            'links' => [navLink('Browse Products', 'index.php#products')],
+            'source' => 'profile_prediction'
+        ];
+    }
+
+    if ($predictedIntent === 'orders' && $isLoggedIn) {
+        return [
+            'reply' => 'Looks like this might be order-related. Do you want to track an order, view details, or cancel a pending order?',
+            'quick_replies' => ['Track order', 'Order details', 'Cancel an order', 'My orders'],
+            'links' => [navLink('My Orders', 'orders.php')],
+            'source' => 'profile_prediction'
+        ];
+    }
+
+    if ($predictedIntent === 'checkout') {
+        return [
+            'reply' => 'Do you want help with checkout steps, shipping address, or order confirmation?',
+            'quick_replies' => ['Checkout instructions', 'Shipping info', 'Payment methods', 'Cart'],
+            'links' => [navLink('Checkout', 'checkout.php'), navLink('Cart', 'cart.php')],
+            'source' => 'profile_prediction'
+        ];
+    }
+
+    if ($predictedIntent === 'payment') {
+        return [
+            'reply' => 'Need help with payment methods or payment issues?',
+            'quick_replies' => ['Payment methods', 'Checkout help', 'Shipping info', 'Return policy'],
+            'links' => [navLink('Checkout', 'checkout.php')],
+            'source' => 'profile_prediction'
+        ];
+    }
+
+    if ($predictedIntent === 'shipping') {
+        return [
+            'reply' => 'Are you asking about delivery options, shipping cost, or delivery time?',
+            'quick_replies' => ['Shipping info', 'Track order', 'Checkout help', 'Return policy'],
+            'links' => [navLink('Checkout', 'checkout.php'), navLink('My Orders', 'orders.php')],
+            'source' => 'profile_prediction'
+        ];
+    }
+
+    return [];
+}
+
+function personalizeQuickRepliesByPredictedIntent(array $quickReplies, ?string $predictedIntent): array {
+    $intentToPreferredReply = [
+        'product_search' => 'Find a product',
+        'availability_filter' => 'Show in-stock items',
+        'checkout' => 'Checkout instructions',
+        'orders' => 'Track order',
+        'payment' => 'Payment methods',
+        'shipping' => 'Shipping info',
+        'returns' => 'Return policy',
+        'auth' => 'Login'
+    ];
+
+    $preferred = $intentToPreferredReply[(string)$predictedIntent] ?? '';
+    if ($preferred === '') {
+        return $quickReplies;
+    }
+
+    $normalized = [];
+    foreach ($quickReplies as $reply) {
+        if (!is_string($reply)) {
+            continue;
+        }
+        $trimmed = trim($reply);
+        if ($trimmed !== '') {
+            $normalized[] = $trimmed;
+        }
+    }
+
+    if (!in_array($preferred, $normalized, true)) {
+        array_unshift($normalized, $preferred);
+    } else {
+        $normalized = array_values(array_filter($normalized, function ($value) use ($preferred) {
+            return $value !== $preferred;
+        }));
+        array_unshift($normalized, $preferred);
+    }
+
+    return array_slice(array_values(array_unique($normalized)), 0, 6);
+}
+
+function loadCustomerChatPreferenceProfile(PDO $db, int $customerId): array {
+    if ($customerId <= 0) {
+        return [];
+    }
+
+    try {
+        ensureCustomerChatProfileTable($db);
+        $stmt = $db->prepare("
+            SELECT
+                customer_id,
+                intent_scores,
+                topic_scores,
+                recent_messages,
+                last_product_query,
+                last_budget,
+                last_message_act,
+                last_detected_intent,
+                last_predicted_intent,
+                turn_count
+            FROM customer_chatbot_profiles
+            WHERE customer_id = :customer_id
+            LIMIT 1
+        ");
+        $stmt->execute([':customer_id' => $customerId]);
+        $row = $stmt->fetch(PDO::FETCH_ASSOC);
+        if (!$row || !is_array($row)) {
+            return [];
+        }
+
+        $recentMessages = [];
+        $recentDecoded = json_decode((string)($row['recent_messages'] ?? '[]'), true);
+        if (is_array($recentDecoded)) {
+            foreach ($recentDecoded as $entry) {
+                if (is_string($entry) && trim($entry) !== '') {
+                    $recentMessages[] = trim($entry);
+                }
+            }
+        }
+
+        return [
+            'customer_id' => (int)$row['customer_id'],
+            'intent_scores' => decodeScoreMap($row['intent_scores'] ?? null),
+            'topic_scores' => decodeScoreMap($row['topic_scores'] ?? null),
+            'recent_messages' => array_slice($recentMessages, -8),
+            'last_product_query' => trim((string)($row['last_product_query'] ?? '')),
+            'last_budget' => isset($row['last_budget']) && is_numeric($row['last_budget']) ? (float)$row['last_budget'] : null,
+            'last_message_act' => trim((string)($row['last_message_act'] ?? '')),
+            'last_detected_intent' => trim((string)($row['last_detected_intent'] ?? '')),
+            'last_predicted_intent' => trim((string)($row['last_predicted_intent'] ?? '')),
+            'turn_count' => isset($row['turn_count']) ? (int)$row['turn_count'] : 0
+        ];
+    } catch (Exception $e) {
+        error_log('Chatbot profile load failed: ' . $e->getMessage());
+        return [];
+    }
 }
 
 function looksLikeShopFollowUp(string $normalized, array $historyContext): bool {
@@ -791,6 +1284,90 @@ function shouldAttemptProductSearch(string $normalized): bool {
     ]);
 }
 
+function shouldUseMemorySearchQuery(string $normalized, array $historyContext): bool {
+    $lastQuery = trim((string)($historyContext['last_product_query'] ?? ''));
+    if ($lastQuery === '') {
+        return false;
+    }
+
+    return looksLikeProductFollowUp($normalized);
+}
+
+function looksLikeProductFollowUp(string $normalized): bool {
+    return containsAny($normalized, [
+        'this',
+        'that',
+        'these',
+        'those',
+        'it',
+        'them',
+        'one',
+        'ones',
+        'another',
+        'same',
+        'similar',
+        'alternative',
+        'better',
+        'cheaper',
+        'budget',
+        'in stock',
+        'available',
+        'show more',
+        'more options',
+        'refine'
+    ]);
+}
+
+function shouldAskFollowUpQuestion(string $normalized, string $messageAct, array $historyContext): bool {
+    if ($normalized === '') {
+        return true;
+    }
+
+    if ($messageAct === 'clarification') {
+        return true;
+    }
+
+    $wordCount = countWords($normalized);
+    if ($wordCount <= 4 && containsAny($normalized, ['help', 'assist', 'support', 'more', 'details', 'not sure', 'idk', 'whatever'])) {
+        return true;
+    }
+
+    if ($wordCount <= 3 && looksLikeShopFollowUp($normalized, $historyContext)) {
+        return true;
+    }
+
+    return false;
+}
+
+function buildSmartClarifyingReply(array $historyContext): array {
+    $lastAssistantIntent = (string)($historyContext['last_assistant_intent'] ?? '');
+    $lastProductQuery = trim((string)($historyContext['last_product_query'] ?? ''));
+    $hasProducts = !empty($historyContext['last_assistant_products']);
+
+    if ($hasProducts || $lastProductQuery !== '') {
+        $topic = $lastProductQuery !== '' ? '"' . $lastProductQuery . '"' : 'the last product list';
+        return [
+            'reply' => 'I can refine ' . $topic . '. Do you want cheaper options, in-stock only, or a specific brand?',
+            'quick_replies' => ['Show cheaper options', 'Show in-stock items', 'Browse categories', 'Find a product'],
+            'links' => [navLink('Browse Products', 'index.php#products')]
+        ];
+    }
+
+    if (in_array($lastAssistantIntent, ['checkout', 'cart', 'payment', 'shipping', 'orders', 'auth', 'returns'], true)) {
+        return [
+            'reply' => 'Sure. Which part do you want help with: requirements, step-by-step, or troubleshooting?',
+            'quick_replies' => ['Checkout instructions', 'Payment methods', 'Shipping info', 'Track order'],
+            'links' => [navLink('Shop Home', 'index.php'), navLink('My Orders', 'orders.php')]
+        ];
+    }
+
+    return [
+        'reply' => 'Happy to help. What do you want to do right now in the shop?',
+        'quick_replies' => ['Find a product', 'Checkout instructions', 'Shipping info', 'Track order'],
+        'links' => [navLink('Shop Home', 'index.php')]
+    ];
+}
+
 function defaultQuickReplies(): array {
     return [
         'Browse categories',
@@ -838,6 +1415,9 @@ function extractChatHistoryContext(array $history): array {
     $lastAssistantProducts = [];
     $lastUserMessage = '';
     $lastAssistantIntent = null;
+    $lastAssistantReply = '';
+    $lastProductQuery = '';
+    $lastBudget = null;
 
     for ($i = count($history) - 1; $i >= 0; $i--) {
         $item = $history[$i];
@@ -854,25 +1434,400 @@ function extractChatHistoryContext(array $history): array {
             }
         }
 
-        if (($role === 'bot' || $role === 'assistant') && empty($lastAssistantProducts)) {
-            if (isset($item['products']) && is_array($item['products'])) {
+        if ($role === 'bot' || $role === 'assistant') {
+            if ($lastAssistantReply === '') {
+                $candidateReply = trim((string)($item['text'] ?? ''));
+                if ($candidateReply !== '') {
+                    $lastAssistantReply = $candidateReply;
+                }
+            }
+
+            if (empty($lastAssistantProducts) && isset($item['products']) && is_array($item['products'])) {
                 $lastAssistantProducts = normalizeHistoryProductMatches($item['products']);
             }
-            if (isset($item['meta']) && is_array($item['meta']) && isset($item['meta']['intent'])) {
-                $lastAssistantIntent = (string)$item['meta']['intent'];
-            }
-        }
 
-        if ($lastUserMessage !== '' && !empty($lastAssistantProducts)) {
-            break;
+            if (isset($item['meta']) && is_array($item['meta'])) {
+                if ($lastAssistantIntent === null && isset($item['meta']['intent']) && trim((string)$item['meta']['intent']) !== '') {
+                    $lastAssistantIntent = (string)$item['meta']['intent'];
+                }
+                if ($lastProductQuery === '' && isset($item['meta']['search_query']) && trim((string)$item['meta']['search_query']) !== '') {
+                    $lastProductQuery = (string)$item['meta']['search_query'];
+                }
+                if ($lastBudget === null && isset($item['meta']['budget']) && is_numeric($item['meta']['budget'])) {
+                    $lastBudget = (float)$item['meta']['budget'];
+                }
+            }
         }
     }
 
     return [
         'last_user_message' => $lastUserMessage,
         'last_assistant_products' => $lastAssistantProducts,
-        'last_assistant_intent' => $lastAssistantIntent
+        'last_assistant_intent' => $lastAssistantIntent,
+        'last_assistant_reply' => $lastAssistantReply,
+        'last_product_query' => $lastProductQuery,
+        'last_budget' => $lastBudget
     ];
+}
+
+function hydrateHistoryContextWithSessionMemory(array $historyContext, array $sessionMemory): array {
+    if (($historyContext['last_user_message'] ?? '') === '' && !empty($sessionMemory['last_user_message'])) {
+        $historyContext['last_user_message'] = (string)$sessionMemory['last_user_message'];
+    }
+
+    if (empty($historyContext['last_assistant_products']) && !empty($sessionMemory['last_assistant_products']) && is_array($sessionMemory['last_assistant_products'])) {
+        $historyContext['last_assistant_products'] = normalizeHistoryProductMatches($sessionMemory['last_assistant_products']);
+    }
+
+    if (empty($historyContext['last_assistant_intent']) && !empty($sessionMemory['last_assistant_intent'])) {
+        $historyContext['last_assistant_intent'] = (string)$sessionMemory['last_assistant_intent'];
+    }
+
+    if (($historyContext['last_assistant_reply'] ?? '') === '' && !empty($sessionMemory['last_assistant_reply'])) {
+        $historyContext['last_assistant_reply'] = (string)$sessionMemory['last_assistant_reply'];
+    }
+
+    if (($historyContext['last_product_query'] ?? '') === '' && !empty($sessionMemory['last_product_query'])) {
+        $historyContext['last_product_query'] = (string)$sessionMemory['last_product_query'];
+    }
+
+    if (!isset($historyContext['last_budget']) || $historyContext['last_budget'] === null) {
+        if (isset($sessionMemory['last_budget']) && is_numeric($sessionMemory['last_budget'])) {
+            $historyContext['last_budget'] = (float)$sessionMemory['last_budget'];
+        }
+    }
+
+    return $historyContext;
+}
+
+function getChatbotSessionMemory(): array {
+    if (session_status() !== PHP_SESSION_ACTIVE) {
+        return [];
+    }
+
+    $memory = $_SESSION['shop_chatbot_memory'] ?? [];
+    return is_array($memory) ? $memory : [];
+}
+
+function persistChatbotSessionMemory(string $message, string $normalized, string $intent, string $messageAct, array $historyContext, array $result): void {
+    if (session_status() !== PHP_SESSION_ACTIVE) {
+        return;
+    }
+
+    $memory = getChatbotSessionMemory();
+    $memory['last_user_message'] = truncateForMemory($message, 300);
+    $memory['last_user_intent'] = $intent;
+    $memory['last_user_message_act'] = $messageAct;
+    $memory['last_assistant_intent'] = (string)($result['meta']['intent'] ?? $intent);
+    $memory['last_assistant_reply'] = truncateForMemory((string)($result['reply'] ?? ''), 600);
+
+    $memoryProducts = normalizeHistoryProductMatches(is_array($result['product_matches'] ?? null) ? $result['product_matches'] : []);
+    if (!empty($memoryProducts)) {
+        $memory['last_assistant_products'] = array_slice($memoryProducts, 0, 5);
+    } elseif (!empty($historyContext['last_assistant_products'])) {
+        $memory['last_assistant_products'] = array_slice(normalizeHistoryProductMatches($historyContext['last_assistant_products']), 0, 5);
+    }
+
+    $assistantIntent = (string)($result['meta']['intent'] ?? $intent);
+    $shouldPersistSearchQuery =
+        in_array($assistantIntent, ['product_search', 'availability_filter', 'compatibility'], true) ||
+        !empty($result['product_matches']) ||
+        !empty($result['meta']['search_query']);
+
+    if ($shouldPersistSearchQuery) {
+        $searchQuery = trim((string)($result['meta']['search_query'] ?? ''));
+        if ($searchQuery === '') {
+            $searchQuery = extractProductSearchTerm($message, $normalized);
+        }
+        if ($searchQuery !== '') {
+            $memory['last_product_query'] = truncateForMemory($searchQuery, 120);
+        }
+    }
+
+    if (isset($result['meta']['budget']) && is_numeric($result['meta']['budget'])) {
+        $memory['last_budget'] = (float)$result['meta']['budget'];
+    } elseif (isset($historyContext['last_budget']) && is_numeric($historyContext['last_budget'])) {
+        $memory['last_budget'] = (float)$historyContext['last_budget'];
+    }
+
+    $recentIntents = [];
+    if (!empty($memory['recent_intents']) && is_array($memory['recent_intents'])) {
+        foreach ($memory['recent_intents'] as $pastIntent) {
+            if (is_string($pastIntent) && $pastIntent !== '') {
+                $recentIntents[] = $pastIntent;
+            }
+        }
+    }
+    $recentIntents[] = $intent;
+    if (count($recentIntents) > 6) {
+        $recentIntents = array_slice($recentIntents, -6);
+    }
+    $memory['recent_intents'] = $recentIntents;
+    $memory['updated_at'] = time();
+
+    $_SESSION['shop_chatbot_memory'] = $memory;
+}
+
+function extractTopicSignalsForProfile(string $normalized, string $intent, array $result): array {
+    $signals = [];
+    $keywordMap = [
+        'cpu' => ['cpu', 'processor', 'ryzen', 'intel'],
+        'gpu' => ['gpu', 'graphics card', 'rtx', 'nvidia', 'radeon'],
+        'ssd' => ['ssd', 'nvme', 'storage'],
+        'ram' => ['ram', 'memory', 'ddr4', 'ddr5'],
+        'motherboard' => ['motherboard', 'mainboard', 'chipset'],
+        'psu' => ['psu', 'power supply'],
+        'case' => ['case', 'chassis'],
+        'cooling' => ['cooler', 'cooling', 'fan', 'aio'],
+        'monitor' => ['monitor', 'display'],
+        'checkout' => ['checkout', 'place order'],
+        'orders' => ['order status', 'track order', 'my order', 'orders'],
+        'shipping' => ['shipping', 'delivery', 'pickup'],
+        'payment' => ['payment', 'card', 'wallet', 'gcash', 'bank transfer'],
+        'returns' => ['return', 'refund', 'replacement'],
+        'auth' => ['login', 'register', 'password', 'account']
+    ];
+
+    foreach ($keywordMap as $topic => $keywords) {
+        if (containsAny($normalized, $keywords)) {
+            $signals[$topic] = (float)($signals[$topic] ?? 0) + 1.0;
+        }
+    }
+
+    $intentToTopic = [
+        'product_search' => 'catalog',
+        'availability_filter' => 'stock',
+        'checkout' => 'checkout',
+        'orders' => 'orders',
+        'shipping' => 'shipping',
+        'payment' => 'payment',
+        'returns' => 'returns',
+        'auth' => 'auth',
+        'compatibility' => 'compatibility'
+    ];
+    if (isset($intentToTopic[$intent])) {
+        $intentTopic = $intentToTopic[$intent];
+        $signals[$intentTopic] = (float)($signals[$intentTopic] ?? 0) + 0.7;
+    }
+
+    $query = normalizeMessage((string)($result['meta']['search_query'] ?? ''));
+    if ($query !== '') {
+        foreach ($keywordMap as $topic => $keywords) {
+            if (containsAny($query, $keywords)) {
+                $signals[$topic] = (float)($signals[$topic] ?? 0) + 0.8;
+            }
+        }
+    }
+
+    return $signals;
+}
+
+function updateCustomerChatPreferenceProfile(
+    PDO $db,
+    int $customerId,
+    string $message,
+    string $normalized,
+    string $intent,
+    string $messageAct,
+    array $result,
+    array $existingProfile = []
+): void {
+    if ($customerId <= 0) {
+        return;
+    }
+
+    try {
+        ensureCustomerChatProfileTable($db);
+        $profile = !empty($existingProfile) ? $existingProfile : loadCustomerChatPreferenceProfile($db, $customerId);
+
+        // Weighted + decayed scores keep profile responsive to recent behavior.
+        $intentScores = decayScoreMap(isset($profile['intent_scores']) && is_array($profile['intent_scores']) ? $profile['intent_scores'] : [], 0.92);
+        $intentIncrement = $intent === 'fallback' ? 0.35 : 1.25;
+        $intentScores[$intent] = (float)($intentScores[$intent] ?? 0) + $intentIncrement;
+
+        $predictedIntent = trim((string)($result['meta']['predicted_intent'] ?? ''));
+        if ($predictedIntent !== '' && $predictedIntent !== 'fallback' && $predictedIntent !== $intent) {
+            $intentScores[$predictedIntent] = (float)($intentScores[$predictedIntent] ?? 0) + 0.25;
+        }
+
+        $topicScores = decayScoreMap(isset($profile['topic_scores']) && is_array($profile['topic_scores']) ? $profile['topic_scores'] : [], 0.90);
+        $topicSignals = extractTopicSignalsForProfile($normalized, $intent, $result);
+        foreach ($topicSignals as $topic => $signalWeight) {
+            $topicScores[$topic] = (float)($topicScores[$topic] ?? 0) + (float)$signalWeight;
+        }
+
+        $recentMessages = [];
+        if (!empty($profile['recent_messages']) && is_array($profile['recent_messages'])) {
+            foreach ($profile['recent_messages'] as $entry) {
+                if (is_string($entry) && trim($entry) !== '') {
+                    $recentMessages[] = trim($entry);
+                }
+            }
+        }
+        $recentMessages[] = truncateForMemory($message, 180);
+        if (count($recentMessages) > 8) {
+            $recentMessages = array_slice($recentMessages, -8);
+        }
+
+        $lastProductQuery = trim((string)($result['meta']['search_query'] ?? ''));
+        if ($lastProductQuery === '') {
+            $lastProductQuery = trim((string)($profile['last_product_query'] ?? ''));
+        }
+
+        $lastBudget = null;
+        if (isset($result['meta']['budget']) && is_numeric($result['meta']['budget'])) {
+            $lastBudget = (float)$result['meta']['budget'];
+        } elseif (isset($profile['last_budget']) && is_numeric($profile['last_budget'])) {
+            $lastBudget = (float)$profile['last_budget'];
+        }
+
+        $turnCount = max(0, (int)($profile['turn_count'] ?? 0)) + 1;
+
+        $stmt = $db->prepare("
+            INSERT INTO customer_chatbot_profiles (
+                customer_id,
+                intent_scores,
+                topic_scores,
+                recent_messages,
+                last_product_query,
+                last_budget,
+                last_message_act,
+                last_detected_intent,
+                last_predicted_intent,
+                turn_count
+            )
+            VALUES (
+                :customer_id,
+                :intent_scores,
+                :topic_scores,
+                :recent_messages,
+                :last_product_query,
+                :last_budget,
+                :last_message_act,
+                :last_detected_intent,
+                :last_predicted_intent,
+                :turn_count
+            )
+            ON DUPLICATE KEY UPDATE
+                intent_scores = VALUES(intent_scores),
+                topic_scores = VALUES(topic_scores),
+                recent_messages = VALUES(recent_messages),
+                last_product_query = VALUES(last_product_query),
+                last_budget = VALUES(last_budget),
+                last_message_act = VALUES(last_message_act),
+                last_detected_intent = VALUES(last_detected_intent),
+                last_predicted_intent = VALUES(last_predicted_intent),
+                turn_count = VALUES(turn_count),
+                updated_at = CURRENT_TIMESTAMP
+        ");
+
+        $stmt->bindValue(':customer_id', $customerId, PDO::PARAM_INT);
+        $stmt->bindValue(':intent_scores', encodeScoreMap($intentScores));
+        $stmt->bindValue(':topic_scores', encodeScoreMap($topicScores));
+        $stmt->bindValue(':recent_messages', (string)json_encode($recentMessages, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_INVALID_UTF8_SUBSTITUTE));
+        $stmt->bindValue(':last_product_query', $lastProductQuery !== '' ? truncateForMemory($lastProductQuery, 255) : null, $lastProductQuery !== '' ? PDO::PARAM_STR : PDO::PARAM_NULL);
+        if ($lastBudget !== null) {
+            $stmt->bindValue(':last_budget', $lastBudget);
+        } else {
+            $stmt->bindValue(':last_budget', null, PDO::PARAM_NULL);
+        }
+        $stmt->bindValue(':last_message_act', $messageAct !== '' ? $messageAct : null, $messageAct !== '' ? PDO::PARAM_STR : PDO::PARAM_NULL);
+        $stmt->bindValue(':last_detected_intent', $intent !== '' ? $intent : null, $intent !== '' ? PDO::PARAM_STR : PDO::PARAM_NULL);
+        $stmt->bindValue(':last_predicted_intent', $predictedIntent !== '' ? $predictedIntent : null, $predictedIntent !== '' ? PDO::PARAM_STR : PDO::PARAM_NULL);
+        $stmt->bindValue(':turn_count', $turnCount, PDO::PARAM_INT);
+        $stmt->execute();
+    } catch (Exception $e) {
+        error_log('Chatbot profile update failed: ' . $e->getMessage());
+    }
+}
+
+function truncateForMemory(string $text, int $maxLength): string {
+    $clean = trim($text);
+    if ($clean === '' || $maxLength <= 0) {
+        return '';
+    }
+
+    if (strlen($clean) <= $maxLength) {
+        return $clean;
+    }
+
+    if ($maxLength <= 3) {
+        return substr($clean, 0, $maxLength);
+    }
+
+    return rtrim(substr($clean, 0, $maxLength - 3)) . '...';
+}
+
+function avoidRepeatedReply(string $reply, array $historyContext, string $intent): string {
+    $current = trim($reply);
+    if ($current === '') {
+        return $current;
+    }
+
+    if ($current === 'Sorry, that prompt/request is out-of-scope to my purpose.') {
+        return $current;
+    }
+
+    $previous = trim((string)($historyContext['last_assistant_reply'] ?? ''));
+    if ($previous === '') {
+        return $current;
+    }
+
+    if (normalizeMessage($current) !== normalizeMessage($previous)) {
+        return $current;
+    }
+
+    $alternatives = [
+        'fallback' => 'I can help with product search, checkout, shipping, payment, returns, and orders. Which one should we do?',
+        'clarification' => 'Sure. Tell me which part you want explained, and I will keep it short and clear.',
+        'product_search' => 'I can refine the results. Share your budget, preferred brand, or in-stock preference.'
+    ];
+
+    return $alternatives[$intent] ?? 'I can help with products, checkout, shipping, payment, returns, and orders. Tell me what you need.';
+}
+
+function sanitizeReplyText(string $reply): string {
+    $normalized = str_replace(["\r\n", "\r"], "\n", trim($reply));
+    $normalized = preg_replace("/\n{3,}/", "\n\n", $normalized);
+    return trim((string)$normalized);
+}
+
+function finalizeChatbotReply(
+    PDO $db,
+    string $message,
+    string $normalized,
+    string $intent,
+    string $messageAct,
+    array $context,
+    ?int $customerId,
+    array $history,
+    array $historyContext,
+    array $result,
+    array $customerProfile = []
+): array {
+    if (!isset($result['meta']) || !is_array($result['meta'])) {
+        $result['meta'] = [];
+    }
+
+    $result['meta']['intent'] = isset($result['meta']['intent']) ? (string)$result['meta']['intent'] : $intent;
+    $result['meta']['message_act'] = $messageAct;
+    // Keep scope-guard replies deterministic; only run LLM enhancement for in-scope content.
+    $scopeGuard = !empty($result['meta']['scope_guard']);
+    if (!$scopeGuard) {
+        $result = maybeEnhanceReplyWithLlm($message, $context, $customerId, $history, $result);
+    } else {
+        $llmConfig = getChatbotLlmConfig();
+        $result['meta']['llm_configured'] = $llmConfig['configured'];
+        $result['meta']['llm_enabled'] = $llmConfig['enabled'];
+        $result['meta']['response_source'] = 'rules';
+    }
+    $result['reply'] = sanitizeReplyText(avoidRepeatedReply((string)($result['reply'] ?? ''), $historyContext, (string)$result['meta']['intent']));
+    persistChatbotSessionMemory($message, $normalized, $intent, $messageAct, $historyContext, $result);
+    if ($customerId !== null && empty($result['meta']['scope_guard'])) {
+        updateCustomerChatPreferenceProfile($db, $customerId, $message, $normalized, (string)$result['meta']['intent'], $messageAct, $result, $customerProfile);
+    }
+
+    return $result;
 }
 
 function normalizeHistoryProductMatches(array $products): array {
@@ -1003,7 +1958,7 @@ function extractProductSearchTerm(string $originalMessage, string $normalizedMes
     }
 
     $term = preg_replace('/\b(in stock|available|please|thanks|thank you)\b/i', '', $term);
-    $term = preg_replace('/\bunder\s+[₱$]?\s*[0-9][0-9,]*(?:\.[0-9]{1,2})?\b/i', '', $term);
+    $term = preg_replace('/\bunder\s+(?:\$|php|\x{20B1})?\s*[0-9][0-9,]*(?:\.[0-9]{1,2})?\b/iu', '', $term);
     $term = preg_replace('/\s+/', ' ', $term);
     $term = trim((string)$term);
 
@@ -1022,8 +1977,8 @@ function extractProductSearchTerm(string $originalMessage, string $normalizedMes
 
 function extractBudgetValue(string $normalized): ?float {
     $patterns = [
-        '/(?:under|below|less than|budget(?: is)?|max(?:imum)?)\s*[₱$]?\s*([0-9][0-9,]*(?:\.[0-9]{1,2})?)/i',
-        '/[₱$]\s*([0-9][0-9,]*(?:\.[0-9]{1,2})?)/'
+        '/(?:under|below|less than|budget(?: is)?|max(?:imum)?)\s*(?:\$|php|\x{20B1})?\s*([0-9][0-9,]*(?:\.[0-9]{1,2})?)/iu',
+        '/(?:\$|php|\x{20B1})\s*([0-9][0-9,]*(?:\.[0-9]{1,2})?)/iu'
     ];
 
     foreach ($patterns as $pattern) {
@@ -1251,8 +2206,12 @@ function buildShopAssistantSystemPrompt(array $llmConfig): string {
         'Be polite, respectful, and helpful at all times.',
         'Speak like a helpful store staff member: warm, natural, and professional (not robotic).',
         'Acknowledge the user\'s request briefly, then answer directly.',
+        'Infer whether the user input is a question, command, request, or clarification and adapt the response style accordingly.',
         'When the user is vague, ask one short clarifying question instead of guessing.',
+        'If a request is incomplete, ask one focused follow-up question and offer 2-4 relevant options.',
         'If the user sends a short reaction like "huh?", "what?", or "not clear", restate your last point in simpler words and offer 2-4 shop-related options.',
+        'Avoid repeating the same opening sentence from your previous reply unless repetition is necessary.',
+        'If customer behavior profile hints are provided, use them as soft personalization signals (not hard facts).',
         'Stay within shop-related support. If the user asks unrelated questions, redirect politely to shop support topics.',
         'If a prompt/request is clearly unrelated to the shop, reply exactly: "Sorry, that prompt/request is out-of-scope to my purpose."',
         'Do not invent policies, stock, order status, prices, or delivery times. Use the provided context. If a detail is missing, say it is not available and direct the user to the relevant page or support staff.',
@@ -1306,8 +2265,8 @@ function sanitizeConversationHistory(array $history): array {
         ];
     }
 
-    if (count($sanitized) > 8) {
-        $sanitized = array_slice($sanitized, -8);
+    if (count($sanitized) > 12) {
+        $sanitized = array_slice($sanitized, -12);
     }
 
     return $sanitized;
@@ -1351,8 +2310,19 @@ function buildLlmKnowledgeContext(string $message, array $context, ?int $custome
             'links' => $result['suggested_links'] ?? [],
             'quick_replies' => $result['quick_replies'] ?? []
         ],
+        'conversation_memory' => [
+            'last_assistant_intent' => $result['meta']['memory_last_intent'] ?? null,
+            'last_product_query' => $result['meta']['memory_last_product_query'] ?? null,
+            'last_assistant_reply' => $result['meta']['memory_last_reply'] ?? null
+        ],
+        'customer_behavior_profile' => [
+            'predicted_intent' => $result['meta']['predicted_intent'] ?? null,
+            'profile_summary' => $result['meta']['customer_profile_summary'] ?? [],
+            'is_profile_enabled' => !empty($result['meta']['customer_profile_enabled'])
+        ],
         'retrieved_facts' => [
             'intent' => $result['meta']['intent'] ?? null,
+            'message_act' => $result['meta']['message_act'] ?? null,
             'order_summary' => $result['meta']['order_summary'] ?? null,
             'product_matches' => $products,
             'fallback_answer' => $result['reply'] ?? ''
