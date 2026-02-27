@@ -7,7 +7,8 @@
     const state = {
         ready: false,
         isOpen: false,
-        isBusy: false
+        isBusy: false,
+        feedbackByResponseId: {}
     };
 
     function getCurrentUser() {
@@ -70,6 +71,8 @@
                 <button type="button" class="admin-ai-chip" data-ai-mode="forecast">Trend Forecast</button>
                 <button type="button" class="admin-ai-chip" data-ai-mode="reorder">Reorder Suggestions</button>
                 <button type="button" class="admin-ai-chip" data-ai-mode="anomalies">Anomaly Scan</button>
+                <button type="button" class="admin-ai-chip" data-ai-mode="memory">Session Memory</button>
+                <button type="button" class="admin-ai-chip" data-ai-mode="evaluate">Self Check</button>
             </div>
 
             <div class="admin-ai-feed" id="admin-ai-feed"></div>
@@ -101,8 +104,9 @@
         const panel = document.getElementById('admin-ai-panel');
         const form = document.getElementById('admin-ai-form');
         const input = document.getElementById('admin-ai-input');
+        const feed = feedElement();
 
-        if (!launcher || !closeBtn || !panel || !form || !input) {
+        if (!launcher || !closeBtn || !panel || !form || !input || !feed) {
             return;
         }
 
@@ -135,6 +139,28 @@
             input.value = '';
             await askCopilot(message);
         });
+
+        feed.addEventListener('click', async (event) => {
+            const feedbackBtn = event.target.closest('.admin-ai-feedback-btn');
+            if (feedbackBtn) {
+                const responseId = feedbackBtn.getAttribute('data-response-id');
+                const rating = feedbackBtn.getAttribute('data-rating');
+                if (!responseId || !rating) {
+                    return;
+                }
+                await submitFeedback(responseId, rating, feedbackBtn);
+                return;
+            }
+
+            const followUpBtn = event.target.closest('.admin-ai-followup-btn');
+            if (followUpBtn) {
+                const question = followUpBtn.getAttribute('data-question');
+                if (!question || state.isBusy) {
+                    return;
+                }
+                await askCopilot(question);
+            }
+        });
     }
 
     function openPanel() {
@@ -164,7 +190,7 @@
     function appendMessage(type, html) {
         const feed = feedElement();
         if (!feed) {
-            return;
+            return null;
         }
 
         const row = document.createElement('div');
@@ -172,6 +198,7 @@
         row.innerHTML = html;
         feed.appendChild(row);
         feed.scrollTop = feed.scrollHeight;
+        return row;
     }
 
     function appendSystemMessage(text) {
@@ -182,8 +209,11 @@
         appendMessage('user', `<div class="admin-ai-bubble">${escapeHtml(text)}</div>`);
     }
 
-    function appendAssistantMessage(html) {
-        appendMessage('assistant', `<div class="admin-ai-bubble">${html}</div>`);
+    function appendAssistantMessage(html, options = {}) {
+        const metaHtml = options.metaHtml ? `<div class="admin-ai-meta">${options.metaHtml}</div>` : '';
+        const followUpHtml = Array.isArray(options.followUps) ? renderFollowUpButtons(options.followUps) : '';
+        const feedbackHtml = options.responseId ? renderFeedbackControls(options.responseId) : '';
+        appendMessage('assistant', `<div class="admin-ai-bubble">${html}${metaHtml}${followUpHtml}${feedbackHtml}</div>`);
     }
 
     function setBusy(isBusy) {
@@ -279,10 +309,20 @@
 
             const data = payload.data || {};
             const reply = escapeHtml(data.reply || 'No response available.');
-            const source = data.response_source === 'llm' ? 'LLM' : 'Rules';
+            const sourceMap = {
+                llm: 'LLM',
+                hybrid: 'Hybrid',
+                rules_fallback: 'Rules fallback',
+                rules: 'Rules'
+            };
+            const source = sourceMap[data.response_source] || 'Rules';
             const language = escapeHtml(data.language || 'en');
-            const meta = `<div class="admin-ai-meta">Source: ${source} | Intent: ${escapeHtml(data.intent || 'general')} | Lang: ${language}</div>`;
-            appendAssistantMessage(`${reply.replace(/\n/g, '<br>')}${meta}`);
+            const strategy = escapeHtml(data.router?.strategy || 'rules');
+            appendAssistantMessage(reply.replace(/\n/g, '<br>'), {
+                responseId: data.response_id || '',
+                followUps: Array.isArray(data.follow_up_actions) ? data.follow_up_actions : [],
+                metaHtml: `Source: ${source} | Intent: ${escapeHtml(data.intent || 'general')} | Lang: ${language} | Router: ${strategy}`
+            });
         } catch (error) {
             appendSystemMessage(error.message || 'Failed to get AI response.');
         } finally {
@@ -305,6 +345,12 @@
         }
         if (mode === 'anomalies') {
             return renderAnomalies(data.anomalies || {});
+        }
+        if (mode === 'memory') {
+            return renderMemory(data.memory || {});
+        }
+        if (mode === 'evaluate') {
+            return renderEvaluation(data.evaluation || {});
         }
         return `<div>${escapeHtml(JSON.stringify(data))}</div>`;
     }
@@ -444,12 +490,155 @@
         `;
     }
 
+    function renderMemory(memory) {
+        const rows = Array.isArray(memory.recent_messages) ? memory.recent_messages.slice(-6).reverse() : [];
+        const items = rows.map((row) => `
+            <li>
+                <strong>${escapeHtml(row.intent || 'general')}</strong> (${escapeHtml(row.language || 'en')})
+                <br>
+                <span>${escapeHtml(row.message || '')}</span>
+            </li>
+        `).join('');
+
+        return `
+            <div class="admin-ai-block-title">Session Memory</div>
+            <p class="admin-ai-meta">Last intent: ${escapeHtml(memory.last_intent || 'n/a')} | Last language: ${escapeHtml(memory.last_language || 'n/a')} | Feedback: ${Number(memory.feedback_count || 0)}</p>
+            ${items ? `<ul class="admin-ai-anomaly-list">${items}</ul>` : '<p>No prior turns recorded in this session.</p>'}
+        `;
+    }
+
+    function renderEvaluation(evaluation) {
+        const summary = evaluation.summary || {};
+        const cases = Array.isArray(evaluation.cases) ? evaluation.cases : [];
+        const rows = cases.map((item) => `
+            <tr>
+                <td>${escapeHtml(item.input || '')}</td>
+                <td>${escapeHtml(item.actual_intent || '')}</td>
+                <td>${escapeHtml(item.router_strategy || '')}</td>
+                <td>${item.passed ? 'PASS' : 'FAIL'}</td>
+            </tr>
+        `).join('');
+
+        return `
+            <div class="admin-ai-block-title">Copilot Self Check</div>
+            <p>Score: ${Number(summary.score_pct || 0).toFixed(1)}% (${Number(summary.passed || 0)} / ${Number(summary.total || 0)})</p>
+            <div class="admin-ai-table-wrap">
+                <table class="admin-ai-table">
+                    <thead>
+                        <tr>
+                            <th>Input</th>
+                            <th>Intent</th>
+                            <th>Router</th>
+                            <th>Result</th>
+                        </tr>
+                    </thead>
+                    <tbody>${rows}</tbody>
+                </table>
+            </div>
+        `;
+    }
+
+    function renderFollowUpButtons(actions) {
+        const clean = actions
+            .filter((item) => typeof item === 'string')
+            .map((item) => item.trim())
+            .filter(Boolean)
+            .slice(0, 5);
+        if (clean.length === 0) {
+            return '';
+        }
+
+        const buttons = clean.map((action) => `
+            <button type="button" class="admin-ai-followup-btn" data-question="${escapeHtml(action)}">
+                ${escapeHtml(action)}
+            </button>
+        `).join('');
+
+        return `<div class="admin-ai-followups">${buttons}</div>`;
+    }
+
+    function renderFeedbackControls(responseId) {
+        const escapedId = escapeHtml(responseId);
+        return `
+            <div class="admin-ai-feedback" data-response-id="${escapedId}">
+                <span class="admin-ai-feedback-label">Was this helpful?</span>
+                <button type="button" class="admin-ai-feedback-btn" data-response-id="${escapedId}" data-rating="up" aria-label="Helpful"><i class="fas fa-thumbs-up"></i></button>
+                <button type="button" class="admin-ai-feedback-btn" data-response-id="${escapedId}" data-rating="down" aria-label="Not helpful"><i class="fas fa-thumbs-down"></i></button>
+                <span class="admin-ai-feedback-status"></span>
+            </div>
+        `;
+    }
+
+    async function submitFeedback(responseId, rating, triggerButton) {
+        if (state.feedbackByResponseId[responseId]) {
+            return;
+        }
+
+        const wrap = triggerButton.closest('.admin-ai-feedback');
+        if (!wrap) {
+            return;
+        }
+
+        const status = wrap.querySelector('.admin-ai-feedback-status');
+        const buttons = wrap.querySelectorAll('.admin-ai-feedback-btn');
+        buttons.forEach((btn) => {
+            btn.disabled = true;
+        });
+        if (status) {
+            status.textContent = 'Sending...';
+        }
+
+        try {
+            const payload = await requestJson(`${window.API_BASE}${API_ENDPOINT}`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    action: 'feedback',
+                    response_id: responseId,
+                    rating
+                })
+            });
+
+            if (!payload.success) {
+                throw new Error(payload.message || 'Feedback failed');
+            }
+
+            state.feedbackByResponseId[responseId] = rating;
+            triggerButton.classList.add('active');
+            if (status) {
+                status.textContent = 'Thanks';
+            }
+        } catch (error) {
+            if (status) {
+                status.textContent = 'Failed';
+            }
+            buttons.forEach((btn) => {
+                btn.disabled = false;
+            });
+        }
+    }
+
     async function requestJson(url, options) {
         const response = await fetch(url, {
             credentials: 'same-origin',
             ...options
         });
-        const payload = await response.json();
+
+        const raw = await response.text();
+        let payload = {};
+        try {
+            payload = raw ? JSON.parse(raw) : {};
+        } catch (error) {
+            const message = response.ok ? 'Invalid API response' : `HTTP ${response.status}`;
+            throw new Error(message);
+        }
+
+        if (!response.ok && !payload.success) {
+            throw new Error(payload.message || `HTTP ${response.status}`);
+        }
+
         return payload;
     }
 

@@ -50,7 +50,7 @@ function handleGetRequest(): void {
             $llmConfig = getAdminAiLlmConfig();
             Response::success([
                 'name' => 'Admin AI Copilot',
-                'version' => '1.2',
+                'version' => '1.4',
                 'read_only' => true,
                 'capabilities' => [
                     'daily_summary',
@@ -58,7 +58,12 @@ function handleGetRequest(): void {
                     'trend_forecasting',
                     'reorder_suggestions',
                     'anomaly_detection',
-                    'bilingual_qa'
+                    'bilingual_qa',
+                    'hybrid_routing',
+                    'session_memory',
+                    'context_retrieval',
+                    'feedback_loop',
+                    'evaluation_suite'
                 ],
                 'languages' => [
                     'en',
@@ -72,7 +77,10 @@ function handleGetRequest(): void {
                     'reorder' => 'GET ?mode=reorder',
                     'anomalies' => 'GET ?mode=anomalies',
                     'insights' => 'GET ?mode=insights',
-                    'ask' => 'POST body: { message, context }'
+                    'memory' => 'GET ?mode=memory',
+                    'evaluate' => 'GET ?mode=evaluate',
+                    'ask' => 'POST body: { message, context }',
+                    'feedback' => 'POST body: { action:\"feedback\", response_id, rating, comment? }'
                 ],
                 'llm' => [
                     'enabled' => $llmConfig['enabled'],
@@ -160,8 +168,27 @@ function handleGetRequest(): void {
             ], 'Integrated AI insights generated');
             return;
 
+        case 'memory':
+            Response::success([
+                'mode' => 'memory',
+                'memory' => getAdminAiMemorySnapshot()
+            ], 'Session memory retrieved');
+            return;
+
+        case 'evaluate':
+            $report = runAdminAiEvaluationSuite($db);
+            logAiActivity('evaluate', [
+                'total_cases' => $report['summary']['total'] ?? 0,
+                'passed' => $report['summary']['passed'] ?? 0
+            ]);
+            Response::success([
+                'mode' => 'evaluate',
+                'evaluation' => $report
+            ], 'Evaluation suite completed');
+            return;
+
         default:
-            Response::error('Invalid mode. Use status, summary, history, forecast, reorder, anomalies, or insights.', 400);
+            Response::error('Invalid mode. Use status, summary, history, forecast, reorder, anomalies, insights, memory, or evaluate.', 400);
             return;
     }
 }
@@ -172,6 +199,12 @@ function handlePostRequest(): void {
     $input = json_decode(file_get_contents('php://input'), true);
     if (!is_array($input)) {
         $input = $_POST;
+    }
+
+    $action = strtolower(trim((string)($input['action'] ?? 'ask')));
+    if ($action === 'feedback') {
+        handleAdminAiFeedback($input);
+        return;
     }
 
     $message = trim((string)($input['message'] ?? ''));
@@ -253,16 +286,510 @@ function sanitizeAdminAiContext(array $context): array {
     return $sanitized;
 }
 
+function getAdminAiSessionMemory(): array {
+    if (session_status() !== PHP_SESSION_ACTIVE) {
+        return [
+            'recent_messages' => [],
+            'last_intent' => null,
+            'last_language' => null,
+            'last_entities' => [],
+            'feedback' => []
+        ];
+    }
+
+    $memory = $_SESSION['admin_ai_memory'] ?? [];
+    if (!is_array($memory)) {
+        $memory = [];
+    }
+
+    if (!isset($memory['recent_messages']) || !is_array($memory['recent_messages'])) {
+        $memory['recent_messages'] = [];
+    }
+    if (!isset($memory['feedback']) || !is_array($memory['feedback'])) {
+        $memory['feedback'] = [];
+    }
+    if (!isset($memory['last_entities']) || !is_array($memory['last_entities'])) {
+        $memory['last_entities'] = [];
+    }
+
+    return $memory;
+}
+
+function updateAdminAiSessionMemory(array $entry): void {
+    if (session_status() !== PHP_SESSION_ACTIVE) {
+        return;
+    }
+
+    $memory = getAdminAiSessionMemory();
+    $memory['recent_messages'][] = [
+        'response_id' => (string)($entry['response_id'] ?? ''),
+        'timestamp' => (string)($entry['timestamp'] ?? gmdate('c')),
+        'message' => substr((string)($entry['message'] ?? ''), 0, 260),
+        'intent' => (string)($entry['intent'] ?? 'general'),
+        'language' => (string)($entry['language'] ?? 'en'),
+        'response_source' => (string)($entry['response_source'] ?? 'rules'),
+        'entities' => isset($entry['entities']) && is_array($entry['entities']) ? $entry['entities'] : []
+    ];
+    $memory['recent_messages'] = array_slice($memory['recent_messages'], -12);
+    $memory['last_intent'] = (string)($entry['intent'] ?? 'general');
+    $memory['last_language'] = (string)($entry['language'] ?? 'en');
+    $memory['last_entities'] = isset($entry['entities']) && is_array($entry['entities']) ? $entry['entities'] : [];
+    $memory['last_response_id'] = (string)($entry['response_id'] ?? '');
+    $memory['updated_at'] = gmdate('c');
+
+    $_SESSION['admin_ai_memory'] = $memory;
+}
+
+function getAdminAiMemorySnapshot(): array {
+    $memory = getAdminAiSessionMemory();
+    $recent = [];
+    foreach ($memory['recent_messages'] as $item) {
+        if (!is_array($item)) {
+            continue;
+        }
+        $recent[] = [
+            'response_id' => (string)($item['response_id'] ?? ''),
+            'timestamp' => (string)($item['timestamp'] ?? ''),
+            'message' => (string)($item['message'] ?? ''),
+            'intent' => (string)($item['intent'] ?? 'general'),
+            'language' => (string)($item['language'] ?? 'en'),
+            'response_source' => (string)($item['response_source'] ?? 'rules')
+        ];
+    }
+
+    return [
+        'last_intent' => $memory['last_intent'] ?? null,
+        'last_language' => $memory['last_language'] ?? null,
+        'last_response_id' => $memory['last_response_id'] ?? null,
+        'recent_messages' => $recent,
+        'feedback_count' => count($memory['feedback'] ?? []),
+        'updated_at' => $memory['updated_at'] ?? null
+    ];
+}
+
+function extractAdminEntities(string $message, string $normalized, array $memory = []): array {
+    $entities = [
+        'language' => detectAdminLanguage($normalized),
+        'history_days' => 90,
+        'forecast_days' => 14,
+        'reorder_limit' => 8,
+        'anomaly_limit' => 10,
+        'metric_focus' => [],
+        'product_hint' => null,
+        'supplier_hint' => null,
+        'follow_up' => false,
+        'scope' => 'operations'
+    ];
+
+    if (preg_match('/\b(last|past|previous)\s+(\d{1,3})\s+days\b/iu', $normalized, $m) === 1) {
+        $entities['history_days'] = max(30, min(365, (int)$m[2]));
+    } elseif (preg_match('/\b(huling|nakaraang)\s+(\d{1,3})\s+araw\b/iu', $normalized, $m) === 1) {
+        $entities['history_days'] = max(30, min(365, (int)$m[2]));
+    }
+
+    if (preg_match('/\b(next|coming)\s+(\d{1,3})\s+days\b/iu', $normalized, $m) === 1) {
+        $entities['forecast_days'] = max(7, min(90, (int)$m[2]));
+    } elseif (preg_match('/\b(susunod na)\s+(\d{1,3})\s+araw\b/iu', $normalized, $m) === 1) {
+        $entities['forecast_days'] = max(7, min(90, (int)$m[2]));
+    }
+
+    if (preg_match('/\btop\s+(\d{1,2})\s+reorder\b/iu', $normalized, $m) === 1) {
+        $entities['reorder_limit'] = max(3, min(20, (int)$m[1]));
+    }
+    if (preg_match('/\btop\s+(\d{1,2})\s+anomal/iu', $normalized, $m) === 1) {
+        $entities['anomaly_limit'] = max(3, min(25, (int)$m[1]));
+    }
+
+    $metricMap = [
+        'orders' => '/\b(order|orders|benta)\b/iu',
+        'revenue' => '/\b(revenue|sales amount|kita|income)\b/iu',
+        'low_stock' => '/\b(low stock|kulang stock)\b/iu',
+        'out_of_stock' => '/\b(out of stock|ubos stock|stockout)\b/iu',
+        'reorder' => '/\b(reorder|restock|replenish)\b/iu',
+        'anomalies' => '/\b(anomal(y|ies)|outlier|kakaiba|abnormal)\b/iu',
+        'purchase_orders' => '/\b(po|purchase order|supplier delivery)\b/iu',
+        'forecast' => '/\b(forecast|projection|predict|trend)\b/iu'
+    ];
+    foreach ($metricMap as $metric => $pattern) {
+        if (preg_match($pattern, $normalized) === 1) {
+            $entities['metric_focus'][] = $metric;
+        }
+    }
+    $entities['metric_focus'] = array_values(array_unique($entities['metric_focus']));
+
+    if (preg_match('/"([^"]{2,80})"/u', $message, $m) === 1) {
+        $entities['product_hint'] = trim((string)$m[1]);
+    } elseif (preg_match('/\b(product|sku)\s*[:\-]?\s*([a-z0-9\-\s]{2,80})$/iu', $normalized, $m) === 1) {
+        $entities['product_hint'] = trim((string)$m[2]);
+    }
+
+    if (preg_match('/\bsupplier\s*[:\-]?\s*([a-z0-9\-\s]{2,80})$/iu', $normalized, $m) === 1) {
+        $entities['supplier_hint'] = trim((string)$m[1]);
+    }
+
+    $entities['follow_up'] = preg_match('/\b(what about|how about|and this|that one|it|those|same|naman|yung|yun|iyon|then)\b/iu', $normalized) === 1;
+    if ($entities['follow_up'] && isset($memory['last_entities']) && is_array($memory['last_entities'])) {
+        foreach (['product_hint', 'supplier_hint'] as $carryKey) {
+            if (empty($entities[$carryKey]) && !empty($memory['last_entities'][$carryKey])) {
+                $entities[$carryKey] = $memory['last_entities'][$carryKey];
+            }
+        }
+    }
+
+    if (in_array('purchase_orders', $entities['metric_focus'], true)) {
+        $entities['scope'] = 'purchasing';
+    } elseif (in_array('reorder', $entities['metric_focus'], true) || in_array('low_stock', $entities['metric_focus'], true)) {
+        $entities['scope'] = 'inventory';
+    } elseif (in_array('forecast', $entities['metric_focus'], true)) {
+        $entities['scope'] = 'analytics';
+    }
+
+    return $entities;
+}
+
+function refineIntentWithEntitiesAndMemory(string $intent, array $entities, array $memory): string {
+    if ($intent !== 'general') {
+        return $intent;
+    }
+
+    if (!empty($entities['metric_focus'])) {
+        if (in_array('forecast', $entities['metric_focus'], true)) {
+            return 'forecast';
+        }
+        if (in_array('anomalies', $entities['metric_focus'], true)) {
+            return 'anomalies';
+        }
+        if (in_array('reorder', $entities['metric_focus'], true) || in_array('low_stock', $entities['metric_focus'], true) || in_array('out_of_stock', $entities['metric_focus'], true)) {
+            return 'reorder';
+        }
+        if (in_array('orders', $entities['metric_focus'], true) || in_array('revenue', $entities['metric_focus'], true)) {
+            return 'summary';
+        }
+    }
+
+    if (!empty($entities['follow_up']) && !empty($memory['last_intent']) && is_string($memory['last_intent'])) {
+        $last = trim($memory['last_intent']);
+        if ($last !== '') {
+            return $last;
+        }
+    }
+
+    return $intent;
+}
+
+function retrieveAdminContextForQuery(
+    Database $db,
+    string $intent,
+    array $entities,
+    array $summary,
+    array $history,
+    array $forecast,
+    array $reorder,
+    array $anomalies
+): array {
+    $context = [
+        'intent' => $intent,
+        'scope' => $entities['scope'] ?? 'operations',
+        'metrics' => [],
+        'top_reorder' => array_slice($reorder, 0, 5),
+        'top_anomalies' => array_slice($anomalies['items'] ?? [], 0, 5),
+        'time_window' => [
+            'history_days' => $entities['history_days'] ?? 90,
+            'forecast_days' => $entities['forecast_days'] ?? 14
+        ]
+    ];
+
+    $metricFocus = isset($entities['metric_focus']) && is_array($entities['metric_focus']) ? $entities['metric_focus'] : [];
+    $summaryMetrics = isset($summary['metrics']) && is_array($summary['metrics']) ? $summary['metrics'] : [];
+    foreach ($metricFocus as $metric) {
+        if ($metric === 'orders') {
+            $context['metrics']['orders_today'] = (int)($summaryMetrics['orders_today'] ?? 0);
+            $context['metrics']['orders_last_7d'] = (int)($summaryMetrics['orders_last_7d'] ?? 0);
+        } elseif ($metric === 'revenue') {
+            $context['metrics']['revenue_today'] = (float)($summaryMetrics['revenue_today'] ?? 0.0);
+            $context['metrics']['revenue_last_7d'] = (float)($summaryMetrics['revenue_last_7d'] ?? 0.0);
+        } elseif ($metric === 'low_stock') {
+            $context['metrics']['low_stock_items'] = (int)($summaryMetrics['low_stock_items'] ?? 0);
+            $context['metrics']['out_of_stock_items'] = (int)($summaryMetrics['out_of_stock_items'] ?? 0);
+        } elseif ($metric === 'forecast') {
+            $context['metrics']['forecast'] = $forecast['projection'] ?? [];
+        } elseif ($metric === 'purchase_orders') {
+            $context['metrics']['pending_purchase_orders'] = (int)($summaryMetrics['pending_purchase_orders'] ?? 0);
+            $context['metrics']['overdue_purchase_orders'] = (int)($summaryMetrics['overdue_purchase_orders'] ?? 0);
+        }
+    }
+
+    $productHint = trim((string)($entities['product_hint'] ?? ''));
+    if ($productHint !== '') {
+        $context['product_lookup'] = safeFetchAll($db, "
+            SELECT
+                p.id,
+                p.name,
+                p.sku,
+                p.reorder_level,
+                COALESCE(i.quantity_available, 0) AS quantity_available
+            FROM products p
+            LEFT JOIN inventory i ON i.product_id = p.id
+            WHERE p.is_active = 1
+              AND (p.name LIKE :term OR p.sku LIKE :term)
+            ORDER BY COALESCE(i.quantity_available, 0) ASC, p.name ASC
+            LIMIT 8
+        ", [':term' => '%' . $productHint . '%']);
+    }
+
+    $supplierHint = trim((string)($entities['supplier_hint'] ?? ''));
+    if ($supplierHint !== '') {
+        $context['supplier_lookup'] = safeFetchAll($db, "
+            SELECT
+                po.po_number,
+                po.status,
+                po.expected_delivery_date,
+                DATEDIFF(CURDATE(), po.expected_delivery_date) AS overdue_days,
+                COALESCE(u.full_name, u.username, 'Supplier') AS supplier_name
+            FROM purchase_orders po
+            LEFT JOIN users u ON u.id = po.supplier_id
+            WHERE (u.full_name LIKE :term OR u.username LIKE :term)
+            ORDER BY po.created_at DESC
+            LIMIT 8
+        ", [':term' => '%' . $supplierHint . '%']);
+    }
+
+    $historySeries = isset($history['series']) && is_array($history['series']) ? $history['series'] : [];
+    $context['history_recent'] = array_slice($historySeries, -14);
+
+    return $context;
+}
+
+function buildAdminRoutingDecision(string $normalized, string $intent, array $entities, array $retrievedContext): array {
+    $wordCount = countWords($normalized);
+    $llmConfig = getAdminAiLlmConfig();
+    $llmEnabled = (bool)($llmConfig['enabled'] ?? false);
+    $hasMetricFocus = !empty($entities['metric_focus']) && is_array($entities['metric_focus']);
+    $hasEntityHints = !empty($entities['product_hint']) || !empty($entities['supplier_hint']);
+    $hasLookups = !empty($retrievedContext['product_lookup']) || !empty($retrievedContext['supplier_lookup']);
+    $isQuestion = strpos($normalized, '?') !== false || preg_match('/\b(what|which|when|where|why|how|can|should|ano|alin|kailan|saan|bakit|paano|pwede)\b/iu', $normalized) === 1;
+    $isAnalyticalQuestion = preg_match('/\b(why|how|explain|compare|insight|recommend|strategy|root cause|risk|tradeoff|bakit|paano|ipaliwanag|anong dapat|ano dapat)\b/iu', $normalized) === 1;
+
+    if (isOutOfScopeAdminQuestion($normalized)) {
+        return [
+            'strategy' => 'rules',
+            'confidence' => 0.99,
+            'reason' => 'out_of_scope_guard'
+        ];
+    }
+
+    if (isAdminGreetingMessage($normalized) || isAdminLanguageCapabilityQuestion($normalized)) {
+        return [
+            'strategy' => 'rules',
+            'confidence' => 0.97,
+            'reason' => 'small_talk_or_capability'
+        ];
+    }
+
+    if ($intent !== 'general') {
+        return [
+            'strategy' => 'rules',
+            'confidence' => 0.94,
+            'reason' => 'deterministic_intent'
+        ];
+    }
+
+    if (!$llmEnabled) {
+        return [
+            'strategy' => 'rules',
+            'confidence' => 0.84,
+            'reason' => 'llm_disabled'
+        ];
+    }
+
+    if (($hasMetricFocus || $hasEntityHints || $hasLookups) && $isAnalyticalQuestion) {
+        return [
+            'strategy' => 'hybrid',
+            'confidence' => 0.82,
+            'reason' => 'grounded_analytical_query'
+        ];
+    }
+
+    if ($hasMetricFocus || $hasEntityHints || $hasLookups) {
+        return [
+            'strategy' => 'hybrid',
+            'confidence' => 0.79,
+            'reason' => 'entity_grounded_general_query'
+        ];
+    }
+
+    if ($isQuestion || $wordCount >= 14) {
+        return [
+            'strategy' => 'llm',
+            'confidence' => 0.74,
+            'reason' => 'open_question'
+        ];
+    }
+
+    return [
+        'strategy' => 'rules',
+        'confidence' => 0.81,
+        'reason' => 'rules_default'
+    ];
+}
+
+function humanizeAdminRuleReply(string $reply, string $language = 'en'): string {
+    $reply = trim($reply);
+    if ($reply === '') {
+        return $language === 'fil' ? 'Walang available na insight sa ngayon.' : 'No additional insight is available right now.';
+    }
+
+    if ($language === 'fil') {
+        return "Narito ang pinaka-relevant na sagot base sa current system data:\n" . $reply;
+    }
+
+    return "Here is the most relevant answer based on current system data:\n" . $reply;
+}
+
+function generateAdminAiResponseId(): string {
+    try {
+        return 'ai_' . bin2hex(random_bytes(8));
+    } catch (Exception $e) {
+        return 'ai_' . dechex(time()) . '_' . mt_rand(1000, 9999);
+    }
+}
+
+function handleAdminAiFeedback(array $input): void {
+    $responseId = trim((string)($input['response_id'] ?? ''));
+    if ($responseId === '') {
+        Response::error('response_id is required for feedback', 400);
+    }
+
+    $ratingRaw = strtolower(trim((string)($input['rating'] ?? '')));
+    $rating = null;
+    if (in_array($ratingRaw, ['up', 'thumbs_up', 'positive', '1'], true)) {
+        $rating = 1;
+    } elseif (in_array($ratingRaw, ['down', 'thumbs_down', 'negative', '-1', '0'], true)) {
+        $rating = -1;
+    }
+    if ($rating === null) {
+        Response::error('rating must be up/down', 400);
+    }
+
+    $comment = trim((string)($input['comment'] ?? ''));
+    if (strlen($comment) > 280) {
+        $comment = substr($comment, 0, 280);
+    }
+
+    if (session_status() === PHP_SESSION_ACTIVE) {
+        $memory = getAdminAiSessionMemory();
+        $memory['feedback'][] = [
+            'response_id' => $responseId,
+            'rating' => $rating,
+            'comment' => $comment,
+            'user_id' => Auth::userId(),
+            'timestamp' => gmdate('c')
+        ];
+        $memory['feedback'] = array_slice($memory['feedback'], -100);
+        $_SESSION['admin_ai_memory'] = $memory;
+    }
+
+    logAiActivity('feedback', [
+        'response_id' => $responseId,
+        'rating' => $rating,
+        'comment_len' => strlen($comment)
+    ]);
+
+    Response::success([
+        'response_id' => $responseId,
+        'rating' => $rating,
+        'stored' => true
+    ], 'Feedback captured');
+}
+
+function runAdminAiEvaluationSuite(Database $db): array {
+    $cases = [
+        ['input' => 'what are the low stock items right now', 'expected_intent' => 'reorder'],
+        ['input' => 'forecast next 14 days for sales', 'expected_intent' => 'forecast'],
+        ['input' => 'show anomalies this week', 'expected_intent' => 'anomalies'],
+        ['input' => 'daily summary today', 'expected_intent' => 'summary'],
+        ['input' => 'can you understand tagalog?', 'expected_intent' => 'general'],
+        ['input' => 'weather tomorrow in manila', 'expected_intent' => 'general', 'expect_out_of_scope' => true]
+    ];
+
+    $results = [];
+    $passed = 0;
+
+    foreach ($cases as $case) {
+        $normalized = normalizeAdminAiMessage((string)$case['input']);
+        $entities = extractAdminEntities((string)$case['input'], $normalized, getAdminAiSessionMemory());
+        $intent = refineIntentWithEntitiesAndMemory(detectAdminIntent($normalized), $entities, getAdminAiSessionMemory());
+
+        $summary = buildDailySummaryPayload($db);
+        $history = buildHistoricalAnalyticsPayload($db, 90);
+        $forecast = buildTrendForecastPayload($history, 14);
+        $reorder = buildReorderSuggestions($db, 8);
+        $anomalies = detectOperationalAnomalies($db, 10);
+        $retrieved = retrieveAdminContextForQuery($db, $intent, $entities, $summary, $history, $forecast, $reorder, $anomalies);
+        $router = buildAdminRoutingDecision($normalized, $intent, $entities, $retrieved);
+
+        $okIntent = ($intent === (string)$case['expected_intent']);
+        $okScope = true;
+        if (!empty($case['expect_out_of_scope'])) {
+            $okScope = isOutOfScopeAdminQuestion($normalized);
+        }
+        $ok = $okIntent && $okScope;
+        if ($ok) {
+            $passed++;
+        }
+
+        $results[] = [
+            'input' => (string)$case['input'],
+            'expected_intent' => (string)$case['expected_intent'],
+            'actual_intent' => $intent,
+            'router_strategy' => $router['strategy'] ?? 'rules',
+            'passed' => $ok
+        ];
+    }
+
+    $total = count($cases);
+    $score = $total > 0 ? ($passed / $total) * 100 : 0.0;
+
+    return [
+        'generated_at' => gmdate('c'),
+        'summary' => [
+            'total' => $total,
+            'passed' => $passed,
+            'failed' => $total - $passed,
+            'score_pct' => round($score, 2)
+        ],
+        'cases' => $results
+    ];
+}
+
+function countWords(string $text): int {
+    $clean = trim((string)preg_replace('/\s+/', ' ', $text));
+    if ($clean === '') {
+        return 0;
+    }
+    return count(explode(' ', $clean));
+}
+
 function buildAdminCopilotReply(Database $db, string $message, array $context): array {
     $normalized = normalizeAdminAiMessage($message);
-    $language = detectAdminLanguage($normalized);
+    $memory = getAdminAiSessionMemory();
+    $entities = extractAdminEntities($message, $normalized, $memory);
+    $language = (string)($entities['language'] ?? detectAdminLanguage($normalized));
     $intent = detectAdminIntent($normalized);
+    $intent = refineIntentWithEntitiesAndMemory($intent, $entities, $memory);
+
+    $historyWindowDays = (int)($entities['history_days'] ?? 90);
+    $forecastHorizonDays = (int)($entities['forecast_days'] ?? 14);
+    $reorderLimit = (int)($entities['reorder_limit'] ?? 8);
+    $anomalyLimit = (int)($entities['anomaly_limit'] ?? 10);
 
     $summary = buildDailySummaryPayload($db);
-    $history = buildHistoricalAnalyticsPayload($db, 90);
-    $forecast = buildTrendForecastPayload($history, 14);
-    $reorder = buildReorderSuggestions($db, 8);
-    $anomalies = detectOperationalAnomalies($db, 10);
+    $history = buildHistoricalAnalyticsPayload($db, $historyWindowDays);
+    $forecast = buildTrendForecastPayload($history, $forecastHorizonDays);
+    $reorder = buildReorderSuggestions($db, $reorderLimit);
+    $anomalies = detectOperationalAnomalies($db, $anomalyLimit);
+    $retrievedContext = retrieveAdminContextForQuery($db, $intent, $entities, $summary, $history, $forecast, $reorder, $anomalies);
+    $routing = buildAdminRoutingDecision($normalized, $intent, $entities, $retrievedContext);
 
     $replyText = '';
     $followUp = [];
@@ -336,11 +863,24 @@ function buildAdminCopilotReply(Database $db, string $message, array $context): 
             'Show trend forecast'
         ];
     } else {
-        $replyText = buildRulesBasedGeneralReply($message, $summary, $reorder, $anomalies, $forecast, $language);
-        $llmReply = maybeGenerateAdminLlmReply($message, $context, $summary, $reorder, $anomalies, $history, $forecast, $language);
+        $rulesReply = buildRulesBasedGeneralReply($message, $summary, $reorder, $anomalies, $forecast, $language);
+        $llmReply = '';
+
+        if (($routing['strategy'] ?? 'rules') !== 'rules') {
+            $llmReply = maybeGenerateAdminLlmReply($message, $context, $summary, $reorder, $anomalies, $history, $forecast, $language, $retrievedContext, $memory);
+        }
+
         if ($llmReply !== '') {
             $replyText = $llmReply;
             $responseSource = 'llm';
+        } elseif (($routing['strategy'] ?? 'rules') === 'hybrid') {
+            $replyText = humanizeAdminRuleReply($rulesReply, $language);
+            $responseSource = 'hybrid';
+        } elseif (($routing['strategy'] ?? 'rules') === 'llm') {
+            $replyText = $rulesReply;
+            $responseSource = 'rules_fallback';
+        } else {
+            $replyText = $rulesReply;
         }
         $followUp = [
             'Daily summary',
@@ -351,21 +891,46 @@ function buildAdminCopilotReply(Database $db, string $message, array $context): 
         ];
     }
 
+    $responseId = generateAdminAiResponseId();
+    $memoryEntry = [
+        'response_id' => $responseId,
+        'timestamp' => gmdate('c'),
+        'message' => $message,
+        'normalized' => $normalized,
+        'intent' => $intent,
+        'language' => $language,
+        'entities' => $entities,
+        'routing' => $routing,
+        'response_source' => $responseSource,
+        'reply' => $replyText
+    ];
+    updateAdminAiSessionMemory($memoryEntry);
+    $updatedMemory = getAdminAiSessionMemory();
+
     return [
+        'response_id' => $responseId,
         'intent' => $intent,
         'language' => $language,
         'response_source' => $responseSource,
+        'router' => $routing,
+        'entities' => $entities,
         'reply' => $replyText,
         'summary' => $summary,
         'history' => $history,
         'forecast' => $forecast,
         'reorder_suggestions' => $reorder,
         'anomalies' => $anomalies,
+        'retrieved_context' => $retrievedContext,
         'follow_up_actions' => $followUp,
         'generated_at' => gmdate('c'),
         'context' => [
             'page' => $context['page'] ?? null,
             'title' => $context['title'] ?? null
+        ],
+        'memory' => [
+            'turns' => (int)count($updatedMemory['recent_messages'] ?? []),
+            'last_intent' => $updatedMemory['last_intent'] ?? null,
+            'last_language' => $updatedMemory['last_language'] ?? null
         ]
     ];
 }
@@ -1843,7 +2408,7 @@ function buildRulesBasedGeneralReply(string $message, array $summary, array $reo
     if (isOutOfScopeAdminQuestion($normalized)) {
         return $language === 'fil'
             ? "Nakafocus ako sa inventory management at system operations lang.\nPwede mong itanong ang sales trends, reorder timing, stock risks, purchase orders, at anomalies."
-            : "I’m scoped to inventory management and system operations only.\nYou can ask about sales trends, reorder timing, stock risks, purchase orders, and anomalies.";
+            : "I'm scoped to inventory management and system operations only.\nYou can ask about sales trends, reorder timing, stock risks, purchase orders, and anomalies.";
     }
 
     if (preg_match('/\b(help|what can you do|capabilities|commands|how do i use|paano gamitin|anong kaya mo)\b/iu', $normalized) === 1) {
@@ -2082,7 +2647,9 @@ function maybeGenerateAdminLlmReply(
     array $anomalies,
     array $history,
     array $forecast,
-    string $language = 'en'
+    string $language = 'en',
+    array $retrievedContext = [],
+    array $memory = []
 ): string {
     $llmConfig = getAdminAiLlmConfig();
     if (!$llmConfig['enabled']) {
@@ -2090,7 +2657,19 @@ function maybeGenerateAdminLlmReply(
     }
 
     try {
-        $messages = buildAdminLlmMessages($message, $context, $summary, $reorder, $anomalies, $history, $forecast, $llmConfig, $language);
+        $messages = buildAdminLlmMessages(
+            $message,
+            $context,
+            $summary,
+            $reorder,
+            $anomalies,
+            $history,
+            $forecast,
+            $retrievedContext,
+            $memory,
+            $llmConfig,
+            $language
+        );
         $reply = callOpenAiCompatibleChat($messages, $llmConfig);
         return sanitizeLlmReply($reply);
     } catch (Exception $e) {
@@ -2107,6 +2686,8 @@ function buildAdminLlmMessages(
     array $anomalies,
     array $history,
     array $forecast,
+    array $retrievedContext,
+    array $memory,
     array $llmConfig,
     string $language = 'en'
 ): array {
@@ -2117,18 +2698,47 @@ function buildAdminLlmMessages(
     $systemPrompt = implode("\n", [
         'You are the Admin AI Copilot for an inventory and e-commerce operations dashboard.',
         'You are read-only: never claim to execute approvals, stock edits, or financial transactions.',
-        'Be concise, factual, and action-oriented.',
-        'Use practical analytics from trend, history, forecast, and anomaly signals.',
-        'When suggesting actions, prioritize risk reduction and operational throughput.',
-        'State assumptions and confidence when forecasting.',
-        'Use only grounded values from provided JSON context. If missing, say it is unavailable.',
-        'If asked about unrelated topics, redirect to operations, purchasing, inventory, orders, and audit monitoring.',
-        'Use short bullets and keep responses typically under 190 words.',
+        'Focus only on inventory management, purchasing, sales operations, audit, and system process questions.',
+        'Be concise, factual, and action-oriented while sounding natural and human.',
+        'Use practical analytics from trend, history, forecast, reorder, and anomaly signals.',
+        'When suggesting actions, prioritize risk reduction, service level, and operational throughput.',
+        'Ground every numeric claim in provided JSON context. If data is missing, state it clearly.',
+        'If asked about unrelated topics, politely redirect to operations scope.',
+        'For analytical queries: explain briefly, then give clear recommended next actions.',
+        'Prefer short bullets and keep responses typically under 260 words.',
         $languageInstruction
     ]);
 
     if (!empty($llmConfig['system_prompt'])) {
         $systemPrompt .= "\nAdditional instruction:\n" . $llmConfig['system_prompt'];
+    }
+
+    $recentMemory = [];
+    $recentMessages = isset($memory['recent_messages']) && is_array($memory['recent_messages']) ? $memory['recent_messages'] : [];
+    foreach (array_slice($recentMessages, -4) as $entry) {
+        if (!is_array($entry)) {
+            continue;
+        }
+        $recentMemory[] = [
+            'message' => (string)($entry['message'] ?? ''),
+            'intent' => (string)($entry['intent'] ?? 'general'),
+            'language' => (string)($entry['language'] ?? 'en'),
+            'response_source' => (string)($entry['response_source'] ?? 'rules'),
+            'response_id' => (string)($entry['response_id'] ?? '')
+        ];
+    }
+
+    $feedback = [];
+    $feedbackRows = isset($memory['feedback']) && is_array($memory['feedback']) ? $memory['feedback'] : [];
+    foreach (array_slice($feedbackRows, -5) as $row) {
+        if (!is_array($row)) {
+            continue;
+        }
+        $feedback[] = [
+            'response_id' => (string)($row['response_id'] ?? ''),
+            'rating' => (int)($row['rating'] ?? 0),
+            'comment' => (string)($row['comment'] ?? '')
+        ];
     }
 
     $knowledge = [
@@ -2137,6 +2747,12 @@ function buildAdminLlmMessages(
             'title' => $context['title'] ?? '',
             'pathname' => $context['pathname'] ?? '',
             'url' => $context['url'] ?? ''
+        ],
+        'conversation_memory' => [
+            'last_intent' => $memory['last_intent'] ?? null,
+            'last_language' => $memory['last_language'] ?? null,
+            'recent_messages' => $recentMemory,
+            'recent_feedback' => $feedback
         ],
         'daily_summary' => [
             'date' => $summary['date'] ?? null,
@@ -2160,8 +2776,20 @@ function buildAdminLlmMessages(
         'anomalies' => [
             'counts' => $anomalies['counts'] ?? [],
             'top_items' => array_slice($anomalies['items'] ?? [], 0, 8)
-        ]
+        ],
+        'retrieved_context' => $retrievedContext
     ];
+
+    $userPrompt = implode("\n", [
+        'User question:',
+        $message,
+        '',
+        'Response requirements:',
+        '- Answer only with grounded operations data.',
+        '- Keep it practical and easy to scan.',
+        '- Include a concise recommendation.',
+        '- Mention uncertainty when confidence is low.'
+    ]);
 
     return [
         [
@@ -2175,7 +2803,7 @@ function buildAdminLlmMessages(
         ],
         [
             'role' => 'user',
-            'content' => $message
+            'content' => $userPrompt
         ]
     ];
 }
@@ -2201,9 +2829,9 @@ function getAdminAiLlmConfig(): array {
         'api_key' => $apiKey,
         'base_url' => $baseUrl !== '' ? $baseUrl : 'https://api.openai.com/v1',
         'model' => (string)(Env::get('ADMIN_AI_MODEL', Env::get('CHATBOT_LLM_MODEL', 'gpt-4o-mini')) ?? 'gpt-4o-mini'),
-        'temperature' => (float)(Env::get('ADMIN_AI_TEMPERATURE', 0.2) ?? 0.2),
-        'max_tokens' => (int)(Env::get('ADMIN_AI_MAX_TOKENS', 320) ?? 320),
-        'timeout_seconds' => (int)(Env::get('ADMIN_AI_TIMEOUT_SECONDS', 20) ?? 20),
+        'temperature' => (float)(Env::get('ADMIN_AI_TEMPERATURE', Env::get('CHATBOT_LLM_TEMPERATURE', 0.35)) ?? 0.35),
+        'max_tokens' => (int)(Env::get('ADMIN_AI_MAX_TOKENS', Env::get('CHATBOT_LLM_MAX_TOKENS', 700)) ?? 700),
+        'timeout_seconds' => (int)(Env::get('ADMIN_AI_TIMEOUT_SECONDS', Env::get('CHATBOT_LLM_TIMEOUT_SECONDS', 35)) ?? 35),
         'configured' => $configured,
         'enabled' => $enabled,
         'system_prompt' => trim((string)(Env::get('ADMIN_AI_SYSTEM_PROMPT', '') ?? ''))

@@ -135,6 +135,73 @@
     color: var(--text-muted);
 }
 
+.admin-ai-followups {
+    margin-top: 8px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.admin-ai-followup-btn {
+    border: 1px solid var(--border-color);
+    background: var(--bg-tertiary);
+    color: var(--text-secondary);
+    border-radius: 999px;
+    padding: 4px 9px;
+    font-size: 0.72rem;
+    cursor: pointer;
+}
+
+.admin-ai-followup-btn:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+}
+
+.admin-ai-feedback {
+    margin-top: 8px;
+    padding-top: 8px;
+    border-top: 1px dashed var(--border-color);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.admin-ai-feedback-label {
+    font-size: 0.7rem;
+    color: var(--text-muted);
+    margin-right: 4px;
+}
+
+.admin-ai-feedback-btn {
+    border: 1px solid var(--border-color);
+    background: transparent;
+    color: var(--text-muted);
+    border-radius: 6px;
+    width: 26px;
+    height: 26px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+}
+
+.admin-ai-feedback-btn:hover,
+.admin-ai-feedback-btn.active {
+    border-color: var(--accent);
+    color: var(--accent);
+}
+
+.admin-ai-feedback-btn:disabled {
+    opacity: 0.65;
+    cursor: not-allowed;
+}
+
+.admin-ai-feedback-status {
+    margin-left: 3px;
+    font-size: 0.68rem;
+    color: var(--text-muted);
+}
+
 .admin-ai-form {
     display: flex;
     align-items: center;

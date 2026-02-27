@@ -72,6 +72,33 @@ A comprehensive inventory management and e-commerce system designed for PC parts
 - **Supplier Portal**: Suppliers access via `supplier/` for order management
 - **API Access**: RESTful APIs available under `backend/api/`
 
+## Admin AI Copilot Setup
+
+- Place `.env` at project root (recommended) or one level above it.
+- Keep `.env` outside any publicly browsable directory when possible.
+- Required for LLM responses:
+  - `CHATBOT_LLM_ENABLED=true`
+  - `OPENAI_API_KEY=...` (or `ADMIN_AI_API_KEY=...`)
+  - `CHATBOT_LLM_MODEL=gpt-4o-mini` (or `ADMIN_AI_MODEL=...`)
+- Optional tuning for richer answers:
+  - `CHATBOT_LLM_TEMPERATURE=0.35`
+  - `CHATBOT_LLM_MAX_TOKENS=700`
+  - `CHATBOT_LLM_TIMEOUT_SECONDS=35`
+  - `ADMIN_AI_SYSTEM_PROMPT=...` (extra guardrails/instructions)
+
+### Admin AI API Endpoints
+
+- `GET /backend/api/ai/admin-copilot.php?mode=status`
+- `GET /backend/api/ai/admin-copilot.php?mode=summary`
+- `GET /backend/api/ai/admin-copilot.php?mode=history&days=90`
+- `GET /backend/api/ai/admin-copilot.php?mode=forecast&days=14`
+- `GET /backend/api/ai/admin-copilot.php?mode=reorder`
+- `GET /backend/api/ai/admin-copilot.php?mode=anomalies`
+- `GET /backend/api/ai/admin-copilot.php?mode=memory`
+- `GET /backend/api/ai/admin-copilot.php?mode=evaluate`
+- `POST /backend/api/ai/admin-copilot.php` with `{ "message": "...", "context": {...} }`
+- `POST /backend/api/ai/admin-copilot.php` with `{ "action":"feedback", "response_id":"...", "rating":"up|down", "comment":"..." }`
+
 ## Security Features
 
 - CSRF protection
