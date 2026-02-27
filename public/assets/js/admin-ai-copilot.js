@@ -10,8 +10,19 @@
         isBusy: false
     };
 
+    function getCurrentUser() {
+        if (typeof currentUser !== 'undefined' && currentUser) {
+            return currentUser;
+        }
+        if (typeof window.currentUser !== 'undefined' && window.currentUser) {
+            return window.currentUser;
+        }
+        return null;
+    }
+
     function canUseCopilot() {
-        return Boolean(window.currentUser && ALLOWED_ROLES.has(window.currentUser.role));
+        const user = getCurrentUser();
+        return Boolean(user && ALLOWED_ROLES.has(user.role));
     }
 
     function init() {

@@ -748,6 +748,7 @@
                 }
 
                 currentUser = data.data;
+                window.currentUser = currentUser;
                 updateUserUI();
                 loadSidebarMenu();
                 if (window.AdminAICopilot && typeof window.AdminAICopilot.init === 'function') {
