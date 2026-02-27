@@ -9,6 +9,7 @@
     var STORAGE_KEY = 'ppc_shop_chatbot_state_v1';
     var MAX_HISTORY = 30;
     var TYPING_MESSAGE_ID = '__typing__';
+    var API_TIMEOUT_MS = 25000;
     var state = {
         open: false,
         maximized: false,
@@ -647,6 +648,24 @@
         if (!value) {
             return 'index.php';
         }
+
+        if (/^\/\//.test(value)) {
+            return 'index.php';
+        }
+
+        var hasScheme = /^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(value);
+        if (hasScheme && !/^https?:/i.test(value)) {
+            return 'index.php';
+        }
+
+        if (/^https?:/i.test(value)) {
+            try {
+                return new URL(value).href;
+            } catch (error) {
+                return 'index.php';
+            }
+        }
+
         return value;
     }
 
@@ -711,29 +730,53 @@
     }
 
     async function requestChatbotReply(messageText, history) {
-        var response = await fetch(getApiUrl(), {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            credentials: 'same-origin',
-            body: JSON.stringify({
-                message: messageText,
-                context: getPageContext(),
-                history: Array.isArray(history) ? history : []
-            })
-        });
-
-        var payload = await response.json().catch(function () {
-            return null;
-        });
-
-        if (!response.ok || !payload || payload.success !== true || !payload.data) {
-            var fallbackMessage = (payload && payload.message) ? payload.message : 'Unable to contact the assistant right now.';
-            throw new Error(fallbackMessage);
+        var controller = typeof AbortController === 'function' ? new AbortController() : null;
+        var timeoutId = null;
+        if (controller) {
+            timeoutId = window.setTimeout(function () {
+                controller.abort();
+            }, API_TIMEOUT_MS);
         }
 
-        return payload.data;
+        try {
+            var options = {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                credentials: 'same-origin',
+                body: JSON.stringify({
+                    message: messageText,
+                    context: getPageContext(),
+                    history: Array.isArray(history) ? history : []
+                })
+            };
+
+            if (controller) {
+                options.signal = controller.signal;
+            }
+
+            var response = await fetch(getApiUrl(), options);
+            var payload = await response.json().catch(function () {
+                return null;
+            });
+
+            if (!response.ok || !payload || payload.success !== true || !payload.data) {
+                var fallbackMessage = (payload && payload.message) ? payload.message : 'Unable to contact the assistant right now.';
+                throw new Error(fallbackMessage);
+            }
+
+            return payload.data;
+        } catch (error) {
+            if (error && error.name === 'AbortError') {
+                throw new Error('Request timed out. Please try again.');
+            }
+            throw error;
+        } finally {
+            if (timeoutId !== null) {
+                window.clearTimeout(timeoutId);
+            }
+        }
     }
 
     function setPending(pending) {
@@ -788,9 +831,10 @@
             }
         }).catch(function (error) {
             removeTypingMessage();
+            var details = isDevelopmentHost() && error && error.message ? ' (' + error.message + ')' : '';
             addMessage(createMessage(
                 'bot',
-                'I could not reach the assistant right now. You can still browse products, check your cart, or try again in a moment. (' + (error && error.message ? error.message : 'Network error') + ')',
+                'I could not reach the assistant right now. You can still browse products, check your cart, or try again in a moment.' + details,
                 {
                     quickReplies: ['Browse categories', 'Find a product', 'Cart', 'Checkout'],
                     links: [

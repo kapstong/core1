@@ -54,8 +54,8 @@ try {
     }
 
     $message = trim((string)($input['message'] ?? ''));
-    $context = isset($input['context']) && is_array($input['context']) ? $input['context'] : [];
-    $history = isset($input['history']) && is_array($input['history']) ? $input['history'] : [];
+    $context = sanitizeChatbotContext(isset($input['context']) && is_array($input['context']) ? $input['context'] : []);
+    $history = sanitizeIncomingChatHistory(isset($input['history']) && is_array($input['history']) ? $input['history'] : []);
 
     if ($message === '') {
         Response::error('Message is required', 400);
@@ -65,6 +65,8 @@ try {
         Response::error('Message is too long (max 600 characters)', 400);
     }
 
+    enforceChatbotRateLimit();
+
     $db = Database::getInstance()->getConnection();
     $customerId = isset($_SESSION['customer_id']) ? (int)$_SESSION['customer_id'] : null;
 
@@ -72,7 +74,263 @@ try {
 
     Response::success($reply, 'Reply generated');
 } catch (Exception $e) {
-    Response::serverError('Chatbot error: ' . $e->getMessage());
+    error_log('Chatbot request failed: ' . $e->getMessage());
+    Response::serverError('Unable to process chatbot request right now.');
+}
+
+function enforceChatbotRateLimit(int $windowSeconds = 60, int $maxRequests = 18): void {
+    if (session_status() !== PHP_SESSION_ACTIVE) {
+        return;
+    }
+
+    $now = time();
+    $rawBucket = $_SESSION['shop_chatbot_rate_limit'] ?? [];
+    $freshBucket = [];
+
+    if (is_array($rawBucket)) {
+        foreach ($rawBucket as $timestamp) {
+            if (!is_int($timestamp) && !is_numeric($timestamp)) {
+                continue;
+            }
+
+            $value = (int)$timestamp;
+            if ($value > ($now - $windowSeconds)) {
+                $freshBucket[] = $value;
+            }
+        }
+    }
+
+    if (count($freshBucket) >= $maxRequests) {
+        Response::error('Too many chatbot requests. Please wait a few seconds and try again.', 429);
+    }
+
+    $freshBucket[] = $now;
+    $_SESSION['shop_chatbot_rate_limit'] = array_slice($freshBucket, -$maxRequests);
+}
+
+function sanitizeChatbotContext(array $context): array {
+    $sanitized = [];
+    $stringLimits = [
+        'page' => 64,
+        'title' => 160,
+        'pathname' => 220,
+        'url' => 400
+    ];
+
+    foreach ($stringLimits as $key => $maxLength) {
+        if (!array_key_exists($key, $context) || !is_scalar($context[$key])) {
+            continue;
+        }
+
+        $value = trim((string)$context[$key]);
+        if ($value === '') {
+            continue;
+        }
+
+        if (strlen($value) > $maxLength) {
+            $value = substr($value, 0, $maxLength);
+        }
+
+        $sanitized[$key] = $value;
+    }
+
+    if (isset($context['product_id']) && is_scalar($context['product_id'])) {
+        $productId = (int)$context['product_id'];
+        if ($productId > 0) {
+            $sanitized['product_id'] = $productId;
+        }
+    }
+
+    return $sanitized;
+}
+
+function sanitizeIncomingChatHistory(array $history): array {
+    $sanitized = [];
+    if (count($history) > 24) {
+        $history = array_slice($history, -24);
+    }
+
+    foreach ($history as $item) {
+        if (!is_array($item)) {
+            continue;
+        }
+
+        $role = strtolower(trim((string)($item['role'] ?? '')));
+        if (!in_array($role, ['user', 'bot', 'assistant'], true)) {
+            continue;
+        }
+
+        $text = trim((string)($item['text'] ?? ''));
+        if ($text === '') {
+            continue;
+        }
+
+        if (strlen($text) > 1000) {
+            $text = substr($text, 0, 1000);
+        }
+
+        $entry = [
+            'role' => $role,
+            'text' => $text
+        ];
+
+        if (($role === 'bot' || $role === 'assistant') && isset($item['meta']) && is_array($item['meta'])) {
+            $meta = sanitizeChatHistoryMeta($item['meta']);
+            if (!empty($meta)) {
+                $entry['meta'] = $meta;
+            }
+        }
+
+        if (($role === 'bot' || $role === 'assistant') && isset($item['products']) && is_array($item['products'])) {
+            $products = sanitizeChatHistoryProducts($item['products']);
+            if (!empty($products)) {
+                $entry['products'] = $products;
+            }
+        }
+
+        $sanitized[] = $entry;
+    }
+
+    return $sanitized;
+}
+
+function sanitizeChatHistoryMeta(array $meta): array {
+    $sanitized = [];
+
+    if (isset($meta['intent']) && is_scalar($meta['intent'])) {
+        $intent = strtolower(trim((string)$meta['intent']));
+        if ($intent !== '' && preg_match('/^[a-z_]{2,40}$/', $intent) === 1) {
+            $sanitized['intent'] = $intent;
+        }
+    }
+
+    if (isset($meta['response_source']) && is_scalar($meta['response_source'])) {
+        $responseSource = strtolower(trim((string)$meta['response_source']));
+        if (in_array($responseSource, ['rules', 'llm'], true)) {
+            $sanitized['response_source'] = $responseSource;
+        }
+    }
+
+    if (isset($meta['search_query']) && is_scalar($meta['search_query'])) {
+        $searchQuery = trim((string)$meta['search_query']);
+        if ($searchQuery !== '') {
+            $sanitized['search_query'] = strlen($searchQuery) > 120 ? substr($searchQuery, 0, 120) : $searchQuery;
+        }
+    }
+
+    if (isset($meta['budget']) && is_numeric($meta['budget'])) {
+        $budget = (float)$meta['budget'];
+        if ($budget >= 0 && $budget <= 100000000) {
+            $sanitized['budget'] = $budget;
+        }
+    }
+
+    if (isset($meta['message_act']) && is_scalar($meta['message_act'])) {
+        $messageAct = strtolower(trim((string)$meta['message_act']));
+        if ($messageAct !== '' && preg_match('/^[a-z_]{2,40}$/', $messageAct) === 1) {
+            $sanitized['message_act'] = $messageAct;
+        }
+    }
+
+    if (array_key_exists('needs_clarification', $meta)) {
+        $sanitized['needs_clarification'] = filter_var($meta['needs_clarification'], FILTER_VALIDATE_BOOLEAN);
+    }
+
+    if (isset($meta['fallback_reason']) && is_scalar($meta['fallback_reason'])) {
+        $fallbackReason = trim((string)$meta['fallback_reason']);
+        if ($fallbackReason !== '') {
+            $sanitized['fallback_reason'] = strlen($fallbackReason) > 80 ? substr($fallbackReason, 0, 80) : $fallbackReason;
+        }
+    }
+
+    return $sanitized;
+}
+
+function sanitizeChatHistoryProducts(array $products): array {
+    $sanitized = [];
+    $products = array_slice($products, 0, 5);
+
+    foreach ($products as $product) {
+        if (!is_array($product)) {
+            continue;
+        }
+
+        $name = trim((string)($product['name'] ?? ''));
+        $url = trim((string)($product['url'] ?? ''));
+        if ($name === '' || $url === '') {
+            continue;
+        }
+
+        if (strlen($name) > 160) {
+            $name = substr($name, 0, 160);
+        }
+        if (strlen($url) > 260) {
+            $url = substr($url, 0, 260);
+        }
+
+        $entry = [
+            'name' => $name,
+            'url' => $url
+        ];
+
+        if (isset($product['id']) && is_numeric($product['id'])) {
+            $entry['id'] = (int)$product['id'];
+        }
+
+        if (isset($product['brand']) && is_scalar($product['brand'])) {
+            $brand = trim((string)$product['brand']);
+            if ($brand !== '') {
+                $entry['brand'] = strlen($brand) > 80 ? substr($brand, 0, 80) : $brand;
+            }
+        }
+
+        if (isset($product['sku']) && is_scalar($product['sku'])) {
+            $sku = trim((string)$product['sku']);
+            if ($sku !== '') {
+                $entry['sku'] = strlen($sku) > 80 ? substr($sku, 0, 80) : $sku;
+            }
+        }
+
+        if (isset($product['category']) && is_scalar($product['category'])) {
+            $category = trim((string)$product['category']);
+            if ($category !== '') {
+                $entry['category'] = strlen($category) > 80 ? substr($category, 0, 80) : $category;
+            }
+        }
+
+        if (isset($product['price']) && is_numeric($product['price'])) {
+            $price = (float)$product['price'];
+            if ($price >= 0 && $price <= 100000000) {
+                $entry['price'] = $price;
+            }
+        }
+
+        if (isset($product['price_formatted']) && is_scalar($product['price_formatted'])) {
+            $priceFormatted = trim((string)$product['price_formatted']);
+            if ($priceFormatted !== '') {
+                $entry['price_formatted'] = strlen($priceFormatted) > 40 ? substr($priceFormatted, 0, 40) : $priceFormatted;
+            }
+        }
+
+        if (array_key_exists('in_stock', $product)) {
+            if (is_bool($product['in_stock'])) {
+                $entry['in_stock'] = $product['in_stock'];
+            } elseif (is_numeric($product['in_stock'])) {
+                $entry['in_stock'] = ((int)$product['in_stock']) > 0;
+            }
+        }
+
+        if (isset($product['quantity_available']) && is_numeric($product['quantity_available'])) {
+            $quantity = (int)$product['quantity_available'];
+            if ($quantity >= 0 && $quantity <= 1000000) {
+                $entry['quantity_available'] = $quantity;
+            }
+        }
+
+        $sanitized[] = $entry;
+    }
+
+    return $sanitized;
 }
 
 function buildChatbotReply(PDO $db, string $message, array $context, ?int $customerId, array $history = []): array {
@@ -2184,7 +2442,7 @@ function getChatbotLlmConfig(): array {
     $apiKey = trim((string)(Env::get('CHATBOT_LLM_API_KEY', Env::get('OPENAI_API_KEY', '')) ?? ''));
     $enabledFlag = Env::get('CHATBOT_LLM_ENABLED', null);
     $configured = $apiKey !== '';
-    $enabled = $configured && ($enabledFlag === null ? true : (bool)$enabledFlag);
+    $enabled = $configured && parseBooleanEnvFlag($enabledFlag, true);
 
     $baseUrl = trim((string)(Env::get('CHATBOT_LLM_BASE_URL', Env::get('OPENAI_BASE_URL', 'https://api.openai.com/v1')) ?? 'https://api.openai.com/v1'));
     $baseUrl = rtrim($baseUrl, '/');
@@ -2201,6 +2459,31 @@ function getChatbotLlmConfig(): array {
         'enabled' => $enabled,
         'system_prompt' => trim((string)(Env::get('CHATBOT_LLM_SYSTEM_PROMPT', '') ?? ''))
     ];
+}
+
+function parseBooleanEnvFlag($value, bool $default): bool {
+    if ($value === null) {
+        return $default;
+    }
+
+    if (is_bool($value)) {
+        return $value;
+    }
+
+    $normalized = strtolower(trim((string)$value));
+    if ($normalized === '') {
+        return $default;
+    }
+
+    if (in_array($normalized, ['1', 'true', 'yes', 'on'], true)) {
+        return true;
+    }
+
+    if (in_array($normalized, ['0', 'false', 'no', 'off'], true)) {
+        return false;
+    }
+
+    return $default;
 }
 
 function requestLlmShopReply(string $message, array $context, ?int $customerId, array $history, array $result, array $llmConfig): string {
