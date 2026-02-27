@@ -16,6 +16,7 @@
     <link rel="stylesheet" href="assets/css/icon-optimizations.css">
     <!-- CUSTOM CHECKBOX SYSTEM - Modern redesign for entire application -->
     <link rel="stylesheet" href="assets/css/checkboxes.css?v=1.0">
+    <link rel="stylesheet" href="assets/css/admin-ai-copilot.css?v=1.0">
     <!-- User Manual System -->
     <link rel="stylesheet" href="assets/css/user-manual.css">
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
@@ -640,6 +641,7 @@
 
     <!-- Include all page loaders -->
     <script src="assets/js/dashboard-pages.js?v=3.6"></script>
+    <script src="assets/js/admin-ai-copilot.js?v=1.0"></script>
 
     <!-- NEW: Complete GRN Management System -->
     <script src="assets/js/grn-new.js?v=3.5"></script>
@@ -748,6 +750,9 @@
                 currentUser = data.data;
                 updateUserUI();
                 loadSidebarMenu();
+                if (window.AdminAICopilot && typeof window.AdminAICopilot.init === 'function') {
+                    window.AdminAICopilot.init();
+                }
             } catch (error) {
                 window.location.href = 'simple-login.php';
             }
