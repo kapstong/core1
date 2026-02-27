@@ -17,13 +17,33 @@ class Env {
             return;
         }
 
-        if ($path === null) {
-            // Default path: root directory
-            $path = dirname(dirname(__DIR__)) . '/.env';
+        $candidates = [];
+        if ($path !== null) {
+            $candidates[] = $path;
+        } else {
+            // Candidate 1: project root (e.g. /public_html/.env)
+            $projectRoot = dirname(dirname(__DIR__));
+            $candidates[] = $projectRoot . '/.env';
+            // Candidate 2: parent directory (e.g. /home/site/.env)
+            $candidates[] = dirname($projectRoot) . '/.env';
         }
+
+        $path = null;
+        foreach ($candidates as $candidate) {
+            if (is_string($candidate) && $candidate !== '' && file_exists($candidate)) {
+                $path = $candidate;
+                break;
+            }
+        }
+
+        // Keep first candidate for debugging visibility when file is missing.
+        if ($path === null) {
+            $path = $candidates[0] ?? null;
+        }
+
         self::$filePath = $path;
 
-        if (!file_exists($path)) {
+        if (empty($path) || !file_exists($path)) {
             // .env file doesn't exist, use defaults or error
             self::$loaded = true;
             return;

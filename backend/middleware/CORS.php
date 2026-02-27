@@ -5,6 +5,35 @@
  */
 
 class CORS {
+    /**
+     * Build same-site origin candidates from runtime host.
+     */
+    private static function getRuntimeOriginCandidates() {
+        $host = $_SERVER['HTTP_HOST'] ?? '';
+        $host = trim((string)$host);
+        if ($host === '') {
+            return [];
+        }
+
+        $isHttps = false;
+        if (!empty($_SERVER['HTTPS']) && strtolower((string)$_SERVER['HTTPS']) !== 'off') {
+            $isHttps = true;
+        } elseif (!empty($_SERVER['HTTP_X_FORWARDED_PROTO']) && strtolower((string)$_SERVER['HTTP_X_FORWARDED_PROTO']) === 'https') {
+            $isHttps = true;
+        }
+
+        $primaryScheme = $isHttps ? 'https' : 'http';
+        $alternateScheme = $isHttps ? 'http' : 'https';
+
+        $origins = [
+            $primaryScheme . '://' . $host
+        ];
+
+        // Add alternate scheme as fallback when proxy/server reports inconsistent HTTPS flags.
+        $origins[] = $alternateScheme . '://' . $host;
+
+        return array_values(array_unique($origins));
+    }
 
     /**
      * Get allowed origins from configuration or defaults
@@ -42,8 +71,8 @@ class CORS {
         // IMPORTANT: In production, set CORS_ALLOWED_ORIGINS in .env file
         // Example: CORS_ALLOWED_ORIGINS=https://yourdomain.com,https://www.yourdomain.com
 
-        // For localhost development only (more secure than wildcard)
-        return [
+        // For localhost development plus same-site origin fallback.
+        $defaults = [
             'http://localhost',
             'http://localhost:3000',
             'http://localhost:8000',
@@ -51,6 +80,8 @@ class CORS {
             'http://127.0.0.1:3000',
             'http://127.0.0.1:8000'
         ];
+
+        return array_values(array_unique(array_merge($defaults, self::getRuntimeOriginCandidates())));
     }
 
     /**
