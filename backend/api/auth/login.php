@@ -231,7 +231,10 @@ try {
                 // Try to send email
                 try {
                     $email = new Email();
-                    $email->sendTwoFactorAuthCode($user, $code, $sessionInfo);
+                    $sent = $email->sendTwoFactorAuthCode($user, $code, $sessionInfo);
+                    if (!$sent) {
+                        error_log('2FA email send returned false for user_id=' . (int)$user['id']);
+                    }
                 } catch (Exception $e) {
                     error_log("Failed to send 2FA email: " . $e->getMessage());
                     // Continue anyway - code is in session

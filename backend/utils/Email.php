@@ -21,44 +21,76 @@ class Email {
     }
 
     private function loadSettings() {
+        require_once __DIR__ . '/../config/env.php';
+        Env::load();
+
+        $envSettings = [
+            'smtp_host' => trim((string)(Env::get('SMTP_HOST', '') ?? '')),
+            'smtp_port' => (int)(Env::get('SMTP_PORT', 587) ?? 587),
+            'smtp_username' => trim((string)(Env::get('SMTP_USERNAME', '') ?? '')),
+            'smtp_password' => trim((string)(Env::get('SMTP_PASSWORD', '') ?? '')),
+            'email_from' => trim((string)(Env::get('SMTP_FROM_EMAIL', 'noreply@pcparts.com') ?? 'noreply@pcparts.com')),
+            'system_name' => trim((string)(Env::get('SMTP_FROM_NAME', 'PC Parts Merchandising System') ?? 'PC Parts Merchandising System'))
+        ];
+
         try {
             require_once __DIR__ . '/../config/database.php';
             $db = Database::getInstance()->getConnection();
 
-            // Get SMTP settings
-            $settings = [
-                'smtp_host' => 'smtp.gmail.com',
-                'smtp_port' => 587,
-                'smtp_username' => 'jerexrb@gmail.com',
-                'smtp_password' => 'hriw kujv uugc crfb',
-                'email_from' => 'noreply@pcparts.com',
-                'system_name' => 'PC Parts Merchandising System'
+            $settingKeys = [
+                'smtp_host' => ['smtp_host', 'email_smtp_host'],
+                'smtp_port' => ['smtp_port', 'email_smtp_port'],
+                'smtp_username' => ['smtp_username', 'email_smtp_user'],
+                'smtp_password' => ['smtp_password', 'email_smtp_pass'],
+                'email_from' => ['email_from', 'email_from_address'],
+                'system_name' => ['system_name', 'email_from_name', 'store_name']
             ];
 
-            foreach ($settings as $key => $default) {
-                $query = "SELECT setting_value FROM settings WHERE setting_key = :key";
-                $stmt = $db->prepare($query);
-                $stmt->bindParam(':key', $key);
-                $stmt->execute();
+            $resolved = $envSettings;
 
-                $result = $stmt->fetch(PDO::FETCH_ASSOC);
-                $settings[$key] = $result ? $result['setting_value'] : $default;
+            foreach ($settingKeys as $targetKey => $candidates) {
+                foreach ($candidates as $candidateKey) {
+                    $query = "SELECT setting_value FROM settings WHERE setting_key = :key LIMIT 1";
+                    $stmt = $db->prepare($query);
+                    $stmt->bindValue(':key', $candidateKey);
+                    $stmt->execute();
+                    $result = $stmt->fetch(PDO::FETCH_ASSOC);
+
+                    if (!$result) {
+                        continue;
+                    }
+
+                    $value = isset($result['setting_value']) ? trim((string)$result['setting_value']) : '';
+                    if ($value === '') {
+                        continue;
+                    }
+
+                    $resolved[$targetKey] = $value;
+                    break;
+                }
             }
 
-            $this->smtpHost = $settings['smtp_host'];
-            $this->smtpPort = (int)$settings['smtp_port'];
-            $this->smtpUsername = $settings['smtp_username'];
-            $this->smtpPassword = $settings['smtp_password'];
-            $this->fromEmail = $settings['email_from'];
-            $this->fromName = $settings['system_name'];
+            $this->smtpHost = trim((string)$resolved['smtp_host']);
+            $this->smtpPort = max(1, (int)$resolved['smtp_port']);
+            $this->smtpUsername = trim((string)$resolved['smtp_username']);
+            $this->smtpPassword = (string)$resolved['smtp_password'];
+            $this->fromEmail = trim((string)$resolved['email_from']);
+            $this->fromName = trim((string)$resolved['system_name']);
 
         } catch (Exception $e) {
-            // Fallback to defaults if database not available
-            $this->smtpHost = '';
-            $this->smtpPort = 587;
-            $this->smtpUsername = '';
-            $this->smtpPassword = '';
+            // Fallback to env values if database is unavailable
+            $this->smtpHost = trim((string)$envSettings['smtp_host']);
+            $this->smtpPort = max(1, (int)$envSettings['smtp_port']);
+            $this->smtpUsername = trim((string)$envSettings['smtp_username']);
+            $this->smtpPassword = (string)$envSettings['smtp_password'];
+            $this->fromEmail = trim((string)$envSettings['email_from']);
+            $this->fromName = trim((string)$envSettings['system_name']);
+        }
+
+        if ($this->fromEmail === '') {
             $this->fromEmail = 'noreply@pcparts.com';
+        }
+        if ($this->fromName === '') {
             $this->fromName = 'PC Parts Merchandising System';
         }
     }
@@ -169,11 +201,21 @@ class Email {
     public function send($to, $subject, $message, $toName = '', $attachments = []) {
         // If SMTP is not configured, use PHP mail as fallback
         if (empty($this->smtpHost) || empty($this->smtpUsername)) {
-            return $this->sendWithPHPMail($to, $subject, $message, $toName);
+            $phpMailResult = $this->sendWithPHPMail($to, $subject, $message, $toName);
+            if (!$phpMailResult) {
+                error_log('Email send failed: SMTP is not configured and PHP mail fallback failed.');
+            }
+            return $phpMailResult;
         }
 
-        // Use SMTP
-        return $this->sendWithSMTP($to, $subject, $message, $toName, $attachments);
+        // Use SMTP first, then try PHP mail fallback if SMTP fails.
+        $smtpResult = $this->sendWithSMTP($to, $subject, $message, $toName, $attachments);
+        if ($smtpResult) {
+            return true;
+        }
+
+        error_log('SMTP send failed, attempting PHP mail fallback.');
+        return $this->sendWithPHPMail($to, $subject, $message, $toName);
     }
 
     private function sendWithPHPMail($to, $subject, $message, $toName = '') {
@@ -254,8 +296,9 @@ class Email {
         $password = $this->smtpPassword;
         $from = $this->fromEmail;
 
-        // Create socket connection
-        $socket = fsockopen($host, $port, $errno, $errstr, 30);
+        // Port 465 uses implicit TLS, while 587 uses STARTTLS.
+        $socketHost = ($port === 465) ? 'ssl://' . $host : $host;
+        $socket = fsockopen($socketHost, $port, $errno, $errstr, 30);
 
         if (!$socket) {
             error_log("SMTP Connection failed: $errstr ($errno)");
@@ -293,6 +336,11 @@ class Email {
         // Send EHLO again after encryption
         fputs($socket, "EHLO $host\r\n");
         $response = $this->readResponse($socket);
+        if (!$this->isSuccess($response)) {
+            error_log("Post-TLS EHLO failed: $response");
+            fclose($socket);
+            return false;
+        }
 
         // Authenticate
         fputs($socket, "AUTH LOGIN\r\n");

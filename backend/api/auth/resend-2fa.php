@@ -62,7 +62,10 @@ try {
     // Send verification email
     try {
         $email = new Email();
-        $email->sendTwoFactorAuthCode($user, $verificationCode, $clientInfo);
+        $sent = $email->sendTwoFactorAuthCode($user, $verificationCode, $clientInfo);
+        if (!$sent) {
+            throw new Exception('Email delivery returned false');
+        }
 
         // Log resend attempt
         AuditLogger::log(

@@ -1084,11 +1084,13 @@
                 }
 
                 if (data.success) {
+                    const payload = data.data || {};
+
                     // Save credentials if Remember Me is checked
                     saveCredentials(username, password);
 
                     // Check if user is a supplier
-                    if (data.user && data.user.role !== 'supplier') {
+                    if (payload.user && payload.user.role !== 'supplier') {
                         showAlert('Access denied. This portal is only for suppliers.');
                         loginBtn.disabled = false;
                         loginBtn.innerHTML = originalContent;
@@ -1096,7 +1098,7 @@
                     }
 
                     // Check if 2FA is required
-                    if (data.requires_two_factor) {
+                    if (payload.requires_two_factor) {
                         showAlert('<strong>Verification Required!</strong> Please check your email for the verification code.', 'success');
                         loginBtn.innerHTML = '<i class="fas fa-shield-alt me-2"></i>Redirecting to verification...';
 

@@ -441,7 +441,7 @@
             verifyBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Verifying...';
 
             try {
-                const response = await fetch(`${API_BASE}/auth/verify-2fa.php`, {
+                const response = await fetch(`${API_BASE}/auth/verify-2fa-simple.php`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     credentials: 'same-origin',
@@ -484,7 +484,7 @@
             resendLink.style.pointerEvents = 'none';
 
             try {
-                const response = await fetch(`${API_BASE}/auth/resend-2fa.php`, {
+                const response = await fetch(`${API_BASE}/auth/resend-2fa-simple.php`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     credentials: 'same-origin'
