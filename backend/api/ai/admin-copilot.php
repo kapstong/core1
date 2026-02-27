@@ -336,7 +336,7 @@ function buildAdminCopilotReply(Database $db, string $message, array $context): 
             'Show trend forecast'
         ];
     } else {
-        $replyText = buildRulesBasedGeneralReply($summary, $reorder, $anomalies, $forecast, $language);
+        $replyText = buildRulesBasedGeneralReply($message, $summary, $reorder, $anomalies, $forecast, $language);
         $llmReply = maybeGenerateAdminLlmReply($message, $context, $summary, $reorder, $anomalies, $history, $forecast, $language);
         if ($llmReply !== '') {
             $replyText = $llmReply;
@@ -379,6 +379,10 @@ function normalizeAdminAiMessage(string $message): string {
 function detectAdminLanguage(string $normalized): string {
     if ($normalized === '') {
         return 'en';
+    }
+
+    if (preg_match('/\b(tagalog|filipino|filipina)\b/u', $normalized) === 1) {
+        return 'fil';
     }
 
     $filipinoMarkers = [
@@ -428,6 +432,26 @@ function detectAdminIntent(string $normalized): string {
     }
 
     return 'general';
+}
+
+function isAdminLanguageCapabilityQuestion(string $normalized): bool {
+    if ($normalized === '') {
+        return false;
+    }
+
+    if (preg_match('/\b(can you|do you|kaya mo|naiintindihan mo|marunong ka)\b.*\b(tagalog|filipino|english)\b/iu', $normalized) === 1) {
+        return true;
+    }
+
+    if (preg_match('/\b(understand|speak|reply|respond|naiintindihan|sumagot)\b.*\b(tagalog|filipino|english)\b/iu', $normalized) === 1) {
+        return true;
+    }
+
+    if (preg_match('/\b(tagalog|filipino)\b.*\?$/iu', $normalized) === 1) {
+        return true;
+    }
+
+    return false;
 }
 
 function buildSummaryIntentReply(array $summary, array $forecast, string $language = 'en'): string {
@@ -1802,7 +1826,14 @@ function safeFetchAll(Database $db, string $sql, array $params = []): array {
     }
 }
 
-function buildRulesBasedGeneralReply(array $summary, array $reorder, array $anomalies, array $forecast, string $language = 'en'): string {
+function buildRulesBasedGeneralReply(string $message, array $summary, array $reorder, array $anomalies, array $forecast, string $language = 'en'): string {
+    $normalized = normalizeAdminAiMessage($message);
+
+    if (isAdminLanguageCapabilityQuestion($normalized)) {
+        return "Oo, naiintindihan ko ang Filipino/Tagalog at English.\n" .
+            "Pwede kang magtanong sa kahit alin sa dalawa tungkol sa sales, inventory, reorder timing, anomalies, at forecast.";
+    }
+
     $critical = (int)($anomalies['counts']['critical'] ?? 0);
     $high = (int)($anomalies['counts']['high'] ?? 0);
     $topReorder = count($reorder);
