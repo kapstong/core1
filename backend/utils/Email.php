@@ -49,6 +49,11 @@ class Email {
             $resolved = $envSettings;
 
             foreach ($settingKeys as $targetKey => $candidates) {
+                // Keep explicit .env values as highest priority.
+                if (isset($resolved[$targetKey]) && trim((string)$resolved[$targetKey]) !== '') {
+                    continue;
+                }
+
                 foreach ($candidates as $candidateKey) {
                     $query = "SELECT setting_value FROM settings WHERE setting_key = :key LIMIT 1";
                     $stmt = $db->prepare($query);
@@ -88,7 +93,7 @@ class Email {
         }
 
         if ($this->fromEmail === '') {
-            $this->fromEmail = 'noreply@pcparts.com';
+            $this->fromEmail = $this->smtpUsername !== '' ? $this->smtpUsername : 'noreply@pcparts.com';
         }
         if ($this->fromName === '') {
             $this->fromName = 'PC Parts Merchandising System';
