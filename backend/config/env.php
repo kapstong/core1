@@ -7,6 +7,7 @@
 class Env {
     private static $loaded = false;
     private static $variables = [];
+    private static $filePath = null;
 
     /**
      * Load .env file
@@ -20,6 +21,7 @@ class Env {
             // Default path: root directory
             $path = dirname(dirname(__DIR__)) . '/.env';
         }
+        self::$filePath = $path;
 
         if (!file_exists($path)) {
             // .env file doesn't exist, use defaults or error
@@ -54,11 +56,10 @@ class Env {
                 // Store in static array
                 self::$variables[$key] = $value;
 
-                // Also set as environment variable
-                if (!isset($_ENV[$key])) {
-                    $_ENV[$key] = $value;
-                    putenv("$key=$value");
-                }
+                // Keep runtime env aligned with file values.
+                // This ensures .env edits take effect even if process env already has old values.
+                $_ENV[$key] = $value;
+                putenv("$key=$value");
             }
         }
 
@@ -78,7 +79,12 @@ class Env {
             self::load();
         }
 
-        // Check in order: $_ENV, getenv(), our stored variables, default
+        // Prefer values loaded from .env file.
+        if (array_key_exists($key, self::$variables)) {
+            return self::castValue(self::$variables[$key]);
+        }
+
+        // Fallback to process/environment values.
         if (isset($_ENV[$key])) {
             return self::castValue($_ENV[$key]);
         }
@@ -86,10 +92,6 @@ class Env {
         $value = getenv($key);
         if ($value !== false) {
             return self::castValue($value);
-        }
-
-        if (isset(self::$variables[$key])) {
-            return self::castValue(self::$variables[$key]);
         }
 
         return $default;
@@ -138,5 +140,15 @@ class Env {
             self::load();
         }
         return self::$variables;
+    }
+
+    /**
+     * Get currently loaded .env file path
+     */
+    public static function path() {
+        if (!self::$loaded) {
+            self::load();
+        }
+        return self::$filePath;
     }
 }
