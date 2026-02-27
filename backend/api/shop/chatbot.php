@@ -110,7 +110,7 @@ function buildChatbotReply(PDO $db, string $message, array $context, ?int $custo
         $meta['response_source'] = 'rules';
         $meta['scope_guard'] = true;
         return finalizeChatbotReply($db, $message, $normalized, $intent, $messageAct, $context, $customerId, $history, $historyContext, [
-            'reply' => 'Sorry, that prompt/request is out-of-scope to my purpose.',
+            'reply' => 'I can only help with PC Parts Central shop topics. Ask me about products, checkout, orders, shipping, payments, or returns.',
             'quick_replies' => ['Checkout instructions', 'Find a product', 'Track order', 'Payment methods'],
             'suggested_links' => dedupeLinks([
                 navLink('Shop Home', 'index.php'),
@@ -489,7 +489,7 @@ function detectIntent(string $normalized): string {
         return 'thanks';
     }
 
-    if (containsAny($normalized, ['hello', 'hi', 'hey', 'good morning', 'good afternoon', 'good evening'])) {
+    if (isGreetingMessage($normalized)) {
         return 'greeting';
     }
 
@@ -560,6 +560,30 @@ function detectIntent(string $normalized): string {
     return 'fallback';
 }
 
+function isGreetingMessage(string $normalized): bool {
+    if ($normalized === '') {
+        return false;
+    }
+
+    if (containsAny($normalized, [
+        'hello',
+        'hi',
+        'hey',
+        'heya',
+        'hey there',
+        'yo',
+        'sup',
+        'good morning',
+        'good afternoon',
+        'good evening',
+        'good day'
+    ])) {
+        return true;
+    }
+
+    return (bool)preg_match('/^(hi+|hey+|he+y+a+|hello+|yo+|sup+|good\s+(morning|afternoon|evening|day))[!\.\?\s]*$/i', $normalized);
+}
+
 function detectMessageAct(string $message, string $normalized): string {
     if ($normalized === '') {
         return 'unclear';
@@ -607,6 +631,10 @@ function containsAny(string $text, array $needles): bool {
 
 function determinePromptScope(string $normalized, string $intent, array $historyContext): string {
     if ($normalized === '') {
+        return 'shop_related';
+    }
+
+    if (isGreetingMessage($normalized)) {
         return 'shop_related';
     }
 
@@ -1788,6 +1816,11 @@ function avoidRepeatedReply(string $reply, array $historyContext, string $intent
 
 function sanitizeReplyText(string $reply): string {
     $normalized = str_replace(["\r\n", "\r"], "\n", trim($reply));
+    $normalized = str_ireplace(
+        'Sorry, that prompt/request is out-of-scope to my purpose.',
+        'I can only help with PC Parts Central shop topics. Ask me about products, checkout, orders, shipping, payments, or returns.',
+        $normalized
+    );
     $normalized = preg_replace("/\n{3,}/", "\n\n", $normalized);
     return trim((string)$normalized);
 }
@@ -2213,7 +2246,7 @@ function buildShopAssistantSystemPrompt(array $llmConfig): string {
         'Avoid repeating the same opening sentence from your previous reply unless repetition is necessary.',
         'If customer behavior profile hints are provided, use them as soft personalization signals (not hard facts).',
         'Stay within shop-related support. If the user asks unrelated questions, redirect politely to shop support topics.',
-        'If a prompt/request is clearly unrelated to the shop, reply exactly: "Sorry, that prompt/request is out-of-scope to my purpose."',
+        'If a prompt/request is clearly unrelated to the shop, give a short polite redirect back to shop support topics.',
         'Do not invent policies, stock, order status, prices, or delivery times. Use the provided context. If a detail is missing, say it is not available and direct the user to the relevant page or support staff.',
         'Be concise, clear, and helpful. Return plain text only (no markdown code fences).',
         'Use short bullets for options, recommendations, or lists.',
