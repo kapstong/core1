@@ -1834,14 +1834,150 @@ function buildRulesBasedGeneralReply(string $message, array $summary, array $reo
             "Pwede kang magtanong sa kahit alin sa dalawa tungkol sa sales, inventory, reorder timing, anomalies, at forecast.";
     }
 
+    if (isAdminGreetingMessage($normalized)) {
+        return $language === 'fil'
+            ? "Handa ako tumulong sa inventory at operations.\nSubukan: \"low stock\", \"reorder ngayon\", \"anomalies\", \"forecast next 14 days\", o \"daily summary\"."
+            : "Ready to help with inventory and operations.\nTry: \"low stock\", \"reorder now\", \"anomalies\", \"forecast next 14 days\", or \"daily summary\".";
+    }
+
+    if (isOutOfScopeAdminQuestion($normalized)) {
+        return $language === 'fil'
+            ? "Nakafocus ako sa inventory management at system operations lang.\nPwede mong itanong ang sales trends, reorder timing, stock risks, purchase orders, at anomalies."
+            : "I’m scoped to inventory management and system operations only.\nYou can ask about sales trends, reorder timing, stock risks, purchase orders, and anomalies.";
+    }
+
+    if (preg_match('/\b(help|what can you do|capabilities|commands|how do i use|paano gamitin|anong kaya mo)\b/iu', $normalized) === 1) {
+        if ($language === 'fil') {
+            return implode("\n", [
+                "Kaya kong sagutin ang:",
+                "- Daily summary (orders/revenue/stock risks)",
+                "- Historical trends (7d/30d/90d)",
+                "- Forecast (projected orders/revenue)",
+                "- Reorder timing at quantity suggestions",
+                "- Anomaly detection para sa operations",
+                "",
+                "Halimbawa: \"ano ang low stock ngayon?\", \"sino dapat i-reorder ngayon?\", \"may anomaly ba ngayong linggo?\""
+            ]);
+        }
+
+        return implode("\n", [
+            "I can answer:",
+            "- Daily summary (orders/revenue/stock risks)",
+            "- Historical trends (7d/30d/90d)",
+            "- Forecast (projected orders/revenue)",
+            "- Reorder timing and quantity suggestions",
+            "- Operations anomaly detection",
+            "",
+            "Examples: \"what is low stock now?\", \"what should we reorder today?\", \"any anomalies this week?\""
+        ]);
+    }
+
     $critical = (int)($anomalies['counts']['critical'] ?? 0);
     $high = (int)($anomalies['counts']['high'] ?? 0);
     $topReorder = count($reorder);
     $ordersToday = (int)($summary['metrics']['orders_today'] ?? 0);
     $revenueToday = (float)($summary['metrics']['revenue_today'] ?? 0);
+    $lowStockItems = (int)($summary['metrics']['low_stock_items'] ?? 0);
+    $outOfStockItems = (int)($summary['metrics']['out_of_stock_items'] ?? 0);
+    $pendingPo = (int)($summary['metrics']['pending_purchase_orders'] ?? 0);
+    $overduePo = (int)($summary['metrics']['overdue_purchase_orders'] ?? 0);
     $trend = (string)($forecast['trend'] ?? 'stable');
     $forecastOrders7d = (float)($forecast['projection']['orders_next_7d'] ?? 0.0);
     $forecastRevenue7d = (float)($forecast['projection']['revenue_next_7d'] ?? 0.0);
+
+    if (preg_match('/\b(low stock|out of stock|inventory risk|stock risk|kulang stock|ubos stock)\b/iu', $normalized) === 1) {
+        $reorderTop = formatTopReorderItems($reorder, 3, $language);
+        if ($language === 'fil') {
+            return implode("\n", [
+                "Inventory risk snapshot:",
+                "- Low stock items: {$lowStockItems}",
+                "- Out of stock items: {$outOfStockItems}",
+                "- Reorder candidates: {$topReorder}",
+                $reorderTop !== '' ? "- Prioridad ngayon: {$reorderTop}" : "- Walang immediate reorder line na may detalye."
+            ]);
+        }
+        return implode("\n", [
+            "Inventory risk snapshot:",
+            "- Low-stock items: {$lowStockItems}",
+            "- Out-of-stock items: {$outOfStockItems}",
+            "- Reorder candidates: {$topReorder}",
+            $reorderTop !== '' ? "- Immediate priorities: {$reorderTop}" : "- No immediate reorder line with detailed priorities."
+        ]);
+    }
+
+    if (preg_match('/\b(reorder|restock|replenish|muling order|kailan mag reorder|when to reorder)\b/iu', $normalized) === 1) {
+        if (empty($reorder)) {
+            return $language === 'fil'
+                ? 'Sa ngayon, walang urgent reorder recommendation based sa current stock at demand.'
+                : 'Right now, there are no urgent reorder recommendations based on current stock and demand.';
+        }
+
+        $reorderTop = formatTopReorderItems($reorder, 4, $language);
+        if ($language === 'fil') {
+            return implode("\n", [
+                "Top reorder recommendations:",
+                "- {$reorderTop}",
+                "- Tip: unahin ang may \"critical\" priority at may pinakamalapit na reorder date."
+            ]);
+        }
+        return implode("\n", [
+            "Top reorder recommendations:",
+            "- {$reorderTop}",
+            "- Tip: prioritize items marked \"critical\" with the nearest reorder date."
+        ]);
+    }
+
+    if (preg_match('/\b(anomal(y|ies)|outlier|suspicious|fraud|kakaiba|abnormal)\b/iu', $normalized) === 1) {
+        $anomalyTop = formatTopAnomalyItems($anomalies, 3);
+        if ($language === 'fil') {
+            return implode("\n", [
+                "Anomaly snapshot:",
+                "- Critical: {$critical}, High: {$high}",
+                $anomalyTop !== '' ? "- Top flags: {$anomalyTop}" : "- Walang major anomalies na na-detect."
+            ]);
+        }
+        return implode("\n", [
+            "Anomaly snapshot:",
+            "- Critical: {$critical}, High: {$high}",
+            $anomalyTop !== '' ? "- Top flags: {$anomalyTop}" : "- No major anomalies detected."
+        ]);
+    }
+
+    if (preg_match('/\b(forecast|projection|predict|next \d+ days|susunod na \d+ araw)\b/iu', $normalized) === 1) {
+        return buildForecastIntentReply($forecast, $language);
+    }
+
+    if (preg_match('/\b(history|historical|trend|past|huling|nakaraang)\b/iu', $normalized) === 1) {
+        $history = [
+            'window_days' => 90,
+            'totals' => [
+                'orders' => (int)($summary['metrics']['orders_last_30d'] ?? 0),
+                'revenue' => (float)($summary['metrics']['revenue_last_30d'] ?? 0.0)
+            ],
+            'averages' => [
+                'orders_per_day_7d' => ((float)($summary['metrics']['orders_last_7d'] ?? 0.0)) / 7.0,
+                'revenue_per_day_7d' => ((float)($summary['metrics']['revenue_last_7d'] ?? 0.0)) / 7.0
+            ],
+            'trend' => [
+                'direction' => $trend
+            ]
+        ];
+        return buildHistoryIntentReply($history, $language);
+    }
+
+    if (preg_match('/\b(order today|orders today|sales today|revenue today|benta ngayon|orders ngayon)\b/iu', $normalized) === 1) {
+        if ($language === 'fil') {
+            return "Ngayong araw:\n- Orders: {$ordersToday}\n- Revenue: PHP " . number_format($revenueToday, 2) . ".";
+        }
+        return "Today:\n- Orders: {$ordersToday}\n- Revenue: PHP " . number_format($revenueToday, 2) . ".";
+    }
+
+    if (preg_match('/\b(purchase order|po|supplier delivery|overdue po|pending po)\b/iu', $normalized) === 1) {
+        if ($language === 'fil') {
+            return "Purchase operations snapshot:\n- Pending PO: {$pendingPo}\n- Overdue PO: {$overduePo}\n- Rekomendasyon: i-follow up agad ang overdue POs para maiwasan ang stockout.";
+        }
+        return "Purchase operations snapshot:\n- Pending POs: {$pendingPo}\n- Overdue POs: {$overduePo}\n- Recommendation: follow up overdue POs immediately to reduce stockout risk.";
+    }
 
     $lines = [];
     if ($language === 'fil') {
@@ -1866,6 +2002,76 @@ function buildRulesBasedGeneralReply(string $message, array $summary, array $reo
     }
 
     return implode("\n", $lines);
+}
+
+function isOutOfScopeAdminQuestion(string $normalized): bool {
+    if ($normalized === '') {
+        return false;
+    }
+
+    $outOfScopePatterns = [
+        '/\b(weather|temperature|ulan|bagyo)\b/iu',
+        '/\b(politics|election|president|senator)\b/iu',
+        '/\b(nba|nfl|sports score|match result)\b/iu',
+        '/\b(bitcoin|crypto|forex|stock market)\b/iu',
+        '/\b(movie|lyrics|song|anime|joke|story)\b/iu'
+    ];
+
+    foreach ($outOfScopePatterns as $pattern) {
+        if (preg_match($pattern, $normalized) === 1) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+function isAdminGreetingMessage(string $normalized): bool {
+    if ($normalized === '') {
+        return false;
+    }
+
+    return preg_match('/^(hi|hello|hey|yo|kamusta|kumusta|good morning|good afternoon|good evening)[\!\.\?\s]*$/iu', $normalized) === 1;
+}
+
+function formatTopReorderItems(array $reorder, int $limit = 3, string $language = 'en'): string {
+    if (empty($reorder)) {
+        return '';
+    }
+
+    $top = array_slice($reorder, 0, max(1, min(6, $limit)));
+    $chunks = [];
+    foreach ($top as $item) {
+        $name = (string)($item['name'] ?? 'Product');
+        $qty = (int)($item['suggested_order_qty'] ?? 0);
+        $date = (string)($item['optimal_reorder_date'] ?? 'N/A');
+        $priority = strtoupper((string)($item['priority'] ?? 'low'));
+
+        if ($language === 'fil') {
+            $chunks[] = "{$name} ({$qty} units, {$priority}, order by {$date})";
+        } else {
+            $chunks[] = "{$name} ({$qty} units, {$priority}, order by {$date})";
+        }
+    }
+
+    return implode('; ', $chunks);
+}
+
+function formatTopAnomalyItems(array $anomalies, int $limit = 3): string {
+    $items = isset($anomalies['items']) && is_array($anomalies['items']) ? $anomalies['items'] : [];
+    if (empty($items)) {
+        return '';
+    }
+
+    $top = array_slice($items, 0, max(1, min(6, $limit)));
+    $chunks = [];
+    foreach ($top as $item) {
+        $severity = strtoupper((string)($item['severity'] ?? 'low'));
+        $title = (string)($item['title'] ?? 'Anomaly');
+        $chunks[] = "[{$severity}] {$title}";
+    }
+
+    return implode('; ', $chunks);
 }
 
 function maybeGenerateAdminLlmReply(
