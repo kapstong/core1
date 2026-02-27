@@ -233,11 +233,17 @@ try {
                     $email = new Email();
                     $sent = $email->sendTwoFactorAuthCode($user, $code, $sessionInfo);
                     if (!$sent) {
-                        error_log('2FA email send returned false for user_id=' . (int)$user['id']);
+                        throw new Exception('2FA email send returned false');
                     }
                 } catch (Exception $e) {
                     error_log("Failed to send 2FA email: " . $e->getMessage());
-                    // Continue anyway - code is in session
+
+                    // Prevent users from getting stuck in 2FA flow when email cannot be delivered.
+                    unset($_SESSION['2fa_code'], $_SESSION['2fa_user_id'], $_SESSION['2fa_expires']);
+
+                    $isDebug = (bool)Env::get('APP_DEBUG', false) || strtolower((string)Env::get('APP_ENV', '')) === 'development';
+                    $errorDetails = $isDebug ? ['debug_code' => $code, 'reason' => $e->getMessage()] : null;
+                    Response::error('Unable to send 2FA email. Please check SMTP settings and try again.', 500, $errorDetails);
                 }
 
                 Response::success([

@@ -92,6 +92,26 @@ class Email {
             $this->fromName = trim((string)$envSettings['system_name']);
         }
 
+        $this->normalizeSettings();
+    }
+
+    /**
+     * Normalize SMTP settings for common provider requirements.
+     */
+    private function normalizeSettings() {
+        $host = strtolower((string)$this->smtpHost);
+        $isGmail = (strpos($host, 'gmail.com') !== false);
+
+        // Gmail app passwords are displayed with spaces, but SMTP expects no spaces.
+        if ($isGmail && $this->smtpPassword !== '') {
+            $this->smtpPassword = preg_replace('/\s+/', '', (string)$this->smtpPassword);
+        }
+
+        // Gmail blocks/rejects many messages when sender does not match authenticated account.
+        if ($isGmail && $this->smtpUsername !== '' && strcasecmp($this->fromEmail, $this->smtpUsername) !== 0) {
+            $this->fromEmail = $this->smtpUsername;
+        }
+
         if ($this->fromEmail === '') {
             $this->fromEmail = $this->smtpUsername !== '' ? $this->smtpUsername : 'noreply@pcparts.com';
         }
@@ -299,7 +319,7 @@ class Email {
         $port = $this->smtpPort;
         $username = $this->smtpUsername;
         $password = $this->smtpPassword;
-        $from = $this->fromEmail;
+        $from = $this->resolveEnvelopeFrom();
 
         // Port 465 uses implicit TLS, while 587 uses STARTTLS.
         $socketHost = ($port === 465) ? 'ssl://' . $host : $host;
@@ -335,7 +355,12 @@ class Email {
             }
 
             // Enable encryption
-            stream_socket_enable_crypto($socket, true, STREAM_CRYPTO_METHOD_TLS_CLIENT);
+            $tlsEnabled = stream_socket_enable_crypto($socket, true, STREAM_CRYPTO_METHOD_TLS_CLIENT);
+            if ($tlsEnabled !== true) {
+                error_log("STARTTLS negotiation failed");
+                fclose($socket);
+                return false;
+            }
         }
 
         // Send EHLO again after encryption
@@ -424,6 +449,17 @@ class Email {
 
         fclose($socket);
         return true;
+    }
+
+    /**
+     * SMTP envelope sender.
+     * Using authenticated username improves deliverability for strict providers.
+     */
+    private function resolveEnvelopeFrom() {
+        if ($this->smtpUsername !== '' && filter_var($this->smtpUsername, FILTER_VALIDATE_EMAIL)) {
+            return $this->smtpUsername;
+        }
+        return $this->fromEmail;
     }
 
     private function readResponse($socket) {

@@ -81,13 +81,9 @@ try {
 
     } catch (Exception $e) {
         error_log("Failed to send 2FA email: " . $e->getMessage());
-
-        // Still return success with code for development
-        $isDev = ($_SERVER['HTTP_HOST'] === 'localhost' || strpos($_SERVER['HTTP_HOST'], '127.0.0.1') !== false);
-
-        Response::success([
-            'message' => 'A new verification code has been generated' . ($isDev ? ': ' . $verificationCode : ''),
-        ], 'Code generated (email may have failed)');
+        $isDebug = (bool)Env::get('APP_DEBUG', false) || strtolower((string)Env::get('APP_ENV', '')) === 'development';
+        $errors = $isDebug ? ['debug_code' => $verificationCode, 'reason' => $e->getMessage()] : null;
+        Response::error('Failed to resend verification code email. Please check SMTP settings.', 500, $errors);
     }
 
 } catch (Exception $e) {

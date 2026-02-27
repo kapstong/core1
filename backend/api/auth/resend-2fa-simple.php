@@ -72,12 +72,9 @@ try {
 
     } catch (Exception $e) {
         error_log("Failed to send 2FA email: " . $e->getMessage());
-
-        // For development - still return success but show code in response
-        Response::success([
-            'message' => 'New code generated',
-            'debug_code' => $verificationCode // Remove in production!
-        ], 'Code generated (email send failed)');
+        $isDebug = (bool)Env::get('APP_DEBUG', false) || strtolower((string)Env::get('APP_ENV', '')) === 'development';
+        $errors = $isDebug ? ['debug_code' => $verificationCode, 'reason' => $e->getMessage()] : null;
+        Response::error('Failed to send verification code email. Please check SMTP settings.', 500, $errors);
     }
 
 } catch (Exception $e) {
