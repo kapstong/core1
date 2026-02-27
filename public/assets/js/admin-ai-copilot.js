@@ -66,6 +66,8 @@
 
             <div class="admin-ai-quick-actions">
                 <button type="button" class="admin-ai-chip" data-ai-mode="summary">Daily Summary</button>
+                <button type="button" class="admin-ai-chip" data-ai-mode="history">Historical Trends</button>
+                <button type="button" class="admin-ai-chip" data-ai-mode="forecast">Trend Forecast</button>
                 <button type="button" class="admin-ai-chip" data-ai-mode="reorder">Reorder Suggestions</button>
                 <button type="button" class="admin-ai-chip" data-ai-mode="anomalies">Anomaly Scan</button>
             </div>
@@ -78,7 +80,7 @@
                     id="admin-ai-input"
                     class="admin-ai-input"
                     maxlength="700"
-                    placeholder="Ask about inventory, purchasing, risks, or daily ops..."
+                    placeholder="Ask in English or Filipino about inventory, purchasing, risk, or trends..."
                     autocomplete="off"
                 />
                 <button type="submit" class="admin-ai-send" id="admin-ai-send">
@@ -210,6 +212,9 @@
             if (payload.data?.llm?.enabled) {
                 appendSystemMessage('LLM enhancement is enabled for richer answers.');
             }
+            if (Array.isArray(payload.data?.languages) && payload.data.languages.includes('fil')) {
+                appendSystemMessage('Bilingual mode enabled: Filipino and English.');
+            }
         } catch (error) {
             appendSystemMessage('AI endpoint is currently unavailable.');
         }
@@ -275,7 +280,8 @@
             const data = payload.data || {};
             const reply = escapeHtml(data.reply || 'No response available.');
             const source = data.response_source === 'llm' ? 'LLM' : 'Rules';
-            const meta = `<div class="admin-ai-meta">Source: ${source} | Intent: ${escapeHtml(data.intent || 'general')}</div>`;
+            const language = escapeHtml(data.language || 'en');
+            const meta = `<div class="admin-ai-meta">Source: ${source} | Intent: ${escapeHtml(data.intent || 'general')} | Lang: ${language}</div>`;
             appendAssistantMessage(`${reply.replace(/\n/g, '<br>')}${meta}`);
         } catch (error) {
             appendSystemMessage(error.message || 'Failed to get AI response.');
@@ -287,6 +293,12 @@
     function renderModeResult(mode, data) {
         if (mode === 'summary') {
             return renderSummary(data.summary || {});
+        }
+        if (mode === 'history') {
+            return renderHistory(data.history || {});
+        }
+        if (mode === 'forecast') {
+            return renderForecast(data.forecast || {});
         }
         if (mode === 'reorder') {
             return renderReorder(data.suggestions || []);
@@ -330,6 +342,7 @@
                 <td>${escapeHtml((item.priority || '').toUpperCase())}</td>
                 <td>${Number(item.quantity_available || 0)}</td>
                 <td>${Number(item.suggested_order_qty || 0)}</td>
+                <td>${escapeHtml(item.optimal_reorder_date || 'N/A')}</td>
             </tr>
         `).join('');
 
@@ -344,6 +357,63 @@
                             <th>Priority</th>
                             <th>Avail.</th>
                             <th>Suggest</th>
+                            <th>Order By</th>
+                        </tr>
+                    </thead>
+                    <tbody>${rows}</tbody>
+                </table>
+            </div>
+        `;
+    }
+
+    function renderHistory(history) {
+        const totals = history.totals || {};
+        const averages = history.averages || {};
+        const trend = history.trend || {};
+        const windowDays = Number(history.window_days || 0);
+
+        return `
+            <div class="admin-ai-block-title">Historical Analytics (${windowDays || 0} days)</div>
+            <div class="admin-ai-kpi-grid">
+                <div class="admin-ai-kpi"><span>Total Orders</span><strong>${Number(totals.orders || 0)}</strong></div>
+                <div class="admin-ai-kpi"><span>Total Revenue</span><strong>${formatCurrency(totals.revenue || 0)}</strong></div>
+                <div class="admin-ai-kpi"><span>7d Orders/Day</span><strong>${Number(averages.orders_per_day_7d || 0).toFixed(1)}</strong></div>
+                <div class="admin-ai-kpi"><span>7d Revenue/Day</span><strong>${formatCurrency(averages.revenue_per_day_7d || 0)}</strong></div>
+            </div>
+            <p class="admin-ai-meta">Trend: ${escapeHtml(trend.direction || 'stable')} | Orders 7d change: ${Number(trend.orders_change_7d_pct || 0).toFixed(1)}% | Revenue 7d change: ${Number(trend.revenue_change_7d_pct || 0).toFixed(1)}%</p>
+        `;
+    }
+
+    function renderForecast(forecast) {
+        const projection = forecast.projection || {};
+        const trend = escapeHtml(forecast.trend || 'stable');
+        const confidence = escapeHtml(forecast.confidence || 'medium');
+        const previewRows = Array.isArray(forecast.series) ? forecast.series.slice(0, 7) : [];
+
+        const rows = previewRows.map((row) => `
+            <tr>
+                <td>${escapeHtml(row.date || '')}</td>
+                <td>${Number(row.orders || 0).toFixed(1)}</td>
+                <td>${formatCurrency(row.revenue || 0)}</td>
+            </tr>
+        `).join('');
+
+        return `
+            <div class="admin-ai-block-title">Trend Forecast (${Number(forecast.horizon_days || 0)} days)</div>
+            <p>${escapeHtml(forecast.summary || 'No forecast summary available.')}</p>
+            <div class="admin-ai-kpi-grid">
+                <div class="admin-ai-kpi"><span>Trend</span><strong>${trend}</strong></div>
+                <div class="admin-ai-kpi"><span>Confidence</span><strong>${confidence}</strong></div>
+                <div class="admin-ai-kpi"><span>Orders Next 7d</span><strong>${Number(projection.orders_next_7d || 0).toFixed(0)}</strong></div>
+                <div class="admin-ai-kpi"><span>Revenue Next 7d</span><strong>${formatCurrency(projection.revenue_next_7d || 0)}</strong></div>
+            </div>
+            <div class="admin-ai-table-wrap">
+                <table class="admin-ai-table">
+                    <thead>
+                        <tr>
+                            <th>Date</th>
+                            <th>Orders</th>
+                            <th>Revenue</th>
                         </tr>
                     </thead>
                     <tbody>${rows}</tbody>
