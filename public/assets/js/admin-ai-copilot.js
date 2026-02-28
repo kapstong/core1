@@ -95,7 +95,6 @@
         document.body.appendChild(launcher);
         document.body.appendChild(panel);
 
-        appendSystemMessage('Copilot ready. Use a quick action or ask a question.');
     }
 
     function bindEvents() {
@@ -239,12 +238,6 @@
                 return;
             }
             state.ready = true;
-            if (payload.data?.llm?.enabled) {
-                appendSystemMessage('LLM enhancement is enabled for richer answers.');
-            }
-            if (Array.isArray(payload.data?.languages) && payload.data.languages.includes('fil')) {
-                appendSystemMessage('Bilingual mode enabled: Filipino and English.');
-            }
         } catch (error) {
             appendSystemMessage('AI endpoint is currently unavailable.');
         }
