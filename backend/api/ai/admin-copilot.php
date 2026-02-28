@@ -22,7 +22,7 @@ if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
 
-Auth::requireRole(['admin', 'inventory_manager', 'purchasing_officer']);
+Auth::requireRole(['admin', 'inventory_manager', 'purchasing_officer', 'staff']);
 
 $method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
 
@@ -50,7 +50,7 @@ function handleGetRequest(): void {
             $llmConfig = getAdminAiLlmConfig();
             Response::success([
                 'name' => 'Admin AI Copilot',
-                'version' => '1.4',
+                'version' => '2.0',
                 'read_only' => true,
                 'capabilities' => [
                     'daily_summary',
@@ -63,11 +63,21 @@ function handleGetRequest(): void {
                     'session_memory',
                     'context_retrieval',
                     'feedback_loop',
-                    'evaluation_suite'
+                    'evaluation_suite',
+                    'clarifying_questions',
+                    'role_personalization',
+                    'reasoned_recommendations',
+                    'proactive_improvements'
                 ],
                 'languages' => [
                     'en',
                     'fil'
+                ],
+                'roles_supported' => [
+                    'admin',
+                    'inventory_manager',
+                    'purchasing_officer',
+                    'staff'
                 ],
                 'endpoints' => [
                     'status' => 'GET ?mode=status',
@@ -263,7 +273,9 @@ function sanitizeAdminAiContext(array $context): array {
         'page' => 64,
         'title' => 160,
         'pathname' => 220,
-        'url' => 400
+        'url' => 400,
+        'role' => 64,
+        'user_name' => 120
     ];
 
     foreach ($limits as $key => $maxLen) {
@@ -293,7 +305,9 @@ function getAdminAiSessionMemory(): array {
             'last_intent' => null,
             'last_language' => null,
             'last_entities' => [],
-            'feedback' => []
+            'feedback' => [],
+            'pending_clarification' => null,
+            'user_profile' => []
         ];
     }
 
@@ -310,6 +324,12 @@ function getAdminAiSessionMemory(): array {
     }
     if (!isset($memory['last_entities']) || !is_array($memory['last_entities'])) {
         $memory['last_entities'] = [];
+    }
+    if (!array_key_exists('pending_clarification', $memory) || ($memory['pending_clarification'] !== null && !is_array($memory['pending_clarification']))) {
+        $memory['pending_clarification'] = null;
+    }
+    if (!isset($memory['user_profile']) || !is_array($memory['user_profile'])) {
+        $memory['user_profile'] = [];
     }
 
     return $memory;
@@ -328,13 +348,21 @@ function updateAdminAiSessionMemory(array $entry): void {
         'intent' => (string)($entry['intent'] ?? 'general'),
         'language' => (string)($entry['language'] ?? 'en'),
         'response_source' => (string)($entry['response_source'] ?? 'rules'),
-        'entities' => isset($entry['entities']) && is_array($entry['entities']) ? $entry['entities'] : []
+        'entities' => isset($entry['entities']) && is_array($entry['entities']) ? $entry['entities'] : [],
+        'role' => (string)($entry['role'] ?? ($memory['user_profile']['role'] ?? '')),
+        'needs_clarification' => !empty($entry['needs_clarification'])
     ];
     $memory['recent_messages'] = array_slice($memory['recent_messages'], -12);
     $memory['last_intent'] = (string)($entry['intent'] ?? 'general');
     $memory['last_language'] = (string)($entry['language'] ?? 'en');
     $memory['last_entities'] = isset($entry['entities']) && is_array($entry['entities']) ? $entry['entities'] : [];
     $memory['last_response_id'] = (string)($entry['response_id'] ?? '');
+    if (isset($entry['user_profile']) && is_array($entry['user_profile'])) {
+        $memory['user_profile'] = $entry['user_profile'];
+    }
+    if (array_key_exists('pending_clarification', $entry)) {
+        $memory['pending_clarification'] = is_array($entry['pending_clarification']) ? $entry['pending_clarification'] : null;
+    }
     $memory['updated_at'] = gmdate('c');
 
     $_SESSION['admin_ai_memory'] = $memory;
@@ -353,7 +381,8 @@ function getAdminAiMemorySnapshot(): array {
             'message' => (string)($item['message'] ?? ''),
             'intent' => (string)($item['intent'] ?? 'general'),
             'language' => (string)($item['language'] ?? 'en'),
-            'response_source' => (string)($item['response_source'] ?? 'rules')
+            'response_source' => (string)($item['response_source'] ?? 'rules'),
+            'role' => (string)($item['role'] ?? '')
         ];
     }
 
@@ -363,8 +392,24 @@ function getAdminAiMemorySnapshot(): array {
         'last_response_id' => $memory['last_response_id'] ?? null,
         'recent_messages' => $recent,
         'feedback_count' => count($memory['feedback'] ?? []),
+        'pending_clarification' => $memory['pending_clarification'] ?? null,
+        'user_profile' => [
+            'role' => (string)($memory['user_profile']['role'] ?? ''),
+            'role_label' => (string)($memory['user_profile']['role_label'] ?? '')
+        ],
         'updated_at' => $memory['updated_at'] ?? null
     ];
+}
+
+function setAdminAiPendingClarification(?array $pending): void {
+    if (session_status() !== PHP_SESSION_ACTIVE) {
+        return;
+    }
+
+    $memory = getAdminAiSessionMemory();
+    $memory['pending_clarification'] = $pending;
+    $memory['updated_at'] = gmdate('c');
+    $_SESSION['admin_ai_memory'] = $memory;
 }
 
 function extractAdminEntities(string $message, string $normalized, array $memory = []): array {
@@ -709,40 +754,121 @@ function runAdminAiEvaluationSuite(Database $db): array {
         ['input' => 'show anomalies this week', 'expected_intent' => 'anomalies'],
         ['input' => 'daily summary today', 'expected_intent' => 'summary'],
         ['input' => 'can you understand tagalog?', 'expected_intent' => 'general'],
-        ['input' => 'weather tomorrow in manila', 'expected_intent' => 'general', 'expect_out_of_scope' => true]
+        ['input' => 'weather tomorrow in manila', 'expected_intent' => 'general', 'expect_out_of_scope' => true],
+
+        // Clarification behavior checks
+        [
+            'input' => 'show history',
+            'expected_intent' => 'history',
+            'expect_clarification' => true,
+            'expected_clarification_type' => 'history_window'
+        ],
+        [
+            'input' => 'forecast',
+            'expected_intent' => 'forecast',
+            'expect_clarification' => true,
+            'expected_clarification_type' => 'forecast_window'
+        ],
+        [
+            'input' => 'reorder product',
+            'expected_intent' => 'reorder',
+            'expect_clarification' => true,
+            'expected_clarification_type' => 'product_hint'
+        ],
+
+        // Role-adaptive behavior checks
+        [
+            'input' => 'daily summary today',
+            'expected_intent' => 'summary',
+            'role' => 'admin',
+            'expect_role_label' => 'Admin',
+            'expect_reasoning' => true,
+            'expect_proactive' => true
+        ],
+        [
+            'input' => 'daily summary today',
+            'expected_intent' => 'summary',
+            'role' => 'staff',
+            'expect_role_label' => 'Staff',
+            'expect_reasoning' => true,
+            'expect_proactive' => true
+        ]
     ];
 
     $results = [];
     $passed = 0;
 
     foreach ($cases as $case) {
-        $normalized = normalizeAdminAiMessage((string)$case['input']);
-        $entities = extractAdminEntities((string)$case['input'], $normalized, getAdminAiSessionMemory());
-        $intent = refineIntentWithEntitiesAndMemory(detectAdminIntent($normalized), $entities, getAdminAiSessionMemory());
+        $input = (string)($case['input'] ?? '');
+        $normalized = normalizeAdminAiMessage($input);
+        $memory = getAdminAiSessionMemory();
+        $entities = extractAdminEntities($input, $normalized, $memory);
+        $language = resolveAdminResponseLanguage($normalized, $entities, $memory);
+        $role = strtolower(trim((string)($case['role'] ?? 'admin')));
+        $roleProfile = getAdminRoleProfile($role, $language);
+        $intent = refineIntentWithEntitiesAndMemory(detectAdminIntent($normalized), $entities, $memory);
 
         $summary = buildDailySummaryPayload($db);
-        $history = buildHistoricalAnalyticsPayload($db, 90);
-        $forecast = buildTrendForecastPayload($history, 14);
-        $reorder = buildReorderSuggestions($db, 8);
-        $anomalies = detectOperationalAnomalies($db, 10);
+        $history = buildHistoricalAnalyticsPayload($db, (int)($entities['history_days'] ?? 90));
+        $forecast = buildTrendForecastPayload($history, (int)($entities['forecast_days'] ?? 14));
+        $reorder = buildReorderSuggestions($db, (int)($entities['reorder_limit'] ?? 8));
+        $anomalies = detectOperationalAnomalies($db, (int)($entities['anomaly_limit'] ?? 10));
         $retrieved = retrieveAdminContextForQuery($db, $intent, $entities, $summary, $history, $forecast, $reorder, $anomalies);
         $router = buildAdminRoutingDecision($normalized, $intent, $entities, $retrieved);
+        $clarification = buildAdminClarificationPrompt($input, $normalized, $intent, $entities, $memory, $language, $roleProfile);
+        $advisory = buildRoleAwareAdvisory($intent, $summary, $forecast, $reorder, $anomalies, $roleProfile, $language);
 
         $okIntent = ($intent === (string)$case['expected_intent']);
         $okScope = true;
         if (!empty($case['expect_out_of_scope'])) {
             $okScope = isOutOfScopeAdminQuestion($normalized);
         }
-        $ok = $okIntent && $okScope;
+
+        $okClarification = true;
+        if (array_key_exists('expect_clarification', $case)) {
+            $okClarification = ((bool)$clarification['needs_clarification'] === (bool)$case['expect_clarification']);
+        }
+
+        $okClarificationType = true;
+        if (!empty($case['expected_clarification_type'])) {
+            $okClarificationType = ((string)($clarification['type'] ?? '') === (string)$case['expected_clarification_type']);
+        }
+
+        $okRole = true;
+        if (!empty($case['expect_role_label'])) {
+            $okRole = strtolower((string)($roleProfile['role_label'] ?? '')) === strtolower((string)$case['expect_role_label']);
+        }
+
+        $okReasoning = true;
+        if (!empty($case['expect_reasoning'])) {
+            $okReasoning = trim((string)($advisory['reasoning'] ?? '')) !== '';
+        }
+
+        $okProactive = true;
+        if (!empty($case['expect_proactive'])) {
+            $okProactive = count($advisory['proactive_suggestions'] ?? []) > 0;
+        }
+
+        $ok = $okIntent && $okScope && $okClarification && $okClarificationType && $okRole && $okReasoning && $okProactive;
         if ($ok) {
             $passed++;
         }
 
         $results[] = [
-            'input' => (string)$case['input'],
+            'input' => $input,
             'expected_intent' => (string)$case['expected_intent'],
             'actual_intent' => $intent,
             'router_strategy' => $router['strategy'] ?? 'rules',
+            'role' => $role,
+            'role_label' => (string)($roleProfile['role_label'] ?? ''),
+            'clarification' => [
+                'needs_clarification' => (bool)($clarification['needs_clarification'] ?? false),
+                'type' => (string)($clarification['type'] ?? ''),
+                'expected' => array_key_exists('expect_clarification', $case) ? (bool)$case['expect_clarification'] : null,
+                'expected_type' => $case['expected_clarification_type'] ?? null
+            ],
+            'reasoning_present' => trim((string)($advisory['reasoning'] ?? '')) !== '',
+            'proactive_count' => count($advisory['proactive_suggestions'] ?? []),
             'passed' => $ok
         ];
     }
@@ -770,13 +896,495 @@ function countWords(string $text): int {
     return count(explode(' ', $clean));
 }
 
+function getAdminRoleProfile(string $role, string $language = 'en'): array {
+    $role = strtolower(trim($role));
+    $profiles = [
+        'admin' => [
+            'role_label_en' => 'Admin',
+            'role_label_fil' => 'Admin',
+            'focus_en' => 'cross-team risk, policy decisions, and service-level outcomes',
+            'focus_fil' => 'cross-team risks, policy decisions, at service-level outcomes',
+            'default_actions_en' => ['Review high-risk exceptions', 'Align owners and due dates', 'Set measurable weekly targets'],
+            'default_actions_fil' => ['I-review ang high-risk exceptions', 'I-align ang owners at due dates', 'Magtakda ng measurable weekly targets']
+        ],
+        'inventory_manager' => [
+            'role_label_en' => 'Inventory Manager',
+            'role_label_fil' => 'Inventory Manager',
+            'focus_en' => 'stock health, replenishment timing, and inventory accuracy',
+            'focus_fil' => 'stock health, replenishment timing, at inventory accuracy',
+            'default_actions_en' => ['Prioritize critical stockouts', 'Validate demand/lead-time assumptions', 'Run targeted cycle counts'],
+            'default_actions_fil' => ['I-prioritize ang critical stockouts', 'I-validate ang demand/lead-time assumptions', 'Mag-run ng targeted cycle counts']
+        ],
+        'purchasing_officer' => [
+            'role_label_en' => 'Purchasing Officer',
+            'role_label_fil' => 'Purchasing Officer',
+            'focus_en' => 'supplier performance, PO flow, and cost/lead-time tradeoffs',
+            'focus_fil' => 'supplier performance, PO flow, at cost/lead-time tradeoffs',
+            'default_actions_en' => ['Escalate overdue POs', 'Renegotiate volatile unit costs', 'Confirm delivery ETAs for critical SKUs'],
+            'default_actions_fil' => ['I-escalate ang overdue POs', 'I-renegotiate ang volatile unit costs', 'I-confirm ang delivery ETAs ng critical SKUs']
+        ],
+        'staff' => [
+            'role_label_en' => 'Staff',
+            'role_label_fil' => 'Staff',
+            'focus_en' => 'day-to-day execution, exception reporting, and fast issue routing',
+            'focus_fil' => 'day-to-day execution, exception reporting, at mabilis na issue routing',
+            'default_actions_en' => ['Report critical gaps early', 'Update affected order queues', 'Coordinate handoff with manager'],
+            'default_actions_fil' => ['I-report agad ang critical gaps', 'I-update ang affected order queues', 'I-coordinate ang handoff sa manager']
+        ]
+    ];
+
+    if (!isset($profiles[$role])) {
+        $role = 'staff';
+    }
+
+    $selected = $profiles[$role];
+    $isFil = $language === 'fil';
+
+    return [
+        'role' => $role,
+        'role_label' => $isFil ? $selected['role_label_fil'] : $selected['role_label_en'],
+        'focus' => $isFil ? $selected['focus_fil'] : $selected['focus_en'],
+        'default_actions' => $isFil ? $selected['default_actions_fil'] : $selected['default_actions_en']
+    ];
+}
+
+function resolveAdminResponseLanguage(string $normalized, array $entities, array $memory): string {
+    $detected = (string)($entities['language'] ?? detectAdminLanguage($normalized));
+    if (!in_array($detected, ['en', 'fil'], true)) {
+        $detected = 'en';
+    }
+
+    $lastLanguage = strtolower(trim((string)($memory['last_language'] ?? '')));
+    if (
+        $detected === 'en' &&
+        $lastLanguage === 'fil' &&
+        !empty($entities['follow_up']) &&
+        countWords($normalized) <= 4
+    ) {
+        return 'fil';
+    }
+
+    return $detected;
+}
+
+function resolveAdminClarificationInput(string $message, string $normalized, array $memory): array {
+    $pending = isset($memory['pending_clarification']) && is_array($memory['pending_clarification'])
+        ? $memory['pending_clarification']
+        : null;
+
+    if ($pending === null) {
+        return [
+            'resolved' => false,
+            'message' => $message
+        ];
+    }
+
+    $trimmed = trim($message);
+    $options = isset($pending['options']) && is_array($pending['options']) ? $pending['options'] : [];
+    if ($trimmed !== '' && preg_match('/^\d{1,2}$/', $trimmed) === 1) {
+        $index = ((int)$trimmed) - 1;
+        if (isset($options[$index]['query']) && is_string($options[$index]['query'])) {
+            return [
+                'resolved' => true,
+                'message' => $options[$index]['query']
+            ];
+        }
+    }
+
+    foreach ($options as $option) {
+        if (!is_array($option)) {
+            continue;
+        }
+        $label = strtolower(trim((string)($option['label'] ?? '')));
+        $query = trim((string)($option['query'] ?? ''));
+        if ($query === '') {
+            continue;
+        }
+        if ($label !== '' && strtolower($trimmed) === $label) {
+            return [
+                'resolved' => true,
+                'message' => $query
+            ];
+        }
+        if (strtolower($trimmed) === strtolower($query)) {
+            return [
+                'resolved' => true,
+                'message' => $query
+            ];
+        }
+    }
+
+    $pendingType = strtolower(trim((string)($pending['type'] ?? '')));
+    if (preg_match('/(\d{1,3})/', $normalized, $m) === 1) {
+        $days = max(7, min(180, (int)$m[1]));
+        if ($pendingType === 'history_window') {
+            return [
+                'resolved' => true,
+                'message' => 'Show historical trends for the last ' . $days . ' days'
+            ];
+        }
+        if ($pendingType === 'forecast_window') {
+            return [
+                'resolved' => true,
+                'message' => 'Show trend forecast for the next ' . $days . ' days'
+            ];
+        }
+    }
+
+    if (($pendingType === 'product_hint' || $pendingType === 'supplier_hint') && countWords($normalized) >= 2) {
+        $baseIntent = (string)($pending['intent'] ?? 'general');
+        if ($pendingType === 'product_hint') {
+            return [
+                'resolved' => true,
+                'message' => ($baseIntent === 'reorder' ? 'Show reorder suggestions for product ' : 'Analyze product ') . $trimmed
+            ];
+        }
+        return [
+            'resolved' => true,
+            'message' => 'Show purchase order status for supplier ' . $trimmed
+        ];
+    }
+
+    return [
+        'resolved' => false,
+        'message' => $message
+    ];
+}
+
+function buildAdminClarificationPrompt(
+    string $message,
+    string $normalized,
+    string $intent,
+    array $entities,
+    array $memory,
+    string $language = 'en',
+    array $roleProfile = []
+): array {
+    $result = [
+        'needs_clarification' => false,
+        'type' => '',
+        'question' => '',
+        'options' => [],
+        'expected_intent' => $intent,
+        'missing' => []
+    ];
+
+    $isFil = $language === 'fil';
+    $wordCount = countWords($normalized);
+    $hasTimeWindow = preg_match('/\b\d{1,3}\s*(day|days|araw)\b/iu', $normalized) === 1;
+    $hasProductKeyword = preg_match('/\b(product|item|sku|produkto)\b/iu', $normalized) === 1;
+    $hasSupplierKeyword = preg_match('/\b(supplier|vendor)\b/iu', $normalized) === 1;
+    $isGenericShortPrompt = $wordCount <= 3 &&
+        preg_match('/^(help|status|update|report|analysis|analyze|insight|check|ano|kamusta|kumusta|pakicheck|patingin)$/iu', $normalized) === 1;
+
+    if (!empty($entities['follow_up']) && empty($memory['last_intent'])) {
+        $result['needs_clarification'] = true;
+        $result['type'] = 'missing_topic';
+        $result['missing'] = ['topic'];
+    } elseif ($hasProductKeyword && empty($entities['product_hint'])) {
+        $result['needs_clarification'] = true;
+        $result['type'] = 'product_hint';
+        $result['missing'] = ['product'];
+        $result['expected_intent'] = $intent !== 'general' ? $intent : 'reorder';
+    } elseif ($hasSupplierKeyword && empty($entities['supplier_hint'])) {
+        $result['needs_clarification'] = true;
+        $result['type'] = 'supplier_hint';
+        $result['missing'] = ['supplier'];
+        $result['expected_intent'] = 'reorder';
+    } elseif ($intent === 'history' && !$hasTimeWindow && $wordCount <= 8) {
+        $result['needs_clarification'] = true;
+        $result['type'] = 'history_window';
+        $result['missing'] = ['time_window'];
+    } elseif ($intent === 'forecast' && !$hasTimeWindow && $wordCount <= 8) {
+        $result['needs_clarification'] = true;
+        $result['type'] = 'forecast_window';
+        $result['missing'] = ['forecast_horizon'];
+    } elseif ($intent === 'general' && $isGenericShortPrompt) {
+        $result['needs_clarification'] = true;
+        $result['type'] = 'missing_topic';
+        $result['missing'] = ['topic'];
+    }
+
+    if (!$result['needs_clarification']) {
+        return $result;
+    }
+
+    $roleLabel = (string)($roleProfile['role_label'] ?? ($isFil ? 'User' : 'User'));
+    if ($result['type'] === 'product_hint') {
+        $result['question'] = $isFil
+            ? 'Sige, tutulungan kita. Aling product name o SKU ang gusto mong i-check?'
+            : 'Happy to help. Which product name or SKU should I analyze?';
+        return $result;
+    }
+
+    if ($result['type'] === 'supplier_hint') {
+        $result['question'] = $isFil
+            ? 'Okay. Aling supplier ang gusto mong i-focus para sa PO status at risk review?'
+            : 'Understood. Which supplier should I focus on for PO status and risk review?';
+        return $result;
+    }
+
+    if ($result['type'] === 'history_window') {
+        $result['question'] = $isFil
+            ? 'Para mas accurate ang trend analysis, anong period ang gusto mo?'
+            : 'To make trend analysis accurate, which time window do you want?';
+        if ($isFil) {
+            $result['options'] = [
+                ['label' => 'Huling 30 araw', 'query' => 'Ipakita ang historical trends sa huling 30 araw'],
+                ['label' => 'Huling 90 araw', 'query' => 'Ipakita ang historical trends sa huling 90 araw'],
+                ['label' => 'Huling 180 araw', 'query' => 'Ipakita ang historical trends sa huling 180 araw']
+            ];
+        } else {
+            $result['options'] = [
+                ['label' => 'Last 30 days', 'query' => 'Show historical trends for the last 30 days'],
+                ['label' => 'Last 90 days', 'query' => 'Show historical trends for the last 90 days'],
+                ['label' => 'Last 180 days', 'query' => 'Show historical trends for the last 180 days']
+            ];
+        }
+        return $result;
+    }
+
+    if ($result['type'] === 'forecast_window') {
+        $result['question'] = $isFil
+            ? 'Para sa forecast, ilang araw ang gusto mong horizon?'
+            : 'For the forecast, what horizon should I use?';
+        if ($isFil) {
+            $result['options'] = [
+                ['label' => 'Susunod na 7 araw', 'query' => 'Ipakita ang trend forecast sa susunod na 7 araw'],
+                ['label' => 'Susunod na 14 araw', 'query' => 'Ipakita ang trend forecast sa susunod na 14 araw'],
+                ['label' => 'Susunod na 30 araw', 'query' => 'Ipakita ang trend forecast sa susunod na 30 araw']
+            ];
+        } else {
+            $result['options'] = [
+                ['label' => 'Next 7 days', 'query' => 'Show trend forecast for the next 7 days'],
+                ['label' => 'Next 14 days', 'query' => 'Show trend forecast for the next 14 days'],
+                ['label' => 'Next 30 days', 'query' => 'Show trend forecast for the next 30 days']
+            ];
+        }
+        return $result;
+    }
+
+    $result['question'] = $isFil
+        ? "Handa akong tumulong, {$roleLabel}. Alin ang gusto mong unahin?"
+        : "I can help with that, {$roleLabel}. Which one should I prioritize first?";
+    if ($isFil) {
+        $result['options'] = [
+            ['label' => 'Daily summary', 'query' => 'Ipakita ang daily summary at key risks'],
+            ['label' => 'Reorder priorities', 'query' => 'Ipakita ang top reorder priorities'],
+            ['label' => 'Anomaly scan', 'query' => 'Ipakita ang critical anomalies at causes'],
+            ['label' => 'Trend forecast', 'query' => 'Ipakita ang trend forecast sa susunod na 14 araw']
+        ];
+    } else {
+        $result['options'] = [
+            ['label' => 'Daily summary', 'query' => 'Show daily summary with key risks'],
+            ['label' => 'Reorder priorities', 'query' => 'Show top reorder priorities'],
+            ['label' => 'Anomaly scan', 'query' => 'Show critical anomalies and causes'],
+            ['label' => 'Trend forecast', 'query' => 'Show trend forecast for the next 14 days']
+        ];
+    }
+    return $result;
+}
+
+function buildRoleAwareAdvisory(
+    string $intent,
+    array $summary,
+    array $forecast,
+    array $reorder,
+    array $anomalies,
+    array $roleProfile,
+    string $language = 'en'
+): array {
+    $isFil = $language === 'fil';
+    $role = (string)($roleProfile['role'] ?? 'staff');
+    $roleLabel = (string)($roleProfile['role_label'] ?? ($isFil ? 'User' : 'User'));
+    $lowStock = (int)($summary['metrics']['low_stock_items'] ?? 0);
+    $outOfStock = (int)($summary['metrics']['out_of_stock_items'] ?? 0);
+    $critical = (int)($anomalies['counts']['critical'] ?? 0);
+    $high = (int)($anomalies['counts']['high'] ?? 0);
+    $trend = (string)($forecast['trend'] ?? 'stable');
+
+    $reasoning = '';
+    if ($intent === 'reorder') {
+        $reasoning = $isFil
+            ? "Pinrioritize ko ang replenishment dahil may {$lowStock} low-stock at {$outOfStock} out-of-stock items, na may direct risk sa fulfillment."
+            : "I prioritized replenishment because {$lowStock} items are low stock and {$outOfStock} are already out of stock, creating direct fulfillment risk.";
+    } elseif ($intent === 'anomalies') {
+        $reasoning = $isFil
+            ? "Naka-focus ang recommendation sa anomaly containment dahil may {$critical} critical at {$high} high-risk signals."
+            : "The recommendation focuses on anomaly containment because there are {$critical} critical and {$high} high-risk signals.";
+    } elseif ($intent === 'forecast' || $intent === 'history') {
+        $reasoning = $isFil
+            ? "Trend-based ang recommendation para ma-align ang staffing, purchasing, at stock buffers habang {$trend} ang projected direction."
+            : "The recommendation is trend-based so staffing, purchasing, and stock buffers stay aligned while the projected direction is {$trend}.";
+    } else {
+        $reasoning = $isFil
+            ? 'Pinaghalo ko ang sales velocity, stock risk, at supplier delays para ma-prioritize ang pinakamalaking operational impact.'
+            : 'I combined sales velocity, stock risk, and supplier delays to prioritize the highest operational-impact actions.';
+    }
+
+    $proactive = [];
+    if ($role === 'admin') {
+        $proactive = $isFil
+            ? ['I-assign ang owner sa top risk item within today', 'Mag-set ng weekly KPI checkpoint para sa stockout at overdue PO']
+            : ['Assign a clear owner for the top risk item today', 'Set a weekly KPI checkpoint for stockout and overdue PO reduction'];
+    } elseif ($role === 'inventory_manager') {
+        $proactive = $isFil
+            ? ['I-run ang cycle count para sa top critical SKUs', 'I-tune ang reorder levels gamit ang latest demand trend']
+            : ['Run cycle counts on top critical SKUs', 'Tune reorder levels using the latest demand trend'];
+    } elseif ($role === 'purchasing_officer') {
+        $proactive = $isFil
+            ? ['I-follow up ngayong araw ang overdue suppliers', 'I-review ang malaking unit-cost spikes bago ang next PO']
+            : ['Follow up overdue suppliers today', 'Review major unit-cost spikes before the next PO cycle'];
+    } else {
+        $proactive = $isFil
+            ? ['I-escalate agad ang critical stock issues sa manager', 'I-update ang affected order queue para clear ang customer impact']
+            : ['Escalate critical stock issues to your manager early', 'Update affected order queues so customer impact is transparent'];
+    }
+
+    return [
+        'role_line' => 'Role focus (' . $roleLabel . '): ' . (string)($roleProfile['focus'] ?? ''),
+        'reasoning' => trim($reasoning),
+        'proactive_suggestions' => $proactive
+    ];
+}
+
+function mergeAdminFollowUpActions(array $primary, array $secondary): array {
+    $merged = [];
+    $seen = [];
+    foreach (array_merge($primary, $secondary) as $item) {
+        if (!is_string($item)) {
+            continue;
+        }
+        $clean = trim($item);
+        if ($clean === '') {
+            continue;
+        }
+        $key = strtolower($clean);
+        if (isset($seen[$key])) {
+            continue;
+        }
+        $seen[$key] = true;
+        $merged[] = $clean;
+        if (count($merged) >= 8) {
+            break;
+        }
+    }
+    return $merged;
+}
+
 function buildAdminCopilotReply(Database $db, string $message, array $context): array {
-    $normalized = normalizeAdminAiMessage($message);
+    $rawMessage = trim($message);
+    $normalized = normalizeAdminAiMessage($rawMessage);
     $memory = getAdminAiSessionMemory();
-    $entities = extractAdminEntities($message, $normalized, $memory);
-    $language = (string)($entities['language'] ?? detectAdminLanguage($normalized));
+    $currentUser = Auth::user() ?? [];
+    $role = strtolower(trim((string)($currentUser['role'] ?? Auth::userRole() ?? 'staff')));
+
+    $resolvedClarification = resolveAdminClarificationInput($rawMessage, $normalized, $memory);
+    $resolvedFromClarification = !empty($resolvedClarification['resolved']);
+    if ($resolvedFromClarification) {
+        $rawMessage = (string)($resolvedClarification['message'] ?? $rawMessage);
+        $normalized = normalizeAdminAiMessage($rawMessage);
+        setAdminAiPendingClarification(null);
+        $memory['pending_clarification'] = null;
+    }
+
+    $entities = extractAdminEntities($rawMessage, $normalized, $memory);
+    $language = resolveAdminResponseLanguage($normalized, $entities, $memory);
+    $roleProfile = getAdminRoleProfile($role, $language);
     $intent = detectAdminIntent($normalized);
     $intent = refineIntentWithEntitiesAndMemory($intent, $entities, $memory);
+
+    $clarification = buildAdminClarificationPrompt($rawMessage, $normalized, $intent, $entities, $memory, $language, $roleProfile);
+    if (!empty($clarification['needs_clarification'])) {
+        $responseId = generateAdminAiResponseId();
+        $options = isset($clarification['options']) && is_array($clarification['options']) ? $clarification['options'] : [];
+        $followUp = [];
+        foreach ($options as $option) {
+            if (!is_array($option)) {
+                continue;
+            }
+            $query = trim((string)($option['query'] ?? ''));
+            if ($query !== '') {
+                $followUp[] = $query;
+            }
+        }
+
+        $pendingPayload = [
+            'type' => (string)($clarification['type'] ?? 'missing_topic'),
+            'intent' => (string)($clarification['expected_intent'] ?? 'general'),
+            'missing' => $clarification['missing'] ?? [],
+            'options' => $options,
+            'base_message' => substr($rawMessage, 0, 220),
+            'created_at' => gmdate('c')
+        ];
+        setAdminAiPendingClarification($pendingPayload);
+
+        $replyText = (string)($clarification['question'] ?? '');
+        if (!empty($followUp)) {
+            $replyText .= "\n";
+            foreach ($followUp as $idx => $optionText) {
+                $replyText .= "\n" . ($idx + 1) . ') ' . $optionText;
+            }
+        }
+
+        $memoryEntry = [
+            'response_id' => $responseId,
+            'timestamp' => gmdate('c'),
+            'message' => $message,
+            'normalized' => $normalized,
+            'intent' => 'clarification',
+            'language' => $language,
+            'entities' => $entities,
+            'response_source' => 'clarification',
+            'role' => $role,
+            'user_profile' => $roleProfile,
+            'needs_clarification' => true,
+            'pending_clarification' => $pendingPayload,
+            'reply' => $replyText
+        ];
+        updateAdminAiSessionMemory($memoryEntry);
+        $updatedMemory = getAdminAiSessionMemory();
+
+        return [
+            'response_id' => $responseId,
+            'intent' => 'clarification',
+            'language' => $language,
+            'response_source' => 'clarification',
+            'router' => [
+                'strategy' => 'clarification',
+                'confidence' => 0.93,
+                'reason' => (string)($clarification['type'] ?? 'missing_detail')
+            ],
+            'entities' => $entities,
+            'reply' => $replyText,
+            'summary' => [],
+            'history' => [],
+            'forecast' => [],
+            'reorder_suggestions' => [],
+            'anomalies' => [],
+            'retrieved_context' => [],
+            'follow_up_actions' => $followUp,
+            'proactive_suggestions' => $followUp,
+            'reasoning' => $language === 'fil'
+                ? 'Kulang ang detalye sa request kaya nagtanong muna ako para mas accurate ang insight.'
+                : 'Your request is missing key details, so I asked a clarifying question to keep the insight accurate.',
+            'role_profile' => $roleProfile,
+            'needs_clarification' => true,
+            'clarification' => $clarification,
+            'generated_at' => gmdate('c'),
+            'context' => [
+                'page' => $context['page'] ?? null,
+                'title' => $context['title'] ?? null,
+                'role' => $context['role'] ?? ($roleProfile['role'] ?? null)
+            ],
+            'memory' => [
+                'turns' => (int)count($updatedMemory['recent_messages'] ?? []),
+                'last_intent' => $updatedMemory['last_intent'] ?? null,
+                'last_language' => $updatedMemory['last_language'] ?? null,
+                'has_pending_clarification' => !empty($updatedMemory['pending_clarification'])
+            ]
+        ];
+    }
 
     $historyWindowDays = (int)($entities['history_days'] ?? 90);
     $forecastHorizonDays = (int)($entities['forecast_days'] ?? 14);
@@ -853,7 +1461,7 @@ function buildAdminCopilotReply(Database $db, string $message, array $context): 
             $top = array_slice($anomalies['items'], 0, 4);
             $lines = [];
             foreach ($top as $item) {
-                $lines[] = '[' . strtoupper($item['severity']) . '] ' . $item['title'];
+                $lines[] = '[' . strtoupper((string)$item['severity']) . '] ' . (string)($item['title'] ?? 'Anomaly');
             }
             $replyText = ($language === 'fil' ? "Mga kasalukuyang anomaly na na-detect:\n- " : "Current anomalies detected:\n- ") . implode("\n- ", $lines);
         }
@@ -863,11 +1471,23 @@ function buildAdminCopilotReply(Database $db, string $message, array $context): 
             'Show trend forecast'
         ];
     } else {
-        $rulesReply = buildRulesBasedGeneralReply($message, $summary, $reorder, $anomalies, $forecast, $language);
+        $rulesReply = buildRulesBasedGeneralReply($rawMessage, $summary, $reorder, $anomalies, $forecast, $language);
         $llmReply = '';
 
         if (($routing['strategy'] ?? 'rules') !== 'rules') {
-            $llmReply = maybeGenerateAdminLlmReply($message, $context, $summary, $reorder, $anomalies, $history, $forecast, $language, $retrievedContext, $memory);
+            $llmReply = maybeGenerateAdminLlmReply(
+                $rawMessage,
+                $context,
+                $summary,
+                $reorder,
+                $anomalies,
+                $history,
+                $forecast,
+                $language,
+                $retrievedContext,
+                $memory,
+                $roleProfile
+            );
         }
 
         if ($llmReply !== '') {
@@ -891,6 +1511,34 @@ function buildAdminCopilotReply(Database $db, string $message, array $context): 
         ];
     }
 
+    $advisory = buildRoleAwareAdvisory($intent, $summary, $forecast, $reorder, $anomalies, $roleProfile, $language);
+    $reasoning = (string)($advisory['reasoning'] ?? '');
+    $proactive = isset($advisory['proactive_suggestions']) && is_array($advisory['proactive_suggestions'])
+        ? $advisory['proactive_suggestions']
+        : [];
+    $roleLine = trim((string)($advisory['role_line'] ?? ''));
+
+    if ($resolvedFromClarification) {
+        $replyText = ($language === 'fil'
+            ? "Salamat sa paglilinaw. Heto ang analysis:\n\n"
+            : "Thanks for clarifying. Here's the analysis:\n\n") . $replyText;
+    }
+    if ($roleLine !== '') {
+        $replyText .= "\n\n" . $roleLine;
+    }
+    if ($reasoning !== '') {
+        $replyText .= "\n" . ($language === 'fil' ? 'Bakit ito ang rekomendasyon: ' : 'Why this recommendation: ') . $reasoning;
+    }
+    if (!empty($proactive)) {
+        $replyText .= "\nProactive improvements:";
+        foreach (array_slice($proactive, 0, 3) as $item) {
+            $replyText .= "\n- " . $item;
+        }
+    }
+
+    $followUp = mergeAdminFollowUpActions($followUp, $proactive);
+    setAdminAiPendingClarification(null);
+
     $responseId = generateAdminAiResponseId();
     $memoryEntry = [
         'response_id' => $responseId,
@@ -902,6 +1550,10 @@ function buildAdminCopilotReply(Database $db, string $message, array $context): 
         'entities' => $entities,
         'routing' => $routing,
         'response_source' => $responseSource,
+        'role' => $role,
+        'user_profile' => $roleProfile,
+        'needs_clarification' => false,
+        'pending_clarification' => null,
         'reply' => $replyText
     ];
     updateAdminAiSessionMemory($memoryEntry);
@@ -922,15 +1574,22 @@ function buildAdminCopilotReply(Database $db, string $message, array $context): 
         'anomalies' => $anomalies,
         'retrieved_context' => $retrievedContext,
         'follow_up_actions' => $followUp,
+        'proactive_suggestions' => $proactive,
+        'reasoning' => $reasoning,
+        'role_profile' => $roleProfile,
+        'needs_clarification' => false,
+        'clarification' => null,
         'generated_at' => gmdate('c'),
         'context' => [
             'page' => $context['page'] ?? null,
-            'title' => $context['title'] ?? null
+            'title' => $context['title'] ?? null,
+            'role' => $context['role'] ?? ($roleProfile['role'] ?? null)
         ],
         'memory' => [
             'turns' => (int)count($updatedMemory['recent_messages'] ?? []),
             'last_intent' => $updatedMemory['last_intent'] ?? null,
-            'last_language' => $updatedMemory['last_language'] ?? null
+            'last_language' => $updatedMemory['last_language'] ?? null,
+            'has_pending_clarification' => !empty($updatedMemory['pending_clarification'])
         ]
     ];
 }
@@ -954,7 +1613,14 @@ function detectAdminLanguage(string $normalized): string {
         'ano', 'paano', 'kailan', 'magkano', 'gaano', 'bakit', 'saan',
         'ngayon', 'kahapon', 'bukas', 'benta', 'imbentaryo', 'stock',
         'kulang', 'sobra', 'order', 'reorder', 'anomaly', 'problema',
-        'pakita', 'ipakita', 'buod', 'trend', 'forecast', 'taas', 'baba'
+        'pakita', 'ipakita', 'buod', 'trend', 'forecast', 'taas', 'baba',
+        'pwede', 'paki', 'pakicheck', 'tingnan', 'kamusta', 'kumusta',
+        'natin', 'naman', 'yung', 'yun', 'gusto', 'kailangan', 'rekomendasyon'
+    ];
+
+    $englishMarkers = [
+        'what', 'how', 'when', 'where', 'why', 'show', 'forecast', 'inventory',
+        'sales', 'revenue', 'history', 'summary', 'anomalies', 'reorder', 'risk'
     ];
 
     $hits = 0;
@@ -963,9 +1629,19 @@ function detectAdminLanguage(string $normalized): string {
             $hits++;
         }
     }
+    $englishHits = 0;
+    foreach ($englishMarkers as $token) {
+        if (preg_match('/\b' . preg_quote($token, '/') . '\b/u', $normalized) === 1) {
+            $englishHits++;
+        }
+    }
 
-    if ($hits >= 2 || preg_match('/\b(ng|sa|mga|nang|para|kasi|lang|naman)\b/u', $normalized) === 1) {
+    if ($hits >= 2 || preg_match('/\b(ng|sa|mga|nang|para|kasi|lang|naman|kita|mo|ko)\b/u', $normalized) === 1) {
         return 'fil';
+    }
+
+    if ($englishHits >= 2 && $hits === 0) {
+        return 'en';
     }
 
     return 'en';
@@ -2395,8 +3071,12 @@ function buildRulesBasedGeneralReply(string $message, array $summary, array $reo
     $normalized = normalizeAdminAiMessage($message);
 
     if (isAdminLanguageCapabilityQuestion($normalized)) {
-        return "Oo, naiintindihan ko ang Filipino/Tagalog at English.\n" .
-            "Pwede kang magtanong sa kahit alin sa dalawa tungkol sa sales, inventory, reorder timing, anomalies, at forecast.";
+        if ($language === 'fil') {
+            return "Oo, naiintindihan ko ang Filipino/Tagalog at English.\n" .
+                "Pwede kang magtanong sa kahit alin sa dalawa tungkol sa sales, inventory, reorder timing, anomalies, at forecast.";
+        }
+        return "Yes, I can understand both English and Filipino/Tagalog.\n" .
+            "You can ask in either language about sales, inventory, reorder timing, anomalies, and forecasts.";
     }
 
     if (isAdminGreetingMessage($normalized)) {
@@ -2649,7 +3329,8 @@ function maybeGenerateAdminLlmReply(
     array $forecast,
     string $language = 'en',
     array $retrievedContext = [],
-    array $memory = []
+    array $memory = [],
+    array $roleProfile = []
 ): string {
     $llmConfig = getAdminAiLlmConfig();
     if (!$llmConfig['enabled']) {
@@ -2667,6 +3348,7 @@ function maybeGenerateAdminLlmReply(
             $forecast,
             $retrievedContext,
             $memory,
+            $roleProfile,
             $llmConfig,
             $language
         );
@@ -2688,6 +3370,7 @@ function buildAdminLlmMessages(
     array $forecast,
     array $retrievedContext,
     array $memory,
+    array $roleProfile,
     array $llmConfig,
     string $language = 'en'
 ): array {
@@ -2699,12 +3382,15 @@ function buildAdminLlmMessages(
         'You are the Admin AI Copilot for an inventory and e-commerce operations dashboard.',
         'You are read-only: never claim to execute approvals, stock edits, or financial transactions.',
         'Focus only on inventory management, purchasing, sales operations, audit, and system process questions.',
-        'Be concise, factual, and action-oriented while sounding natural and human.',
+        'Be concise, factual, and action-oriented while sounding natural, friendly, and professional.',
         'Use practical analytics from trend, history, forecast, reorder, and anomaly signals.',
         'When suggesting actions, prioritize risk reduction, service level, and operational throughput.',
         'Ground every numeric claim in provided JSON context. If data is missing, state it clearly.',
         'If asked about unrelated topics, politely redirect to operations scope.',
-        'For analytical queries: explain briefly, then give clear recommended next actions.',
+        'If the prompt is incomplete or ambiguous, ask one focused clarifying question before answering.',
+        'For analytical queries: explain briefly, then give clear recommended next actions and why they are recommended.',
+        'Always adapt recommendations to the user role profile in context.',
+        'Include at least one proactive improvement suggestion.',
         'Prefer short bullets and keep responses typically under 260 words.',
         $languageInstruction
     ]);
@@ -2746,14 +3432,18 @@ function buildAdminLlmMessages(
             'page' => $context['page'] ?? '',
             'title' => $context['title'] ?? '',
             'pathname' => $context['pathname'] ?? '',
-            'url' => $context['url'] ?? ''
+            'url' => $context['url'] ?? '',
+            'role' => $context['role'] ?? '',
+            'user_name' => $context['user_name'] ?? ''
         ],
         'conversation_memory' => [
             'last_intent' => $memory['last_intent'] ?? null,
             'last_language' => $memory['last_language'] ?? null,
             'recent_messages' => $recentMemory,
-            'recent_feedback' => $feedback
+            'recent_feedback' => $feedback,
+            'pending_clarification' => $memory['pending_clarification'] ?? null
         ],
+        'role_profile' => $roleProfile,
         'daily_summary' => [
             'date' => $summary['date'] ?? null,
             'highlights' => $summary['highlights'] ?? [],
@@ -2787,7 +3477,8 @@ function buildAdminLlmMessages(
         'Response requirements:',
         '- Answer only with grounded operations data.',
         '- Keep it practical and easy to scan.',
-        '- Include a concise recommendation.',
+        '- Include a concise recommendation and explain the reasoning.',
+        '- Add one proactive improvement suggestion tailored to the user role.',
         '- Mention uncertainty when confidence is low.'
     ]);
 

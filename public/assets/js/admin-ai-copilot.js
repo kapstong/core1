@@ -1,14 +1,15 @@
 (function () {
     'use strict';
 
-    const ALLOWED_ROLES = new Set(['admin', 'inventory_manager', 'purchasing_officer']);
+    const ALLOWED_ROLES = new Set(['admin', 'inventory_manager', 'purchasing_officer', 'staff']);
     const API_ENDPOINT = '/ai/admin-copilot.php';
 
     const state = {
         ready: false,
         isOpen: false,
         isBusy: false,
-        feedbackByResponseId: {}
+        feedbackByResponseId: {},
+        hasShownWelcome: false
     };
 
     function getCurrentUser() {
@@ -170,6 +171,13 @@
         panel.classList.add('open');
         panel.setAttribute('aria-hidden', 'false');
         state.isOpen = true;
+
+        if (!state.hasShownWelcome) {
+            const user = getCurrentUser();
+            const role = user?.role ? String(user.role).replace(/_/g, ' ') : 'user';
+            appendSystemMessage(`Conversational mode is ready. I will adapt insights for your ${role} role and ask clarifying questions when needed.`);
+            state.hasShownWelcome = true;
+        }
     }
 
     function closePanel() {
@@ -278,6 +286,7 @@
         openPanel();
         appendUserMessage(message);
         setBusy(true);
+        const user = getCurrentUser();
 
         try {
             const payload = await requestJson(`${window.API_BASE}${API_ENDPOINT}`, {
@@ -291,7 +300,9 @@
                         page: window.currentPage || 'home',
                         title: document.getElementById('page-title-top')?.textContent || '',
                         pathname: window.location.pathname || '',
-                        url: window.location.href || ''
+                        url: window.location.href || '',
+                        role: user?.role || '',
+                        user_name: user?.full_name || user?.username || ''
                     }
                 })
             });
@@ -306,15 +317,21 @@
                 llm: 'LLM',
                 hybrid: 'Hybrid',
                 rules_fallback: 'Rules fallback',
-                rules: 'Rules'
+                rules: 'Rules',
+                clarification: 'Clarification'
             };
             const source = sourceMap[data.response_source] || 'Rules';
             const language = escapeHtml(data.language || 'en');
             const strategy = escapeHtml(data.router?.strategy || 'rules');
+            const roleLens = escapeHtml(data.role_profile?.role_label || user?.role || '');
+            const followUps = Array.isArray(data.follow_up_actions) ? data.follow_up_actions : [];
+            const proactive = Array.isArray(data.proactive_suggestions) ? data.proactive_suggestions : [];
+            const mergedFollowUps = Array.from(new Set([...followUps, ...proactive])).slice(0, 8);
+            const clarificationFlag = data.needs_clarification ? ' | Clarifying: yes' : '';
             appendAssistantMessage(reply.replace(/\n/g, '<br>'), {
                 responseId: data.response_id || '',
-                followUps: Array.isArray(data.follow_up_actions) ? data.follow_up_actions : [],
-                metaHtml: `Source: ${source} | Intent: ${escapeHtml(data.intent || 'general')} | Lang: ${language} | Router: ${strategy}`
+                followUps: mergedFollowUps,
+                metaHtml: `Source: ${source} | Intent: ${escapeHtml(data.intent || 'general')} | Lang: ${language} | Role: ${roleLens} | Router: ${strategy}${clarificationFlag}`
             });
         } catch (error) {
             appendSystemMessage(error.message || 'Failed to get AI response.');
@@ -485,6 +502,8 @@
 
     function renderMemory(memory) {
         const rows = Array.isArray(memory.recent_messages) ? memory.recent_messages.slice(-6).reverse() : [];
+        const pending = Boolean(memory.pending_clarification);
+        const roleLabel = memory.user_profile?.role_label || memory.user_profile?.role || 'n/a';
         const items = rows.map((row) => `
             <li>
                 <strong>${escapeHtml(row.intent || 'general')}</strong> (${escapeHtml(row.language || 'en')})
@@ -495,7 +514,7 @@
 
         return `
             <div class="admin-ai-block-title">Session Memory</div>
-            <p class="admin-ai-meta">Last intent: ${escapeHtml(memory.last_intent || 'n/a')} | Last language: ${escapeHtml(memory.last_language || 'n/a')} | Feedback: ${Number(memory.feedback_count || 0)}</p>
+            <p class="admin-ai-meta">Last intent: ${escapeHtml(memory.last_intent || 'n/a')} | Last language: ${escapeHtml(memory.last_language || 'n/a')} | Role: ${escapeHtml(roleLabel)} | Pending clarification: ${pending ? 'yes' : 'no'} | Feedback: ${Number(memory.feedback_count || 0)}</p>
             ${items ? `<ul class="admin-ai-anomaly-list">${items}</ul>` : '<p>No prior turns recorded in this session.</p>'}
         `;
     }

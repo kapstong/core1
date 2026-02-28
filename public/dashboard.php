@@ -641,7 +641,7 @@
 
     <!-- Include all page loaders -->
     <script src="assets/js/dashboard-pages.js?v=3.6"></script>
-    <script src="assets/js/admin-ai-copilot.js?v=1.1"></script>
+    <script src="assets/js/admin-ai-copilot.js?v=1.2"></script>
 
     <!-- NEW: Complete GRN Management System -->
     <script src="assets/js/grn-new.js?v=3.5"></script>
