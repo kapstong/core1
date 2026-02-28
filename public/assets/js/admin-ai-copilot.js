@@ -324,13 +324,25 @@
             const language = escapeHtml(data.language || 'en');
             const strategy = escapeHtml(data.router?.strategy || 'rules');
             const roleLens = escapeHtml(data.role_profile?.role_label || user?.role || '');
-            const followUps = Array.isArray(data.follow_up_actions) ? data.follow_up_actions : [];
-            const proactive = Array.isArray(data.proactive_suggestions) ? data.proactive_suggestions : [];
-            const mergedFollowUps = Array.from(new Set([...followUps, ...proactive])).slice(0, 8);
             const clarificationFlag = data.needs_clarification ? ' | Clarifying: yes' : '';
+
+            let followUpActions = [];
+            if (data.needs_clarification && Array.isArray(data.clarification?.options)) {
+                followUpActions = data.clarification.options
+                    .map((option) => {
+                        if (!option || typeof option !== 'object') {
+                            return '';
+                        }
+                        return String(option.label || option.query || '').trim();
+                    })
+                    .filter(Boolean);
+            } else {
+                followUpActions = Array.isArray(data.follow_up_actions) ? data.follow_up_actions : [];
+            }
+
             appendAssistantMessage(reply.replace(/\n/g, '<br>'), {
-                responseId: data.response_id || '',
-                followUps: mergedFollowUps,
+                responseId: data.needs_clarification ? '' : (data.response_id || ''),
+                followUps: followUpActions,
                 metaHtml: `Source: ${source} | Intent: ${escapeHtml(data.intent || 'general')} | Lang: ${language} | Role: ${roleLens} | Router: ${strategy}${clarificationFlag}`
             });
         } catch (error) {
@@ -561,8 +573,8 @@
         }
 
         const buttons = clean.map((action) => `
-            <button type="button" class="admin-ai-followup-btn" data-question="${escapeHtml(action)}">
-                ${escapeHtml(action)}
+            <button type="button" class="admin-ai-followup-btn" data-question="${escapeHtml(action)}" title="${escapeHtml(action)}">
+                ${escapeHtml(formatActionLabel(action))}
             </button>
         `).join('');
 
@@ -574,8 +586,8 @@
         return `
             <div class="admin-ai-feedback" data-response-id="${escapedId}">
                 <span class="admin-ai-feedback-label">Was this helpful?</span>
-                <button type="button" class="admin-ai-feedback-btn" data-response-id="${escapedId}" data-rating="up" aria-label="Helpful"><i class="fas fa-thumbs-up"></i></button>
-                <button type="button" class="admin-ai-feedback-btn" data-response-id="${escapedId}" data-rating="down" aria-label="Not helpful"><i class="fas fa-thumbs-down"></i></button>
+                <button type="button" class="admin-ai-feedback-btn" data-response-id="${escapedId}" data-rating="up" aria-label="Helpful">Yes</button>
+                <button type="button" class="admin-ai-feedback-btn" data-response-id="${escapedId}" data-rating="down" aria-label="Not helpful">No</button>
                 <span class="admin-ai-feedback-status"></span>
             </div>
         `;
@@ -666,6 +678,17 @@
             .replace(/>/g, '&gt;')
             .replace(/"/g, '&quot;')
             .replace(/'/g, '&#39;');
+    }
+
+    function formatActionLabel(action) {
+        const text = String(action || '').trim();
+        if (!text) {
+            return '';
+        }
+        if (text.length <= 54) {
+            return text;
+        }
+        return `${text.slice(0, 51)}...`;
     }
 
     window.AdminAICopilot = {
