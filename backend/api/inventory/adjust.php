@@ -76,8 +76,11 @@ function createAdjustment($user) {
     }
 
     // Validate quantity
-    if ($quantityAdjusted === 0) {
+    if ($adjustmentType !== 'recount' && $quantityAdjusted === 0) {
         Response::error('Quantity adjusted cannot be zero', 400);
+    }
+    if ($adjustmentType === 'recount' && $quantityAdjusted < 0) {
+        Response::error('New stock quantity cannot be negative', 400);
     }
 
     if ($adjustmentType === 'remove' && $quantityAdjusted > 0) {
@@ -148,8 +151,10 @@ function createAdjustment($user) {
 
         $adjustmentId = $db->lastInsertId();
 
-        // Update inventory
-        $inventoryQuery = "UPDATE inventory SET quantity_on_hand = :new_quantity WHERE product_id = :product_id";
+        // Update inventory (create row if missing)
+        $inventoryQuery = "INSERT INTO inventory (product_id, quantity_on_hand, quantity_reserved)
+                          VALUES (:product_id, :new_quantity, 0)
+                          ON DUPLICATE KEY UPDATE quantity_on_hand = VALUES(quantity_on_hand)";
         $invStmt = $db->prepare($inventoryQuery);
         $invStmt->bindParam(':new_quantity', $newStock, PDO::PARAM_INT);
         $invStmt->bindParam(':product_id', $productId, PDO::PARAM_INT);
@@ -207,8 +212,8 @@ function createAdjustment($user) {
 
         Response::success([
             'message' => 'Stock adjustment created successfully',
-            'adjustment' => $adjustment
-        ], 201);
+            'adjustment' => formatAdjustmentForResponse($adjustment)
+        ], 'Stock adjustment created successfully', 201);
 
     } catch (Exception $e) {
         $db->rollBack();
@@ -222,10 +227,14 @@ function listAdjustments() {
     // Get query parameters
     $productId = isset($_GET['product_id']) ? (int)$_GET['product_id'] : null;
     $adjustmentType = isset($_GET['type']) ? $_GET['type'] : null;
-    $startDate = isset($_GET['start_date']) ? $_GET['start_date'] : null;
-    $endDate = isset($_GET['end_date']) ? $_GET['end_date'] : null;
+    $reason = isset($_GET['reason']) ? trim($_GET['reason']) : null;
+    $search = isset($_GET['search']) ? trim($_GET['search']) : null;
+    $startDate = isset($_GET['start_date']) ? $_GET['start_date'] : (isset($_GET['date_from']) ? $_GET['date_from'] : null);
+    $endDate = isset($_GET['end_date']) ? $_GET['end_date'] : (isset($_GET['date_to']) ? $_GET['date_to'] : null);
     $limit = isset($_GET['limit']) ? (int)$_GET['limit'] : 50;
     $offset = isset($_GET['offset']) ? (int)$_GET['offset'] : 0;
+    $limit = max(1, min($limit, 500));
+    $offset = max(0, $offset);
 
     // Build query
     $query = "SELECT
@@ -260,6 +269,21 @@ function listAdjustments() {
         $params[':adjustment_type'] = $adjustmentType;
     }
 
+    if ($reason) {
+        $query .= " AND sa.reason = :reason";
+        $params[':reason'] = $reason;
+    }
+
+    if ($search) {
+        $query .= " AND (
+            p.name LIKE :search
+            OR p.sku LIKE :search
+            OR sa.adjustment_number LIKE :search
+            OR COALESCE(sa.notes, '') LIKE :search
+        )";
+        $params[':search'] = '%' . $search . '%';
+    }
+
     if ($startDate) {
         $query .= " AND DATE(sa.adjustment_date) >= :start_date";
         $params[':start_date'] = $startDate;
@@ -282,9 +306,13 @@ function listAdjustments() {
 
     $stmt->execute();
     $adjustments = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    $adjustments = array_map('formatAdjustmentForResponse', $adjustments);
 
     // Get total count - build a simpler dedicated count query
-    $countQuery = "SELECT COUNT(*) as total FROM stock_adjustments sa WHERE 1=1";
+    $countQuery = "SELECT COUNT(*) as total
+                   FROM stock_adjustments sa
+                   INNER JOIN products p ON sa.product_id = p.id
+                   WHERE 1=1";
 
     if ($productId) {
         $countQuery .= " AND sa.product_id = :product_id";
@@ -292,6 +320,19 @@ function listAdjustments() {
 
     if ($adjustmentType) {
         $countQuery .= " AND sa.adjustment_type = :adjustment_type";
+    }
+
+    if ($reason) {
+        $countQuery .= " AND sa.reason = :reason";
+    }
+
+    if ($search) {
+        $countQuery .= " AND (
+            p.name LIKE :search
+            OR p.sku LIKE :search
+            OR sa.adjustment_number LIKE :search
+            OR COALESCE(sa.notes, '') LIKE :search
+        )";
     }
 
     if ($startDate) {
@@ -360,4 +401,28 @@ function getAdjustmentDetails($db, $adjustmentId) {
     $stmt->execute();
 
     return $stmt->fetch(PDO::FETCH_ASSOC);
+}
+
+function formatAdjustmentForResponse($adjustment) {
+    if (!$adjustment || !is_array($adjustment)) {
+        return $adjustment;
+    }
+
+    $formatted = $adjustment;
+    $formatted['quantity_adjusted'] = (int)($formatted['quantity_adjusted'] ?? 0);
+    $formatted['quantity_before'] = (int)($formatted['quantity_before'] ?? 0);
+    $formatted['quantity_after'] = (int)($formatted['quantity_after'] ?? 0);
+
+    // Keep compatibility with existing dashboard rendering contract.
+    $formatted['product'] = [
+        'name' => $formatted['product_name'] ?? 'Unknown Product',
+        'sku' => $formatted['product_sku'] ?? ''
+    ];
+
+    // Existing dashboard expects remove quantity as absolute and adds "-" in UI.
+    if (($formatted['adjustment_type'] ?? '') === 'remove') {
+        $formatted['quantity_adjusted'] = abs($formatted['quantity_adjusted']);
+    }
+
+    return $formatted;
 }

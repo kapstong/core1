@@ -22,6 +22,10 @@ require_once __DIR__ . '/../../middleware/CORS.php';
 
 CORS::handle();
 
+// Locked down: this debug-era endpoint is intentionally disabled.
+// Use /backend/api/inventory/adjust.php for all stock adjustment operations.
+Response::error('Deprecated endpoint. Use /backend/api/inventory/adjust.php', 410);
+
 // TEMPORARILY DISABLE AUTHENTICATION FOR DEBUGGING
 // Auth::requireAuth();
 

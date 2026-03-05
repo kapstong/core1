@@ -3853,7 +3853,7 @@ async function loadStockAdjustments(page = 1) {
         content.classList.add('d-none');
         noAdjustmentsMessage.classList.add('d-none');
 
-        let url = `${API_BASE}/inventory/adjustments.php?limit=${itemsPerPage}&offset=${(page - 1) * itemsPerPage}`;
+        let url = `${API_BASE}/inventory/adjust.php?limit=${itemsPerPage}&offset=${(page - 1) * itemsPerPage}`;
 
         if (type !== 'all') url += `&type=${type}`;
         if (reason !== 'all') url += `&reason=${reason}`;
@@ -4297,7 +4297,7 @@ async function createStockAdjustment() {
     };
 
     try {
-        const response = await fetch(`${API_BASE}/inventory/adjustments.php`, {
+        const response = await fetch(`${API_BASE}/inventory/adjust.php`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(adjustmentData)
@@ -9175,7 +9175,7 @@ async function loadStockAdjustments(page = 1) {
         content.classList.add('d-none');
         noAdjustmentsMessage.classList.add('d-none');
 
-        let url = `${API_BASE}/inventory/adjustments.php?limit=${itemsPerPage}&offset=${(page - 1) * itemsPerPage}`;
+        let url = `${API_BASE}/inventory/adjust.php?limit=${itemsPerPage}&offset=${(page - 1) * itemsPerPage}`;
 
         if (type !== 'all') url += `&type=${type}`;
         if (reason !== 'all') url += `&reason=${reason}`;
@@ -9623,7 +9623,7 @@ async function createStockAdjustment() {
     };
 
     try {
-        const response = await fetch(`${API_BASE}/inventory/adjustments.php`, {
+        const response = await fetch(`${API_BASE}/inventory/adjust.php`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(adjustmentData)
