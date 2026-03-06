@@ -94,6 +94,15 @@
     background: rgba(15, 23, 42, 0.25);
 }
 
+.admin-ai-disclosure {
+    padding: 8px 14px 9px;
+    border-bottom: 1px solid rgba(148, 163, 184, 0.2);
+    background: rgba(2, 6, 23, 0.35);
+    color: rgba(203, 213, 225, 0.88);
+    font-size: 0.72rem;
+    line-height: 1.4;
+}
+
 .admin-ai-chip {
     border: 1px solid rgba(148, 163, 184, 0.3);
     background: rgba(15, 23, 42, 0.48);
@@ -162,6 +171,21 @@
     line-height: 1.45;
 }
 
+.admin-ai-source-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    border: 1px solid rgba(56, 189, 248, 0.45);
+    background: rgba(2, 132, 199, 0.18);
+    color: rgba(224, 242, 254, 0.96);
+    border-radius: 999px;
+    font-size: 0.67rem;
+    font-weight: 700;
+    letter-spacing: 0.01em;
+    padding: 3px 8px;
+    margin-bottom: 8px;
+}
+
 .admin-ai-followups {
     margin-top: 9px;
     display: flex;
@@ -200,6 +224,16 @@
     flex-wrap: wrap;
 }
 
+.admin-ai-approval {
+    margin-top: 10px;
+    padding-top: 8px;
+    border-top: 1px dashed rgba(148, 163, 184, 0.28);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+}
+
 .admin-ai-feedback-label {
     font-size: 0.71rem;
     color: var(--text-muted);
@@ -221,6 +255,35 @@
     justify-content: center;
     cursor: pointer;
     transition: border-color 0.16s ease, color 0.16s ease, background 0.16s ease;
+}
+
+.admin-ai-approve-btn {
+    border: 1px solid rgba(148, 163, 184, 0.36);
+    background: rgba(15, 23, 42, 0.48);
+    color: rgba(226, 232, 240, 0.92);
+    border-radius: 999px;
+    min-width: 64px;
+    height: 28px;
+    padding: 0 11px;
+    font-size: 0.72rem;
+    font-weight: 600;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: border-color 0.16s ease, color 0.16s ease, background 0.16s ease;
+}
+
+.admin-ai-approve-btn:hover,
+.admin-ai-approve-btn.active {
+    border-color: rgba(56, 189, 248, 0.8);
+    color: #ecfeff;
+    background: rgba(2, 132, 199, 0.35);
+}
+
+.admin-ai-approve-btn:disabled {
+    opacity: 0.65;
+    cursor: not-allowed;
 }
 
 .admin-ai-feedback-btn:hover,

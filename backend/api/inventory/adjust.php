@@ -68,6 +68,33 @@ function createAdjustment($user) {
     $quantityAdjusted = (int)$input['quantity_adjusted'];
     $reason = trim($input['reason']);
     $notes = isset($input['notes']) ? trim($input['notes']) : null;
+    $aiResponseId = isset($input['ai_response_id']) ? trim((string)$input['ai_response_id']) : '';
+    $aiResponseSource = isset($input['ai_response_source']) ? trim((string)$input['ai_response_source']) : '';
+    $aiApprovedBy = isset($input['ai_approved_by']) ? trim((string)$input['ai_approved_by']) : '';
+
+    if ($aiResponseId !== '' && strlen($aiResponseId) > 80) {
+        $aiResponseId = substr($aiResponseId, 0, 80);
+    }
+    if ($aiResponseSource !== '' && strlen($aiResponseSource) > 40) {
+        $aiResponseSource = substr($aiResponseSource, 0, 40);
+    }
+    if ($aiApprovedBy !== '' && strlen($aiApprovedBy) > 120) {
+        $aiApprovedBy = substr($aiApprovedBy, 0, 120);
+    }
+
+    $aiMetadata = null;
+    if ($aiResponseId !== '' || $aiResponseSource !== '' || $aiApprovedBy !== '') {
+        $aiMetadata = [
+            'response_id' => $aiResponseId,
+            'response_source' => $aiResponseSource !== '' ? $aiResponseSource : 'rules',
+            'approved_by' => $aiApprovedBy,
+            'linked_at' => gmdate('c')
+        ];
+        $aiAuditNote = '[AI_REF:' . ($aiMetadata['response_id'] !== '' ? $aiMetadata['response_id'] : 'n/a')
+            . '|SRC:' . $aiMetadata['response_source']
+            . '|APPROVED_BY:' . ($aiMetadata['approved_by'] !== '' ? $aiMetadata['approved_by'] : 'n/a') . ']';
+        $notes = trim(($notes ? ($notes . ' ') : '') . $aiAuditNote);
+    }
 
     // Validate adjustment type
     $validTypes = ['add', 'remove', 'recount'];
@@ -207,8 +234,28 @@ function createAdjustment($user) {
             'quantity_adjusted' => $adjustment['quantity_adjusted'],
             'quantity_after' => $adjustment['quantity_after'],
             'reason' => $adjustment['reason'],
-            'notes' => $adjustment['notes']
+            'notes' => $adjustment['notes'],
+            'ai_assistance' => $aiMetadata
         ]);
+
+        if ($aiMetadata !== null) {
+            AuditLogger::log(
+                'ai_assisted_action',
+                'stock_adjustment',
+                $adjustment['id'],
+                "AI-assisted stock adjustment {$adjustment['adjustment_number']} approved and applied",
+                null,
+                [
+                    'adjustment_number' => $adjustment['adjustment_number'],
+                    'product_id' => $adjustment['product_id'],
+                    'ai_response_id' => $aiMetadata['response_id'] ?? '',
+                    'ai_response_source' => $aiMetadata['response_source'] ?? 'rules',
+                    'ai_approved_by' => $aiMetadata['approved_by'] ?? '',
+                    'linked_at' => $aiMetadata['linked_at'] ?? gmdate('c')
+                ],
+                $user['id']
+            );
+        }
 
         Response::success([
             'message' => 'Stock adjustment created successfully',

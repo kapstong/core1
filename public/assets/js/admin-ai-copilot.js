@@ -9,6 +9,7 @@
         isOpen: false,
         isBusy: false,
         feedbackByResponseId: {},
+        approvalsByResponseId: {},
         hasShownWelcome: false
     };
 
@@ -59,7 +60,7 @@
             <div class="admin-ai-header">
                 <div class="admin-ai-title-wrap">
                     <h3 class="admin-ai-title"><i class="fas fa-robot"></i> Admin AI Copilot</h3>
-                    <p class="admin-ai-subtitle">Read-only operations assistant</p>
+                    <p class="admin-ai-subtitle">AI-generated operations assistant. Human approval required before action.</p>
                 </div>
                 <button type="button" class="admin-ai-close" id="admin-ai-close" aria-label="Close AI panel">
                     <i class="fas fa-times"></i>
@@ -75,6 +76,7 @@
                 <button type="button" class="admin-ai-chip" data-ai-mode="memory">Session Memory</button>
                 <button type="button" class="admin-ai-chip" data-ai-mode="evaluate">Self Check</button>
             </div>
+            <div class="admin-ai-disclosure">Every assistant response is marked with source and can be approved/rejected for audit logging.</div>
 
             <div class="admin-ai-feed" id="admin-ai-feed"></div>
 
@@ -141,6 +143,17 @@
         });
 
         feed.addEventListener('click', async (event) => {
+            const approvalBtn = event.target.closest('.admin-ai-approve-btn');
+            if (approvalBtn) {
+                const responseId = approvalBtn.getAttribute('data-response-id');
+                const decision = approvalBtn.getAttribute('data-decision');
+                if (!responseId || !decision) {
+                    return;
+                }
+                await submitApproval(responseId, decision, approvalBtn);
+                return;
+            }
+
             const feedbackBtn = event.target.closest('.admin-ai-feedback-btn');
             if (feedbackBtn) {
                 const responseId = feedbackBtn.getAttribute('data-response-id');
@@ -217,10 +230,12 @@
     }
 
     function appendAssistantMessage(html, options = {}) {
+        const sourcePill = renderSourcePill(options.responseSource || 'rules', options.aiGenerated !== false);
         const metaHtml = options.metaHtml ? `<div class="admin-ai-meta">${options.metaHtml}</div>` : '';
         const followUpHtml = Array.isArray(options.followUps) ? renderFollowUpButtons(options.followUps) : '';
+        const approvalHtml = options.responseId ? renderApprovalControls(options.responseId, options.responseSource || 'rules', options.intent || 'general') : '';
         const feedbackHtml = options.responseId ? renderFeedbackControls(options.responseId) : '';
-        appendMessage('assistant', `<div class="admin-ai-bubble">${html}${metaHtml}${followUpHtml}${feedbackHtml}</div>`);
+        appendMessage('assistant', `<div class="admin-ai-bubble">${sourcePill}${html}${metaHtml}${followUpHtml}${approvalHtml}${feedbackHtml}</div>`);
     }
 
     function setBusy(isBusy) {
@@ -270,7 +285,15 @@
             }
 
             const html = renderModeResult(mode, payload.data || {});
-            appendAssistantMessage(html);
+            const responseId = String(payload?.data?.response_id || '');
+            const responseSource = String(payload?.data?.response_source || 'rules');
+            appendAssistantMessage(html, {
+                responseId,
+                responseSource,
+                intent: mode,
+                aiGenerated: true,
+                metaHtml: `Source: ${escapeHtml(responseSource)} | Intent: ${escapeHtml(mode)} | AI-generated: yes | Human approval: required`
+            });
         } catch (error) {
             appendSystemMessage(error.message || 'Failed to run AI action.');
         } finally {
@@ -313,6 +336,7 @@
 
             const data = payload.data || {};
             const reply = escapeHtml(data.reply || 'No response available.');
+            const responseSourceRaw = String(data.response_source || 'rules');
             const sourceMap = {
                 llm: 'LLM',
                 hybrid: 'Hybrid',
@@ -320,7 +344,7 @@
                 rules: 'Rules',
                 clarification: 'Clarification'
             };
-            const source = sourceMap[data.response_source] || 'Rules';
+            const source = sourceMap[responseSourceRaw] || 'Rules';
             const language = escapeHtml(data.language || 'en');
             const strategy = escapeHtml(data.router?.strategy || 'rules');
             const roleLens = escapeHtml(data.role_profile?.role_label || user?.role || '');
@@ -342,8 +366,11 @@
 
             appendAssistantMessage(reply.replace(/\n/g, '<br>'), {
                 responseId: data.needs_clarification ? '' : (data.response_id || ''),
+                responseSource: responseSourceRaw,
+                intent: data.intent || 'general',
+                aiGenerated: true,
                 followUps: followUpActions,
-                metaHtml: `Source: ${source} | Intent: ${escapeHtml(data.intent || 'general')} | Lang: ${language} | Role: ${roleLens} | Router: ${strategy}${clarificationFlag}`
+                metaHtml: `Source: ${source} | Intent: ${escapeHtml(data.intent || 'general')} | Lang: ${language} | Role: ${roleLens} | Router: ${strategy}${clarificationFlag} | AI-generated: yes`
             });
         } catch (error) {
             appendSystemMessage(error.message || 'Failed to get AI response.');
@@ -514,6 +541,7 @@
 
     function renderMemory(memory) {
         const rows = Array.isArray(memory.recent_messages) ? memory.recent_messages.slice(-6).reverse() : [];
+        const approvals = Array.isArray(memory.recent_approvals) ? memory.recent_approvals.slice(-4).reverse() : [];
         const pending = Boolean(memory.pending_clarification);
         const roleLabel = memory.user_profile?.role_label || memory.user_profile?.role || 'n/a';
         const items = rows.map((row) => `
@@ -523,11 +551,19 @@
                 <span>${escapeHtml(row.message || '')}</span>
             </li>
         `).join('');
+        const approvalItems = approvals.map((row) => `
+            <li>
+                <strong>${escapeHtml(row.decision || 'approved').toUpperCase()}</strong>
+                response ${escapeHtml(row.response_id || '')}
+                (${escapeHtml(row.response_source || 'rules')})
+            </li>
+        `).join('');
 
         return `
             <div class="admin-ai-block-title">Session Memory</div>
-            <p class="admin-ai-meta">Last intent: ${escapeHtml(memory.last_intent || 'n/a')} | Last language: ${escapeHtml(memory.last_language || 'n/a')} | Role: ${escapeHtml(roleLabel)} | Pending clarification: ${pending ? 'yes' : 'no'} | Feedback: ${Number(memory.feedback_count || 0)}</p>
+            <p class="admin-ai-meta">Last intent: ${escapeHtml(memory.last_intent || 'n/a')} | Last language: ${escapeHtml(memory.last_language || 'n/a')} | Role: ${escapeHtml(roleLabel)} | Pending clarification: ${pending ? 'yes' : 'no'} | Feedback: ${Number(memory.feedback_count || 0)} | Approvals: ${Number(memory.approvals_count || 0)}</p>
             ${items ? `<ul class="admin-ai-anomaly-list">${items}</ul>` : '<p>No prior turns recorded in this session.</p>'}
+            ${approvalItems ? `<div class="admin-ai-meta" style="margin-top:8px;">Recent approvals</div><ul class="admin-ai-anomaly-list">${approvalItems}</ul>` : ''}
         `;
     }
 
@@ -593,6 +629,32 @@
         `;
     }
 
+    function renderSourcePill(responseSource, aiGenerated = true) {
+        const labelMap = {
+            llm: 'LLM',
+            hybrid: 'Hybrid',
+            rules: 'Rules',
+            rules_fallback: 'Rules fallback',
+            clarification: 'Clarification'
+        };
+        const source = String(responseSource || 'rules');
+        const sourceLabel = labelMap[source] || source;
+        const typeLabel = aiGenerated ? 'AI-generated' : 'System-generated';
+        return `<div class="admin-ai-source-pill">${escapeHtml(typeLabel)} | Source: ${escapeHtml(sourceLabel)}</div>`;
+    }
+
+    function renderApprovalControls(responseId, responseSource, intent) {
+        const escapedId = escapeHtml(responseId);
+        return `
+            <div class="admin-ai-approval" data-response-id="${escapedId}" data-response-source="${escapeHtml(responseSource || 'rules')}" data-intent="${escapeHtml(intent || 'general')}">
+                <span class="admin-ai-feedback-label">Decision</span>
+                <button type="button" class="admin-ai-approve-btn" data-response-id="${escapedId}" data-decision="approved" aria-label="Approve AI recommendation">Approve</button>
+                <button type="button" class="admin-ai-approve-btn" data-response-id="${escapedId}" data-decision="rejected" aria-label="Reject AI recommendation">Reject</button>
+                <span class="admin-ai-feedback-status"></span>
+            </div>
+        `;
+    }
+
     async function submitFeedback(responseId, rating, triggerButton) {
         if (state.feedbackByResponseId[responseId]) {
             return;
@@ -633,6 +695,62 @@
             triggerButton.classList.add('active');
             if (status) {
                 status.textContent = 'Thanks';
+            }
+        } catch (error) {
+            if (status) {
+                status.textContent = 'Failed';
+            }
+            buttons.forEach((btn) => {
+                btn.disabled = false;
+            });
+        }
+    }
+
+    async function submitApproval(responseId, decision, triggerButton) {
+        if (state.approvalsByResponseId[responseId]) {
+            return;
+        }
+
+        const wrap = triggerButton.closest('.admin-ai-approval');
+        if (!wrap) {
+            return;
+        }
+
+        const status = wrap.querySelector('.admin-ai-feedback-status');
+        const buttons = wrap.querySelectorAll('.admin-ai-approve-btn');
+        const responseSource = wrap.getAttribute('data-response-source') || 'rules';
+        const intent = wrap.getAttribute('data-intent') || 'general';
+
+        buttons.forEach((btn) => {
+            btn.disabled = true;
+        });
+        if (status) {
+            status.textContent = 'Saving...';
+        }
+
+        try {
+            const payload = await requestJson(`${window.API_BASE}${API_ENDPOINT}`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    action: 'approve',
+                    response_id: responseId,
+                    decision,
+                    response_source: responseSource,
+                    intent
+                })
+            });
+
+            if (!payload.success) {
+                throw new Error(payload.message || 'Approval failed');
+            }
+
+            state.approvalsByResponseId[responseId] = decision;
+            triggerButton.classList.add('active');
+            if (status) {
+                status.textContent = decision === 'approved' ? 'Approved' : 'Rejected';
             }
         } catch (error) {
             if (status) {

@@ -2773,6 +2773,7 @@ async function loadProducts() {
 function displayProducts(products) {
     const tbody = document.getElementById('products-table-body');
     const isStaff = currentUser.role === 'staff';
+    const canDirectAdjust = ['admin', 'inventory_manager', 'purchasing_officer', 'staff'].includes(currentUser.role);
 
         tbody.innerHTML = products.map(product => {
             // Handle absolute URLs from ImageUpload class and fix relative paths
@@ -2822,6 +2823,17 @@ function displayProducts(products) {
                 <td>${statusBadge}</td>
                 <td>
                     <div class="btn-group btn-group-sm">
+                        ${canDirectAdjust ? `
+                        <button onclick="quickAdjustProductStock(${product.id}, 'add', 1)" class="btn btn-outline-success" title="Direct add 1 stock">
+                            <i class="fas fa-plus"></i>
+                        </button>
+                        <button onclick="quickAdjustProductStock(${product.id}, 'remove', 1)" class="btn btn-outline-warning" title="Direct remove 1 stock">
+                            <i class="fas fa-minus"></i>
+                        </button>
+                        <button onclick="openStockAdjustmentModalForProduct(${product.id})" class="btn btn-outline-secondary" title="Open full stock adjustment form">
+                            <i class="fas fa-exchange-alt"></i>
+                        </button>
+                        ` : ''}
                         <button onclick="viewProduct(${product.id})" class="btn btn-outline-info" title="View Details">
                             <i class="fas fa-eye"></i>
                         </button>
@@ -2847,6 +2859,89 @@ function filterProducts(searchTerm) {
         (product.description && product.description.toLowerCase().includes(searchTerm.toLowerCase()))
     );
     displayProducts(filtered);
+}
+
+async function quickAdjustProductStock(productId, adjustmentType, quantity = 1) {
+    const product = allProducts.find((item) => Number(item.id) === Number(productId));
+    if (!product) {
+        showError('Product not found. Please refresh and try again.');
+        return;
+    }
+
+    const normalizedType = adjustmentType === 'remove' ? 'remove' : 'add';
+    const amount = Math.max(1, Math.abs(parseInt(quantity, 10) || 1));
+    const currentStock = Number(product.quantity_available ?? product.quantity_on_hand ?? 0);
+
+    if (normalizedType === 'remove' && currentStock < amount) {
+        showError(`Cannot remove ${amount}. Current available stock is ${currentStock}.`);
+        return;
+    }
+
+    const verb = normalizedType === 'add' ? 'add' : 'remove';
+    const confirmMessage = `Direct adjustment: ${verb} ${amount} unit${amount === 1 ? '' : 's'} for "${product.name}"?`;
+    let confirmed = true;
+
+    if (typeof showConfirm === 'function') {
+        confirmed = await showConfirm(confirmMessage, {
+            title: 'Confirm Direct Adjustment',
+            confirmText: normalizedType === 'add' ? 'Add Stock' : 'Remove Stock',
+            type: normalizedType === 'add' ? 'success' : 'warning'
+        });
+    } else {
+        confirmed = window.confirm(confirmMessage);
+    }
+
+    if (!confirmed) {
+        return;
+    }
+
+    const payload = {
+        product_id: Number(productId),
+        adjustment_type: normalizedType,
+        quantity_adjusted: amount,
+        reason: 'counting_error',
+        notes: `Direct quick adjustment from Products page (${normalizedType === 'add' ? '+' : '-'}${amount})`
+    };
+
+    try {
+        const response = await fetch(`${API_BASE}/inventory/adjust.php`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'same-origin',
+            body: JSON.stringify(payload)
+        });
+
+        const result = await response.json();
+        if (!result.success) {
+            throw new Error(result.message || 'Stock adjustment failed');
+        }
+
+        showSuccess(`Stock updated: ${product.name} (${normalizedType === 'add' ? '+' : '-'}${amount})`);
+        await loadProducts();
+
+        if (document.getElementById('adjustments-table-body')) {
+            loadStockAdjustments().catch(() => {});
+        }
+    } catch (error) {
+        devLog('Direct adjustment failed:', error);
+        showError(error.message || 'Failed to apply direct stock adjustment.');
+    }
+}
+
+function openStockAdjustmentModalForProduct(productId) {
+    const product = allProducts.find((item) => Number(item.id) === Number(productId));
+
+    if (!product) {
+        openStockAdjustmentModal();
+        return;
+    }
+
+    window.__stockAdjustmentPreset = {
+        id: Number(product.id),
+        name: String(product.name || ''),
+        stock: Number(product.quantity_available ?? product.quantity_on_hand ?? 0)
+    };
+    openStockAdjustmentModal();
 }
 
 async function openProductModal(productId = null) {
@@ -9496,6 +9591,7 @@ function setupAdjustmentFormInteractivity() {
     const searchResults = document.getElementById('adjustment-product-search-results');
     const productHiddenInput = document.getElementById('adjustment-product');
     const typeSelect = document.getElementById('adjustment-type');
+    const reasonSelect = document.getElementById('adjustment-reason');
     const quantityInput = document.getElementById('adjustment-quantity');
     const currentStockDisplay = document.getElementById('current-stock-display');
     const newStockDisplay = document.getElementById('new-stock-display');
@@ -9507,6 +9603,8 @@ function setupAdjustmentFormInteractivity() {
     let productsForSearch = [];
     let selectedProductId = null;
     let selectedProductStock = 0;
+
+    applyPresetProductIfAny();
 
     // Load products for search
     fetch(`${API_BASE}/products/index.php?status=all&limit=1000`)
@@ -9653,6 +9751,39 @@ function setupAdjustmentFormInteractivity() {
         newStockDisplay.value = newStock;
         adjustmentPreview.value = preview;
         adjustmentPreview.style.color = adjustmentType === 'add' ? 'green' : adjustmentType === 'remove' ? 'red' : 'blue';
+    }
+
+    function applyPresetProductIfAny() {
+        const preset = window.__stockAdjustmentPreset;
+        if (!preset || typeof preset !== 'object') {
+            return;
+        }
+
+        const presetId = Number(preset.id || 0);
+        if (presetId <= 0) {
+            delete window.__stockAdjustmentPreset;
+            return;
+        }
+
+        selectedProductId = String(presetId);
+        selectedProductStock = Number(preset.stock || 0);
+
+        productHiddenInput.value = String(presetId);
+        productSearchInput.value = String(preset.name || '');
+        currentStockDisplay.value = String(selectedProductStock);
+
+        if (!typeSelect.value) {
+            typeSelect.value = 'recount';
+        }
+        if (reasonSelect && !reasonSelect.value) {
+            reasonSelect.value = 'counting_error';
+        }
+        if (!quantityInput.value) {
+            quantityInput.value = String(selectedProductStock);
+        }
+
+        updateAdjustmentCalculations();
+        delete window.__stockAdjustmentPreset;
     }
 
     function debounce(func, wait) {

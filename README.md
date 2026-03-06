@@ -9,6 +9,7 @@ A comprehensive inventory management and e-commerce system designed for PC parts
 - **Purchase Orders (PO)**: Create and manage purchase orders from suppliers
 - **Goods Received Notes (GRN)**: Track incoming inventory and quality control
 - **Inventory Management**: Real-time stock tracking, reordering alerts, stock adjustments
+- **Direct Adjustment Controls**: One-click `+1/-1` stock adjustments from the Products table
 - **Point of Sale (POS)**: In-store sales processing and receipt generation
 - **Customer E-Commerce**: Online ordering system with customer accounts
 - **Audit Logging**: Comprehensive activity tracking and system auditing
@@ -98,6 +99,40 @@ A comprehensive inventory management and e-commerce system designed for PC parts
 - `GET /backend/api/ai/admin-copilot.php?mode=evaluate`
 - `POST /backend/api/ai/admin-copilot.php` with `{ "message": "...", "context": {...} }`
 - `POST /backend/api/ai/admin-copilot.php` with `{ "action":"feedback", "response_id":"...", "rating":"up|down", "comment":"..." }`
+- `POST /backend/api/ai/admin-copilot.php` with `{ "action":"approve", "response_id":"...", "decision":"approved|rejected", "response_source":"...", "intent":"..." }`
+
+## Inventory Automation Setup
+
+The inventory automation runner can automatically:
+- detect low-stock and critical-stock products,
+- create draft purchase orders for high-priority replenishment,
+- send summary alerts to `admin`, `inventory_manager`, and `purchasing_officer` accounts.
+
+Run manually:
+```bash
+php backend/utils/automate_inventory_ops.php
+```
+
+Dry-run validation (no DB writes, no real email sends):
+```bash
+php backend/utils/automate_inventory_ops.php --dry-run
+```
+
+Environment toggles:
+- `INVENTORY_AUTOMATION_ENABLED=true`
+- `INVENTORY_AUTOMATION_AUTO_PO_DRAFTS=true`
+- `INVENTORY_AUTOMATION_ALERT_EMAILS=true`
+- `INVENTORY_AUTOMATION_MAX_ITEMS=40`
+- `INVENTORY_AUTOMATION_CRITICAL_COVER_DAYS=3`
+- `INVENTORY_AUTOMATION_LEAD_DAYS=7`
+- `INVENTORY_AUTOMATION_REVIEW_DAYS=14`
+- `INVENTORY_AUTOMATION_ACTOR_USER_ID=0`
+- `INVENTORY_AUTOMATION_DEFAULT_SUPPLIER_ID=0`
+
+Windows Task Scheduler helper:
+```powershell
+powershell -ExecutionPolicy Bypass -File backend/utils/setup_inventory_automation_task.ps1
+```
 
 ## Security Features
 

@@ -596,10 +596,13 @@
                 meta.className = 'ppc-chatbot-message-meta';
                 var metaParts = [];
                 if (message.role === 'bot') {
-                    if (message.meta && message.meta.response_source === 'llm') {
-                        metaParts.push('AI');
+                    if (message.meta && (message.meta.response_source === 'llm' || message.meta.response_source === 'hybrid')) {
+                        metaParts.push('AI-generated');
                     } else {
-                        metaParts.push('Assistant');
+                        metaParts.push('Rules assistant');
+                    }
+                    if (message.meta && message.meta.response_source) {
+                        metaParts.push('Source: ' + String(message.meta.response_source));
                     }
                 } else {
                     metaParts.push('You');

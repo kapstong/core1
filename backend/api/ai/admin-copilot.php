@@ -63,6 +63,8 @@ function handleGetRequest(): void {
                     'session_memory',
                     'context_retrieval',
                     'feedback_loop',
+                    'approval_workflow',
+                    'ai_traceability',
                     'evaluation_suite',
                     'clarifying_questions',
                     'role_personalization',
@@ -90,7 +92,8 @@ function handleGetRequest(): void {
                     'memory' => 'GET ?mode=memory',
                     'evaluate' => 'GET ?mode=evaluate',
                     'ask' => 'POST body: { message, context }',
-                    'feedback' => 'POST body: { action:\"feedback\", response_id, rating, comment? }'
+                    'feedback' => 'POST body: { action:\"feedback\", response_id, rating, comment? }',
+                    'approve' => 'POST body: { action:\"approve\", response_id, decision:\"approved|rejected\", response_source?, intent?, note? }'
                 ],
                 'llm' => [
                     'enabled' => $llmConfig['enabled'],
@@ -106,6 +109,8 @@ function handleGetRequest(): void {
             logAiActivity('summary', ['summary_date' => $summary['date'] ?? null]);
             Response::success([
                 'mode' => 'summary',
+                'response_id' => generateAdminAiResponseId(),
+                'response_source' => 'rules',
                 'summary' => $summary
             ], 'Daily summary generated');
             return;
@@ -116,6 +121,8 @@ function handleGetRequest(): void {
             logAiActivity('history', ['days' => $historyDays]);
             Response::success([
                 'mode' => 'history',
+                'response_id' => generateAdminAiResponseId(),
+                'response_source' => 'rules',
                 'days' => $historyDays,
                 'history' => $history
             ], 'Historical analytics generated');
@@ -128,6 +135,8 @@ function handleGetRequest(): void {
             logAiActivity('forecast', ['days' => $forecastDays, 'trend' => $forecast['trend'] ?? 'stable']);
             Response::success([
                 'mode' => 'forecast',
+                'response_id' => generateAdminAiResponseId(),
+                'response_source' => 'rules',
                 'days' => $forecastDays,
                 'forecast' => $forecast
             ], 'Trend forecast generated');
@@ -138,6 +147,8 @@ function handleGetRequest(): void {
             logAiActivity('reorder', ['suggestion_count' => count($suggestions)]);
             Response::success([
                 'mode' => 'reorder',
+                'response_id' => generateAdminAiResponseId(),
+                'response_source' => 'rules',
                 'suggestions' => $suggestions,
                 'count' => count($suggestions)
             ], 'Reorder suggestions generated');
@@ -151,6 +162,8 @@ function handleGetRequest(): void {
             ]);
             Response::success([
                 'mode' => 'anomalies',
+                'response_id' => generateAdminAiResponseId(),
+                'response_source' => 'rules',
                 'anomalies' => $anomalies
             ], 'Anomaly scan complete');
             return;
@@ -170,6 +183,8 @@ function handleGetRequest(): void {
 
             Response::success([
                 'mode' => 'insights',
+                'response_id' => generateAdminAiResponseId(),
+                'response_source' => 'rules',
                 'summary' => $summary,
                 'history' => $history,
                 'forecast' => $forecast,
@@ -214,6 +229,10 @@ function handlePostRequest(): void {
     $action = strtolower(trim((string)($input['action'] ?? 'ask')));
     if ($action === 'feedback') {
         handleAdminAiFeedback($input);
+        return;
+    }
+    if ($action === 'approve') {
+        handleAdminAiApproval($input);
         return;
     }
 
@@ -306,6 +325,7 @@ function getAdminAiSessionMemory(): array {
             'last_language' => null,
             'last_entities' => [],
             'feedback' => [],
+            'approvals' => [],
             'pending_clarification' => null,
             'user_profile' => []
         ];
@@ -321,6 +341,9 @@ function getAdminAiSessionMemory(): array {
     }
     if (!isset($memory['feedback']) || !is_array($memory['feedback'])) {
         $memory['feedback'] = [];
+    }
+    if (!isset($memory['approvals']) || !is_array($memory['approvals'])) {
+        $memory['approvals'] = [];
     }
     if (!isset($memory['last_entities']) || !is_array($memory['last_entities'])) {
         $memory['last_entities'] = [];
@@ -392,6 +415,20 @@ function getAdminAiMemorySnapshot(): array {
         'last_response_id' => $memory['last_response_id'] ?? null,
         'recent_messages' => $recent,
         'feedback_count' => count($memory['feedback'] ?? []),
+        'approvals_count' => count($memory['approvals'] ?? []),
+        'recent_approvals' => array_values(array_map(static function ($row): array {
+            if (!is_array($row)) {
+                return [];
+            }
+            return [
+                'response_id' => (string)($row['response_id'] ?? ''),
+                'decision' => (string)($row['decision'] ?? ''),
+                'response_source' => (string)($row['response_source'] ?? 'rules'),
+                'intent' => (string)($row['intent'] ?? 'general'),
+                'approved_by' => (string)($row['approved_by'] ?? ''),
+                'timestamp' => (string)($row['timestamp'] ?? '')
+            ];
+        }, array_slice($memory['approvals'] ?? [], -5))),
         'pending_clarification' => $memory['pending_clarification'] ?? null,
         'user_profile' => [
             'role' => (string)($memory['user_profile']['role'] ?? ''),
@@ -745,6 +782,95 @@ function handleAdminAiFeedback(array $input): void {
         'rating' => $rating,
         'stored' => true
     ], 'Feedback captured');
+}
+
+function handleAdminAiApproval(array $input): void {
+    $responseId = trim((string)($input['response_id'] ?? ''));
+    if ($responseId === '') {
+        Response::error('response_id is required for approval', 400);
+    }
+
+    $decision = strtolower(trim((string)($input['decision'] ?? 'approved')));
+    if (!in_array($decision, ['approved', 'rejected'], true)) {
+        Response::error('decision must be approved or rejected', 400);
+    }
+
+    $responseSource = trim((string)($input['response_source'] ?? 'rules'));
+    if ($responseSource === '') {
+        $responseSource = 'rules';
+    }
+    if (strlen($responseSource) > 40) {
+        $responseSource = substr($responseSource, 0, 40);
+    }
+
+    $intent = trim((string)($input['intent'] ?? 'general'));
+    if ($intent === '') {
+        $intent = 'general';
+    }
+    if (strlen($intent) > 60) {
+        $intent = substr($intent, 0, 60);
+    }
+
+    $note = trim((string)($input['note'] ?? ''));
+    if (strlen($note) > 280) {
+        $note = substr($note, 0, 280);
+    }
+
+    $user = Auth::user();
+    $userId = Auth::userId();
+    $approver = (string)($user['full_name'] ?? $user['username'] ?? ('User #' . (string)$userId));
+    $timestamp = gmdate('c');
+
+    if (session_status() === PHP_SESSION_ACTIVE) {
+        $memory = getAdminAiSessionMemory();
+        $memory['approvals'][] = [
+            'response_id' => $responseId,
+            'decision' => $decision,
+            'response_source' => $responseSource,
+            'intent' => $intent,
+            'note' => $note,
+            'user_id' => $userId,
+            'approved_by' => $approver,
+            'timestamp' => $timestamp
+        ];
+        $memory['approvals'] = array_slice($memory['approvals'], -100);
+        $_SESSION['admin_ai_memory'] = $memory;
+    }
+
+    logAiActivity('approval', [
+        'response_id' => $responseId,
+        'decision' => $decision,
+        'source' => $responseSource,
+        'intent' => $intent
+    ]);
+
+    AuditLogger::log(
+        'ai_approval',
+        'admin_ai_response',
+        null,
+        "Admin AI response {$responseId} marked as {$decision} by {$approver}",
+        null,
+        [
+            'response_id' => $responseId,
+            'decision' => $decision,
+            'response_source' => $responseSource,
+            'intent' => $intent,
+            'approved_by' => $approver,
+            'approved_by_user_id' => $userId,
+            'note' => $note,
+            'timestamp' => $timestamp
+        ],
+        $userId
+    );
+
+    Response::success([
+        'response_id' => $responseId,
+        'decision' => $decision,
+        'response_source' => $responseSource,
+        'intent' => $intent,
+        'approved_by' => $approver,
+        'timestamp' => $timestamp
+    ], 'Approval decision recorded');
 }
 
 function runAdminAiEvaluationSuite(Database $db): array {
@@ -3722,7 +3848,9 @@ function logAiActivity(string $mode, array $meta = []): void {
         null,
         [
             'mode' => $mode,
-            'role' => $role
+            'role' => $role,
+            'meta' => $meta,
+            'recorded_at' => gmdate('c')
         ],
         $userId
     );
