@@ -637,10 +637,10 @@
     </script>
 
     <!-- Inactivity Monitor -->
-    <script src="assets/js/inactivity-monitor.js?v=3.3"></script>
+    <script src="assets/js/inactivity-monitor.js?v=3.4"></script>
 
     <!-- Include all page loaders -->
-    <script src="assets/js/dashboard-pages.js?v=3.6"></script>
+    <script src="assets/js/dashboard-pages.js?v=3.7"></script>
     <script src="assets/js/admin-ai-copilot.js?v=1.3"></script>
 
     <!-- NEW: Complete GRN Management System -->
@@ -696,7 +696,7 @@
         // Initialize inactivity monitor with user's saved preference
         async function initInactivityMonitor() {
             try {
-                console.log('⚙️ Loading inactivity timeout from settings...');
+                console.log('Loading inactivity settings...');
                 const response = await fetch(`${API_BASE}/settings/index.php`, {
                     credentials: 'same-origin'
                 });
@@ -706,28 +706,30 @@
                 const settingsArray = data.data?.settings || data.settings || [];
 
                 if (data.success && settingsArray && Array.isArray(settingsArray)) {
-                    console.log('📋 Settings array found with', settingsArray.length, 'items');
-                    // Find inactivity_timeout setting
-                    const setting = settingsArray.find(s => s.setting_key === 'inactivity_timeout');
-                    console.log('🔍 Found inactivity_timeout setting:', setting);
-                    const timeoutMinutes = parseInt(setting?.setting_value) || 30;
-                    console.log('✅ LOADED FROM DATABASE:', timeoutMinutes, 'minutes');
+                    const timeoutSetting = settingsArray.find(s => s.setting_key === 'inactivity_timeout');
+                    const warningDelaySetting = settingsArray.find(s => s.setting_key === 'inactivity_warning_delay_seconds');
 
-                    // Initialize monitor with saved setting
+                    const timeoutMinutes = Number.parseInt(timeoutSetting?.setting_value, 10);
+                    const warningDelaySeconds = Number.parseInt(warningDelaySetting?.setting_value, 10);
+
+                    const safeTimeoutMinutes = Number.isFinite(timeoutMinutes) ? timeoutMinutes : 30;
+                    const safeWarningDelaySeconds = Number.isFinite(warningDelaySeconds) ? warningDelaySeconds : 60;
+
+                    console.log('Loaded inactivity settings:', safeTimeoutMinutes, 'minutes timeout,', safeWarningDelaySeconds, 'seconds warning delay');
+
+                    // Initialize monitor with saved settings
                     if (typeof initializeInactivityMonitor === 'function') {
-                        initializeInactivityMonitor(timeoutMinutes);
+                        initializeInactivityMonitor(safeTimeoutMinutes, safeWarningDelaySeconds);
                     }
-                } else {
-                    console.warn('⚠️ No settings array found, using default 30 minutes');
-                    if (typeof initializeInactivityMonitor === 'function') {
-                        initializeInactivityMonitor(30);
-                    }
+                } else if (typeof initializeInactivityMonitor === 'function') {
+                    // Fallback to defaults when settings are missing
+                    initializeInactivityMonitor(30, 60);
                 }
             } catch (error) {
-                console.error('❌ Failed to load setting:', error);
-                // Fallback to default 30 minutes
+                console.error('Failed to load inactivity settings:', error);
+                // Fallback to defaults on error
                 if (typeof initializeInactivityMonitor === 'function') {
-                    initializeInactivityMonitor(30);
+                    initializeInactivityMonitor(30, 60);
                 }
             }
         }
@@ -1948,3 +1950,4 @@
     <script src="assets/js/icon-lazy-loader.js"></script>
 </body>
 </html>
+

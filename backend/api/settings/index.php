@@ -386,6 +386,7 @@ function initializeDefaultSettings($db) {
 
         // Security settings
         ['key' => 'inactivity_timeout', 'value' => '30', 'description' => 'Auto-logout after inactivity (minutes, 0 = disabled)', 'category' => 'security'],
+        ['key' => 'inactivity_warning_delay_seconds', 'value' => '60', 'description' => 'Delay before inactivity countdown popup appears (seconds)', 'category' => 'security'],
     ];
 
     foreach ($defaultSettings as $setting) {
@@ -543,6 +544,7 @@ function createDefaultSettingsFile($filePath) {
         'session_timeout' => 'false',
         'password_policy' => 'basic',
         'inactivity_timeout' => '30', // Minutes before auto-logout due to inactivity
+        'inactivity_warning_delay_seconds' => '60', // Seconds before inactivity countdown popup appears
 
         // Email settings
         'email_from' => 'noreply@pcparts.com'
@@ -571,7 +573,7 @@ function getSettingCategory($key) {
         'store' => ['store_name', 'store_email', 'store_phone', 'store_address'],
         'tax' => ['tax_rate'],
         'shop' => ['shop_enabled', 'guest_checkout', 'free_shipping_threshold', 'default_shipping_cost'],
-        'security' => ['enable_2fa', 'session_timeout', 'password_policy', 'inactivity_timeout'],
+        'security' => ['enable_2fa', 'session_timeout', 'password_policy', 'inactivity_timeout', 'inactivity_warning_delay_seconds'],
         'email' => ['email_from']
     ];
 

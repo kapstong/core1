@@ -1,15 +1,23 @@
 /**
  * Inactivity Monitor
- * Shows warning after 10 seconds of inactivity with countdown based on admin setting
+ * Shows warning after configured inactivity delay with countdown based on admin settings
  */
 
 let sessionTimeout = 30; // Countdown duration in minutes (set by admin)
-let inactivityDetectionTime = 10; // Fixed: 10 seconds to detect inactivity
+let inactivityDetectionTime = 60; // Delay before showing warning modal (seconds)
 let inactivityTimer = null;
 let countdownTimer = null;
 let countdownInterval = null;
 let warningShown = false;
 let expiryTimestamp = null; // Timestamp when session will expire
+
+function normalizeWarningDelaySeconds(value) {
+    const parsed = parseInt(value, 10);
+    if (!Number.isFinite(parsed)) {
+        return 60;
+    }
+    return Math.max(1, Math.min(parsed, 86400)); // 1 second to 24 hours
+}
 
 // Format seconds to MM:SS or HH:MM:SS
 function formatCountdown(totalSeconds) {
@@ -103,8 +111,9 @@ const createWarningModal = () => {
 };
 
 // Initialize inactivity monitor
-function initializeInactivityMonitor(timeoutMinutes) {
-    sessionTimeout = parseInt(timeoutMinutes) || 0;
+function initializeInactivityMonitor(timeoutMinutes, warningDelaySeconds = 60) {
+    sessionTimeout = parseInt(timeoutMinutes, 10) || 0;
+    inactivityDetectionTime = normalizeWarningDelaySeconds(warningDelaySeconds);
 
     // Clear existing timers
     clearAllTimers();
@@ -146,7 +155,7 @@ function clearAllTimers() {
     }
 }
 
-// Start detecting inactivity (10 seconds)
+// Start detecting inactivity
 function startInactivityDetection() {
     // Clear existing timer
     if (inactivityTimer) {
@@ -158,7 +167,7 @@ function startInactivityDetection() {
         return;
     }
 
-    // Set 10-second inactivity detection timer
+    // Set inactivity detection timer
     inactivityTimer = setTimeout(() => {
         showWarningWithCountdown();
     }, inactivityDetectionTime * 1000);

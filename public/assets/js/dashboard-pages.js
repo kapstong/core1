@@ -679,9 +679,23 @@ async function loadSettingsPage() {
                                     <div id="timeout-status" class="mt-2 fw-bold"></div>
                                 </div>
                             </div>
+                            <div class="mb-3">
+                                <label class="form-label fw-bold">Warning Activation Delay (minutes:seconds)</label>
+                                <div class="row g-2">
+                                    <div class="col-6">
+                                        <input type="number" class="form-control" id="inactivity-warning-minutes" min="0" max="120" placeholder="Minutes">
+                                    </div>
+                                    <div class="col-6">
+                                        <input type="number" class="form-control" id="inactivity-warning-seconds" min="0" max="59" placeholder="Seconds">
+                                    </div>
+                                </div>
+                                <div class="form-text">
+                                    How long the system waits before showing the inactivity countdown popup.
+                                </div>
+                            </div>
                             <div id="security-message"></div>
                             <button type="submit" class="btn btn-primary">
-                                <i class="fas fa-save me-2"></i>Update Inactivity Timeout in Settings Table
+                                <i class="fas fa-save me-2"></i>Update Inactivity Settings
                             </button>
                         </form>
                     </div>
@@ -953,6 +967,19 @@ function getSettingValue(settings, key, fallback = '') {
     return found.parsed_value !== undefined ? found.parsed_value : (found.setting_value ?? fallback);
 }
 
+function parseIntSettingValue(value, fallback) {
+    const parsed = Number.parseInt(value, 10);
+    return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+function splitSecondsToMinutesAndSeconds(totalSeconds) {
+    const safeSeconds = Math.max(0, parseIntSettingValue(totalSeconds, 60));
+    return {
+        minutes: Math.floor(safeSeconds / 60),
+        seconds: safeSeconds % 60
+    };
+}
+
 async function loadSettingsData() {
     try {
         const response = await fetch(`${API_BASE}/settings/index.php`, { credentials: 'same-origin' });
@@ -993,7 +1020,13 @@ async function loadSettingsData() {
 
         // Security settings
         const inactivityTimeout = document.getElementById('inactivity-timeout');
+        const inactivityWarningMinutes = document.getElementById('inactivity-warning-minutes');
+        const inactivityWarningSeconds = document.getElementById('inactivity-warning-seconds');
         if (inactivityTimeout) inactivityTimeout.value = getSettingValue(settings, 'inactivity_timeout', '');
+        const warningDelaySeconds = getSettingValue(settings, 'inactivity_warning_delay_seconds', 60);
+        const splitDelay = splitSecondsToMinutesAndSeconds(warningDelaySeconds);
+        if (inactivityWarningMinutes) inactivityWarningMinutes.value = splitDelay.minutes;
+        if (inactivityWarningSeconds) inactivityWarningSeconds.value = splitDelay.seconds;
 
         // Maintenance settings
         const maintenanceStatus = document.getElementById('maintenance-status');
@@ -1070,12 +1103,41 @@ async function saveEmailSettings() {
 }
 
 async function saveSecuritySettings() {
-    const timeoutValue = document.getElementById('inactivity-timeout')?.value ?? '';
+    const timeoutMinutes = parseIntSettingValue(document.getElementById('inactivity-timeout')?.value, 30);
+    const warningMinutes = parseIntSettingValue(document.getElementById('inactivity-warning-minutes')?.value, 0);
+    const warningSeconds = parseIntSettingValue(document.getElementById('inactivity-warning-seconds')?.value, 0);
+
+    if (timeoutMinutes < 0 || timeoutMinutes > 1440) {
+        showError('Inactivity timeout must be between 0 and 1440 minutes');
+        return;
+    }
+
+    if (warningMinutes < 0 || warningMinutes > 120) {
+        showError('Warning delay minutes must be between 0 and 120');
+        return;
+    }
+
+    if (warningSeconds < 0 || warningSeconds > 59) {
+        showError('Warning delay seconds must be between 0 and 59');
+        return;
+    }
+
+    const warningDelayTotalSeconds = (warningMinutes * 60) + warningSeconds;
     const payload = {
-        setting_key: 'inactivity_timeout',
-        setting_value: timeoutValue,
-        category: 'general',
-        description: 'Auto-logout after inactivity (minutes, 0 = disabled)'
+        settings: [
+            {
+                key: 'inactivity_timeout',
+                value: String(timeoutMinutes),
+                category: 'security',
+                description: 'Auto-logout after inactivity (minutes, 0 = disabled)'
+            },
+            {
+                key: 'inactivity_warning_delay_seconds',
+                value: String(warningDelayTotalSeconds),
+                category: 'security',
+                description: 'Delay before inactivity countdown popup appears (seconds)'
+            }
+        ]
     };
 
     try {
@@ -1088,7 +1150,12 @@ async function saveSecuritySettings() {
         if (!result.success) throw new Error(result.message || 'Failed to save security settings');
         showSuccess('Security settings saved');
         const statusEl = document.getElementById('timeout-status');
-        if (statusEl) statusEl.textContent = 'Updated successfully';
+        if (statusEl) statusEl.textContent = `Updated successfully (${timeoutMinutes}m timeout, ${warningMinutes}m ${warningSeconds}s warning delay)`;
+
+        // Apply updated values immediately in current session.
+        if (typeof initializeInactivityMonitor === 'function') {
+            initializeInactivityMonitor(timeoutMinutes, warningDelayTotalSeconds);
+        }
     } catch (error) {
         showError(error.message || 'Failed to save security settings');
     }
