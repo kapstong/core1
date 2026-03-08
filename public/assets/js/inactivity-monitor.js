@@ -120,14 +120,9 @@ function initializeInactivityMonitor(timeoutMinutes, warningDelaySeconds = 60) {
 
     // If timeout is 0 or negative, disable monitoring
     if (sessionTimeout <= 0) {
-        console.log('🔓 Inactivity monitoring DISABLED');
         return;
     }
 
-    console.log(`🔐 Inactivity Monitor Initialized:
-    ├─ Inactivity detection: ${inactivityDetectionTime} seconds
-    ├─ Countdown duration: ${sessionTimeout} minutes
-    └─ Total max idle: ${inactivityDetectionTime}s + ${sessionTimeout}m`);
 
     // Create warning modal
     createWarningModal();
@@ -177,8 +172,6 @@ function startInactivityDetection() {
 function showWarningWithCountdown() {
     if (warningShown) return;
 
-    console.log(`⚠️ Warning triggered after ${inactivityDetectionTime} seconds of inactivity`);
-    console.log(`⏱️ Starting countdown: ${sessionTimeout} minutes`);
 
     warningShown = true;
     const modal = document.getElementById('inactivityWarningModal');
@@ -251,7 +244,6 @@ function updateCountdownDisplay(countdownEl, progressRing, totalSeconds, circumf
 
 // Handle session expiration
 async function handleSessionExpired() {
-    console.log(`🚪 Session expired - logging out`);
     clearAllTimers();
     warningShown = false;
 
@@ -267,7 +259,6 @@ async function handleSessionExpired() {
             credentials: 'same-origin'
         });
     } catch (error) {
-        console.error('Logout request failed:', error);
         // Continue with redirect even if logout API fails
     }
 
@@ -295,7 +286,6 @@ function resetOnActivity() {
         
         warningShown = false;
         clearAllTimers();
-        console.log('✓ Activity detected - session extended');
     }
 
     // Restart inactivity detection
@@ -332,7 +322,6 @@ function setupActivityListeners() {
         document.addEventListener(event, handleActivity, true);
     });
 
-    console.log('👂 Activity listeners active');
 }
 
 // Make functions globally available
@@ -341,7 +330,6 @@ window.resetInactivityTimer = resetOnActivity; // Keep function name for compati
 
 // Handle logout button (if user wants to logout from modal)
 window.handleLogout = async function() {
-    console.log('🚪 Manual logout requested');
     clearAllTimers();
 
     // Perform logout via POST request
@@ -351,7 +339,6 @@ window.handleLogout = async function() {
             credentials: 'same-origin'
         });
     } catch (error) {
-        console.error('Logout request failed:', error);
     }
 
     // Redirect to login page

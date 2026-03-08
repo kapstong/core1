@@ -696,7 +696,6 @@
         // Initialize inactivity monitor with user's saved preference
         async function initInactivityMonitor() {
             try {
-                console.log('Loading inactivity settings...');
                 const response = await fetch(`${API_BASE}/settings/index.php`, {
                     credentials: 'same-origin'
                 });
@@ -715,8 +714,6 @@
                     const safeTimeoutMinutes = Number.isFinite(timeoutMinutes) ? timeoutMinutes : 30;
                     const safeWarningDelaySeconds = Number.isFinite(warningDelaySeconds) ? warningDelaySeconds : 60;
 
-                    console.log('Loaded inactivity settings:', safeTimeoutMinutes, 'minutes timeout,', safeWarningDelaySeconds, 'seconds warning delay');
-
                     // Initialize monitor with saved settings
                     if (typeof initializeInactivityMonitor === 'function') {
                         initializeInactivityMonitor(safeTimeoutMinutes, safeWarningDelaySeconds);
@@ -726,7 +723,6 @@
                     initializeInactivityMonitor(30, 60);
                 }
             } catch (error) {
-                console.error('Failed to load inactivity settings:', error);
                 // Fallback to defaults on error
                 if (typeof initializeInactivityMonitor === 'function') {
                     initializeInactivityMonitor(30, 60);
