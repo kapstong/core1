@@ -362,7 +362,8 @@
             }
 
             const data = payload.data || {};
-            const reply = escapeHtml(data.reply || 'No response available.');
+            const rawReply = String(data.reply || 'No response available.');
+            const replyHtml = formatAssistantReply(rawReply);
             const responseSourceRaw = String(data.response_source || 'rules');
             const sourceMap = {
                 llm: 'LLM',
@@ -391,7 +392,7 @@
                 followUpActions = Array.isArray(data.follow_up_actions) ? data.follow_up_actions : [];
             }
 
-            appendAssistantMessage(reply.replace(/\n/g, '<br>'), {
+            appendAssistantMessage(replyHtml, {
                 responseId: data.needs_clarification ? '' : (data.response_id || ''),
                 responseSource: responseSourceRaw,
                 intent: data.intent || 'general',
@@ -814,6 +815,142 @@
     function formatCurrency(value) {
         const amount = Number(value || 0);
         return `PHP ${amount.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    }
+
+    function formatAssistantReply(text) {
+        const input = String(text || '').replace(/\r\n/g, '\n').trim();
+        if (!input) {
+            return '<p class="admin-ai-rich-paragraph">No response available.</p>';
+        }
+
+        const lines = input.split('\n');
+        const blocks = [];
+        let i = 0;
+
+        while (i < lines.length) {
+            const raw = lines[i] || '';
+            const line = raw.trim();
+
+            if (!line) {
+                i += 1;
+                continue;
+            }
+
+            const headingMatch = line.match(/^(#{1,3})\s+(.+)$/);
+            if (headingMatch) {
+                const level = headingMatch[1].length;
+                blocks.push(`<div class="admin-ai-rich-heading level-${level}">${renderInlineRichText(headingMatch[2])}</div>`);
+                i += 1;
+                continue;
+            }
+
+            if (/^[-*]\s+/.test(line)) {
+                const items = [];
+                while (i < lines.length) {
+                    const candidate = (lines[i] || '').trim();
+                    if (!/^[-*]\s+/.test(candidate)) {
+                        break;
+                    }
+                    items.push(candidate.replace(/^[-*]\s+/, '').trim());
+                    i += 1;
+                }
+                blocks.push(`<ul class="admin-ai-rich-list">${items.map((item) => `<li>${renderInlineRichText(item)}</li>`).join('')}</ul>`);
+                continue;
+            }
+
+            if (/^\d+\.\s+/.test(line)) {
+                const items = [];
+                while (i < lines.length) {
+                    const candidate = (lines[i] || '').trim();
+                    if (!/^\d+\.\s+/.test(candidate)) {
+                        break;
+                    }
+                    items.push(candidate.replace(/^\d+\.\s+/, '').trim());
+                    i += 1;
+                }
+                blocks.push(`<ol class="admin-ai-rich-list ordered">${items.map((item) => `<li>${renderInlineRichText(item)}</li>`).join('')}</ol>`);
+                continue;
+            }
+
+            if (isKeyValueLine(line)) {
+                const entries = [];
+                while (i < lines.length) {
+                    const candidate = (lines[i] || '').trim();
+                    if (!isKeyValueLine(candidate)) {
+                        break;
+                    }
+                    const split = candidate.split(':');
+                    const key = split.shift() || '';
+                    const value = split.join(':');
+                    entries.push({
+                        key: key.trim(),
+                        value: value.trim()
+                    });
+                    i += 1;
+                }
+
+                if (entries.length >= 2) {
+                    blocks.push(`
+                        <div class="admin-ai-rich-kv">
+                            ${entries.map((entry) => `
+                                <div class="admin-ai-rich-kv-row">
+                                    <span class="admin-ai-rich-kv-key">${renderInlineRichText(entry.key)}</span>
+                                    <span class="admin-ai-rich-kv-value">${renderInlineRichText(entry.value)}</span>
+                                </div>
+                            `).join('')}
+                        </div>
+                    `);
+                    continue;
+                }
+
+                const entry = entries[0];
+                blocks.push(`<p class="admin-ai-rich-paragraph"><strong>${renderInlineRichText(entry.key)}:</strong> ${renderInlineRichText(entry.value)}</p>`);
+                continue;
+            }
+
+            const paragraphLines = [];
+            while (i < lines.length) {
+                const candidate = (lines[i] || '').trim();
+                if (!candidate) {
+                    break;
+                }
+                if (/^(#{1,3})\s+/.test(candidate) || /^[-*]\s+/.test(candidate) || /^\d+\.\s+/.test(candidate)) {
+                    break;
+                }
+                paragraphLines.push(candidate);
+                i += 1;
+            }
+
+            if (paragraphLines.length > 0) {
+                blocks.push(`<p class="admin-ai-rich-paragraph">${renderInlineRichText(paragraphLines.join(' '))}</p>`);
+                continue;
+            }
+
+            i += 1;
+        }
+
+        return blocks.join('');
+    }
+
+    function renderInlineRichText(text) {
+        let safe = escapeHtml(text || '');
+        safe = safe.replace(/`([^`]+)`/g, '<code class="admin-ai-inline-code">$1</code>');
+        safe = safe.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+        safe = safe.replace(/\*([^*\n]+)\*/g, '<em>$1</em>');
+        return safe;
+    }
+
+    function isKeyValueLine(text) {
+        if (!text || !text.includes(':')) {
+            return false;
+        }
+        const parts = text.split(':');
+        if (parts.length < 2) {
+            return false;
+        }
+        const key = (parts.shift() || '').trim();
+        const value = parts.join(':').trim();
+        return key.length >= 2 && key.length <= 48 && value.length > 0;
     }
 
     function escapeHtml(text) {
