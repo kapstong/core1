@@ -7,6 +7,7 @@
     const state = {
         ready: false,
         isOpen: false,
+        isMaximized: false,
         isBusy: false,
         feedbackByResponseId: {},
         approvalsByResponseId: {},
@@ -62,9 +63,14 @@
                     <h3 class="admin-ai-title"><i class="fas fa-robot"></i> Admin AI Copilot</h3>
                     <p class="admin-ai-subtitle">AI-generated operations assistant. Human approval required before action.</p>
                 </div>
-                <button type="button" class="admin-ai-close" id="admin-ai-close" aria-label="Close AI panel">
-                    <i class="fas fa-times"></i>
-                </button>
+                <div class="admin-ai-header-actions">
+                    <button type="button" class="admin-ai-maximize" id="admin-ai-maximize" aria-label="Enlarge AI panel" title="Enlarge">
+                        <i class="fas fa-expand"></i>
+                    </button>
+                    <button type="button" class="admin-ai-close" id="admin-ai-close" aria-label="Close AI panel" title="Close">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
             </div>
 
             <div class="admin-ai-quick-actions">
@@ -102,13 +108,14 @@
 
     function bindEvents() {
         const launcher = document.getElementById('admin-ai-launcher');
+        const maximizeBtn = document.getElementById('admin-ai-maximize');
         const closeBtn = document.getElementById('admin-ai-close');
         const panel = document.getElementById('admin-ai-panel');
         const form = document.getElementById('admin-ai-form');
         const input = document.getElementById('admin-ai-input');
         const feed = feedElement();
 
-        if (!launcher || !closeBtn || !panel || !form || !input || !feed) {
+        if (!launcher || !maximizeBtn || !closeBtn || !panel || !form || !input || !feed) {
             return;
         }
 
@@ -118,6 +125,10 @@
             } else {
                 openPanel();
             }
+        });
+
+        maximizeBtn.addEventListener('click', () => {
+            toggleMaximized();
         });
 
         closeBtn.addEventListener('click', closePanel);
@@ -201,6 +212,22 @@
         panel.classList.remove('open');
         panel.setAttribute('aria-hidden', 'true');
         state.isOpen = false;
+    }
+
+    function toggleMaximized(force) {
+        const panel = document.getElementById('admin-ai-panel');
+        const maximizeBtn = document.getElementById('admin-ai-maximize');
+        if (!panel || !maximizeBtn) {
+            return;
+        }
+
+        const nextState = typeof force === 'boolean' ? force : !state.isMaximized;
+        state.isMaximized = nextState;
+        panel.classList.toggle('maximized', nextState);
+
+        maximizeBtn.innerHTML = nextState ? '<i class="fas fa-compress"></i>' : '<i class="fas fa-expand"></i>';
+        maximizeBtn.setAttribute('aria-label', nextState ? 'Restore AI panel size' : 'Enlarge AI panel');
+        maximizeBtn.setAttribute('title', nextState ? 'Restore' : 'Enlarge');
     }
 
     function feedElement() {
@@ -811,6 +838,7 @@
 
     window.AdminAICopilot = {
         init,
-        open: openPanel
+        open: openPanel,
+        toggleSize: toggleMaximized
     };
 })();
