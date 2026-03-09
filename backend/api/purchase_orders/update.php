@@ -159,6 +159,115 @@ try {
         }
     }
 
+    // Handle item updates (auto-adjust PO totals when items are added/removed/edited)
+    if (array_key_exists('items', $input)) {
+        if (!is_array($input['items']) || empty($input['items'])) {
+            $conn->rollBack();
+            Response::error('Items array is required and cannot be empty', 400);
+        }
+
+        // Prevent item edits once receiving has started or PO lifecycle is finalized
+        if (in_array($po['status'], ['approved', 'ordered', 'partially_received', 'received', 'cancelled'], true)) {
+            $conn->rollBack();
+            Response::error('Cannot update PO items for this status', 400);
+        }
+
+        $receivedCheckStmt = $conn->prepare("
+            SELECT COALESCE(SUM(quantity_received), 0) AS total_received
+            FROM purchase_order_items
+            WHERE po_id = :po_id
+        ");
+        $receivedCheckStmt->execute([':po_id' => $poId]);
+        $receivedTotals = $receivedCheckStmt->fetch(PDO::FETCH_ASSOC);
+        $hasReceivedQty = ((int)($receivedTotals['total_received'] ?? 0)) > 0;
+
+        if ($hasReceivedQty) {
+            $conn->rollBack();
+            Response::error('Cannot update PO items after receiving has started', 400);
+        }
+
+        $validatedItems = [];
+        $seenProductIds = [];
+        $recalculatedTotal = 0.0;
+
+        foreach ($input['items'] as $item) {
+            if (!isset($item['product_id']) || !isset($item['quantity_ordered']) || !isset($item['unit_cost'])) {
+                $conn->rollBack();
+                Response::error('Each item must have product_id, quantity_ordered, and unit_cost', 400);
+            }
+
+            $productId = (int)$item['product_id'];
+            $quantity = (int)$item['quantity_ordered'];
+            $unitCost = (float)$item['unit_cost'];
+
+            if ($productId <= 0) {
+                $conn->rollBack();
+                Response::error('Invalid product_id in items', 400);
+            }
+
+            if ($quantity <= 0) {
+                $conn->rollBack();
+                Response::error('Quantity ordered must be greater than 0 for product ID ' . $productId, 400);
+            }
+
+            if ($unitCost < 0) {
+                $conn->rollBack();
+                Response::error('Unit cost cannot be negative for product ID ' . $productId, 400);
+            }
+
+            if (isset($seenProductIds[$productId])) {
+                $conn->rollBack();
+                Response::error('Duplicate product in items is not allowed (product ID ' . $productId . ')', 400);
+            }
+            $seenProductIds[$productId] = true;
+
+            $productStmt = $conn->prepare("SELECT id FROM products WHERE id = :product_id AND is_active = 1");
+            $productStmt->execute([':product_id' => $productId]);
+            $productExists = $productStmt->fetch(PDO::FETCH_ASSOC);
+
+            if (!$productExists) {
+                $conn->rollBack();
+                Response::error('Product not found or inactive: ID ' . $productId, 400);
+            }
+
+            $lineTotal = $quantity * $unitCost;
+            $recalculatedTotal += $lineTotal;
+
+            $validatedItems[] = [
+                'product_id' => $productId,
+                'quantity_ordered' => $quantity,
+                'unit_cost' => $unitCost,
+                'notes' => $item['notes'] ?? null
+            ];
+        }
+
+        // Replace existing items with the validated set
+        $deleteItemsStmt = $conn->prepare("DELETE FROM purchase_order_items WHERE po_id = :po_id");
+        $deleteItemsStmt->execute([':po_id' => $poId]);
+
+        $insertItemStmt = $conn->prepare("
+            INSERT INTO purchase_order_items (
+                po_id, product_id, quantity_ordered, quantity_received, unit_cost, notes
+            ) VALUES (
+                :po_id, :product_id, :quantity_ordered, :quantity_received, :unit_cost, :notes
+            )
+        ");
+
+        foreach ($validatedItems as $validatedItem) {
+            $insertItemStmt->execute([
+                ':po_id' => $poId,
+                ':product_id' => $validatedItem['product_id'],
+                ':quantity_ordered' => $validatedItem['quantity_ordered'],
+                ':quantity_received' => 0,
+                ':unit_cost' => $validatedItem['unit_cost'],
+                ':notes' => $validatedItem['notes']
+            ]);
+        }
+
+        $updateFields[] = "total_amount = :total_amount";
+        $updateData['total_amount'] = round($recalculatedTotal, 2);
+    }
+
     if (empty($updateFields)) {
         $conn->rollBack();
         Response::error('No valid fields to update', 400);
