@@ -457,12 +457,36 @@ async function ensureProfileFaceModels() {
     if (profileFaceEnrollmentState.modelsLoaded) return;
     await ensureFaceApiLibraries();
 
-    const modelBase = 'https://justadudewhohacks.github.io/face-api.js/models';
-    await Promise.all([
-        faceapi.nets.tinyFaceDetector.loadFromUri(modelBase),
-        faceapi.nets.faceLandmark68Net.loadFromUri(modelBase),
-        faceapi.nets.faceRecognitionNet.loadFromUri(modelBase)
+    const withTimeout = (promise, ms, message) => Promise.race([
+        promise,
+        new Promise((_, reject) => setTimeout(() => reject(new Error(message)), ms))
     ]);
+
+    const modelBases = [
+        'https://cdn.jsdelivr.net/npm/@vladmandic/face-api@1.7.13/model',
+        'https://justadudewhohacks.github.io/face-api.js/models'
+    ];
+
+    let loaded = false;
+    let lastError = null;
+    for (const modelBase of modelBases) {
+        try {
+            await withTimeout(Promise.all([
+                faceapi.nets.tinyFaceDetector.loadFromUri(modelBase),
+                faceapi.nets.faceLandmark68Net.loadFromUri(modelBase),
+                faceapi.nets.faceRecognitionNet.loadFromUri(modelBase)
+            ]), 20000, `Model load timeout from ${modelBase}`);
+            loaded = true;
+            break;
+        } catch (error) {
+            lastError = error;
+        }
+    }
+
+    if (!loaded) {
+        throw lastError || new Error('Unable to load face detector models');
+    }
+
     profileFaceEnrollmentState.modelsLoaded = true;
 }
 
@@ -581,24 +605,47 @@ async function loadProfilePage() {
                     </div>
                     <div class="card-body">
                         <div id="face-enrollment-badge" class="mb-2 text-muted">Loading enrollment status...</div>
-                        <div style="position: relative; width: 100%; height: 220px; border-radius: 10px; overflow: hidden; border: 1px solid var(--border-color); background: rgba(0,0,0,0.25);">
+                        <div style="position: relative; width: 100%; height: 160px; border-radius: 10px; overflow: hidden; border: 1px solid var(--border-color); background: rgba(0,0,0,0.25);">
                             <video id="profile-face-video" autoplay muted playsinline style="width: 100%; height: 100%; object-fit: cover;"></video>
                             <div id="profile-face-video-placeholder" style="position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; color: var(--text-muted); font-size: 0.9rem; text-align: center; padding: 0.5rem;">
-                                Start camera, look straight, then blink once.
+                                Click Start Camera to open large enrollment popup.
                             </div>
                         </div>
                         <div class="d-grid gap-2 mt-3">
                             <button class="btn btn-outline-primary" type="button" id="profile-face-start-btn">
-                                <i class="fas fa-camera me-2"></i>Start Camera
-                            </button>
-                            <button class="btn btn-primary" type="button" id="profile-face-enroll-btn" disabled>
-                                <i class="fas fa-id-badge me-2"></i>Enroll / Update Face
+                                <i class="fas fa-camera me-2"></i>Start Camera (Popup)
                             </button>
                             <button class="btn btn-outline-danger" type="button" id="profile-face-remove-btn">
                                 <i class="fas fa-trash-alt me-2"></i>Remove Face Enrollment
                             </button>
                         </div>
                         <small id="profile-face-status" class="d-block mt-2 text-muted">Liveness check not started.</small>
+                    </div>
+                </div>
+
+                <div class="modal fade" id="faceEnrollmentModal" tabindex="-1" aria-hidden="true">
+                    <div class="modal-dialog modal-xl modal-dialog-centered">
+                        <div class="modal-content" style="background: var(--bg-card); border: 1px solid var(--border-color);">
+                            <div class="modal-header" style="border-bottom: 1px solid var(--border-color);">
+                                <h5 class="modal-title"><i class="fas fa-camera me-2"></i>Face Enrollment</h5>
+                                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                            </div>
+                            <div class="modal-body">
+                                <div style="position: relative; width: 100%; height: min(70vh, 560px); border-radius: 12px; overflow: hidden; border: 1px solid var(--border-color); background: rgba(0,0,0,0.3);">
+                                    <video id="profile-face-video-modal" autoplay muted playsinline style="width: 100%; height: 100%; object-fit: cover;"></video>
+                                    <div id="profile-face-video-placeholder-modal" style="position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; color: var(--text-muted); font-size: 1rem; text-align: center; padding: 1rem;">
+                                        Camera preview will appear here. Keep your face centered and blink once.
+                                    </div>
+                                </div>
+                                <small id="profile-face-status-modal" class="d-block mt-2 text-muted">Waiting for camera...</small>
+                            </div>
+                            <div class="modal-footer" style="border-top: 1px solid var(--border-color);">
+                                <button class="btn btn-primary" type="button" id="profile-face-enroll-btn-modal" disabled>
+                                    <i class="fas fa-id-badge me-2"></i>Enroll / Update Face
+                                </button>
+                                <button class="btn btn-secondary" type="button" data-bs-dismiss="modal">Close</button>
+                            </div>
+                        </div>
                     </div>
                 </div>
                 ` : ''}
@@ -679,18 +726,26 @@ async function initProfileFaceEnrollmentSection() {
     const badgeEl = document.getElementById('face-enrollment-badge');
     const statusEl = document.getElementById('profile-face-status');
     const startBtn = document.getElementById('profile-face-start-btn');
-    const enrollBtn = document.getElementById('profile-face-enroll-btn');
+    const modalEnrollBtn = document.getElementById('profile-face-enroll-btn-modal');
     const removeBtn = document.getElementById('profile-face-remove-btn');
     const videoEl = document.getElementById('profile-face-video');
     const placeholderEl = document.getElementById('profile-face-video-placeholder');
+    const modalEl = document.getElementById('faceEnrollmentModal');
+    const modalVideoEl = document.getElementById('profile-face-video-modal');
+    const modalPlaceholderEl = document.getElementById('profile-face-video-placeholder-modal');
+    const modalStatusEl = document.getElementById('profile-face-status-modal');
 
-    if (!badgeEl || !statusEl || !startBtn || !enrollBtn || !removeBtn || !videoEl || !placeholderEl) {
+    if (!badgeEl || !statusEl || !startBtn || !modalEnrollBtn || !removeBtn || !videoEl || !placeholderEl || !modalEl || !modalVideoEl || !modalPlaceholderEl || !modalStatusEl) {
         return;
     }
+
+    const modalInstance = window.bootstrap ? bootstrap.Modal.getOrCreateInstance(modalEl) : null;
 
     const setStatus = (text, error = false) => {
         statusEl.style.color = error ? 'var(--danger)' : 'var(--text-muted)';
         statusEl.textContent = text;
+        modalStatusEl.style.color = error ? 'var(--danger)' : 'var(--text-muted)';
+        modalStatusEl.textContent = text;
     };
 
     const renderBadge = (isEnabled, enrolledAt = null) => {
@@ -754,13 +809,13 @@ async function initProfileFaceEnrollmentSection() {
                     profileFaceEnrollmentState.lastDetectionAt = now;
 
                     const detection = await faceapi
-                        .detectSingleFace(videoEl, new faceapi.TinyFaceDetectorOptions({ inputSize: 320 }))
+                        .detectSingleFace(modalVideoEl, new faceapi.TinyFaceDetectorOptions({ inputSize: 320 }))
                         .withFaceLandmarks()
                         .withFaceDescriptor();
 
                     if (!detection) {
                         profileFaceEnrollmentState.lastDescriptor = null;
-                        enrollBtn.disabled = true;
+                        modalEnrollBtn.disabled = true;
                         setStatus('No face detected. Keep your face centered.');
                     } else {
                         profileFaceEnrollmentState.lastDescriptor = Array.from(detection.descriptor);
@@ -785,16 +840,16 @@ async function initProfileFaceEnrollmentSection() {
                         }
 
                         if (profileFaceEnrollmentState.livenessVerifiedAt) {
-                            enrollBtn.disabled = false;
+                            modalEnrollBtn.disabled = false;
                             setStatus('Liveness passed. You can enroll/update face now.');
                         } else {
-                            enrollBtn.disabled = true;
+                            modalEnrollBtn.disabled = true;
                             setStatus('Face detected. Please blink once to pass liveness.');
                         }
                     }
                 }
             } catch (error) {
-                enrollBtn.disabled = true;
+                modalEnrollBtn.disabled = true;
                 setStatus('Face detector error. Restart camera.', true);
             } finally {
                 profileFaceEnrollmentState.rafHandle = requestAnimationFrame(detect);
@@ -810,6 +865,9 @@ async function initProfileFaceEnrollmentSection() {
 
         try {
             cleanupProfileFaceEnrollment();
+            if (modalInstance) {
+                modalInstance.show();
+            }
 
             profileFaceEnrollmentState.stream = await navigator.mediaDevices.getUserMedia({
                 video: { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 480 } },
@@ -817,17 +875,20 @@ async function initProfileFaceEnrollmentSection() {
             });
 
             videoEl.srcObject = profileFaceEnrollmentState.stream;
+            modalVideoEl.srcObject = profileFaceEnrollmentState.stream;
             try {
                 await videoEl.play();
+                await modalVideoEl.play();
             } catch (e) {
                 // ignore autoplay promise failures, stream is still attached
             }
             placeholderEl.style.display = 'none';
+            modalPlaceholderEl.style.display = 'none';
             profileFaceEnrollmentState.blinkCount = 0;
             profileFaceEnrollmentState.eyeClosedFrameCount = 0;
             profileFaceEnrollmentState.lastDescriptor = null;
             profileFaceEnrollmentState.livenessVerifiedAt = null;
-            enrollBtn.disabled = true;
+            modalEnrollBtn.disabled = true;
 
             setStatus('Camera started. Loading face detector...');
             await ensureProfileFaceModels();
@@ -840,7 +901,7 @@ async function initProfileFaceEnrollmentSection() {
         }
     });
 
-    enrollBtn.addEventListener('click', async () => {
+    modalEnrollBtn.addEventListener('click', async () => {
         if (!profileFaceEnrollmentState.lastDescriptor) {
             showError('No face descriptor available. Start camera and align your face.');
             return;
@@ -851,9 +912,9 @@ async function initProfileFaceEnrollmentSection() {
             return;
         }
 
-        enrollBtn.disabled = true;
-        const original = enrollBtn.innerHTML;
-        enrollBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Enrolling...';
+        modalEnrollBtn.disabled = true;
+        const original = modalEnrollBtn.innerHTML;
+        modalEnrollBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Enrolling...';
 
         try {
             await requestVerificationCode('enroll');
@@ -888,8 +949,8 @@ async function initProfileFaceEnrollmentSection() {
             showError(error.message || 'Failed to enroll face');
             setStatus(error.message || 'Failed to enroll face', true);
         } finally {
-            enrollBtn.innerHTML = original;
-            enrollBtn.disabled = !profileFaceEnrollmentState.livenessVerifiedAt;
+            modalEnrollBtn.innerHTML = original;
+            modalEnrollBtn.disabled = !profileFaceEnrollmentState.livenessVerifiedAt;
         }
     });
 
@@ -936,13 +997,21 @@ async function initProfileFaceEnrollmentSection() {
             profileFaceEnrollmentState.lastDescriptor = null;
             profileFaceEnrollmentState.livenessVerifiedAt = null;
             profileFaceEnrollmentState.blinkCount = 0;
-            enrollBtn.disabled = true;
+            modalEnrollBtn.disabled = true;
         } catch (error) {
             showError(error.message || 'Failed to remove face enrollment');
         } finally {
             removeBtn.disabled = false;
             removeBtn.innerHTML = original;
         }
+    });
+
+    modalEl.addEventListener('hidden.bs.modal', () => {
+        cleanupProfileFaceEnrollment();
+        placeholderEl.style.display = 'flex';
+        modalPlaceholderEl.style.display = 'flex';
+        setStatus('Liveness check not started.');
+        modalEnrollBtn.disabled = true;
     });
 
     loadFaceStatus();
