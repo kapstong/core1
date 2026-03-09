@@ -640,7 +640,7 @@
     <script src="assets/js/inactivity-monitor.js?v=3.4"></script>
 
     <!-- Include all page loaders -->
-    <script src="assets/js/dashboard-pages.js?v=4.7"></script>
+    <script src="assets/js/dashboard-pages.js?v=4.8"></script>
     <script src="assets/js/admin-ai-copilot.js?v=1.5"></script>
 
     <!-- NEW: Complete GRN Management System -->
