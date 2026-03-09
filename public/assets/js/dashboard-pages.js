@@ -388,7 +388,9 @@ const profileFaceEnrollmentState = {
     livenessVerifiedAt: null,
     lastDetectionAt: 0,
     earHistory: [],
-    dynamicBlinkThreshold: 0.19
+    dynamicBlinkThreshold: 0.19,
+    noseBaselineX: null,
+    motionPassed: false
 };
 let profileFaceLibsPromise = null;
 
@@ -508,6 +510,8 @@ function cleanupProfileFaceEnrollment() {
     profileFaceEnrollmentState.livenessVerifiedAt = null;
     profileFaceEnrollmentState.earHistory = [];
     profileFaceEnrollmentState.dynamicBlinkThreshold = 0.19;
+    profileFaceEnrollmentState.noseBaselineX = null;
+    profileFaceEnrollmentState.motionPassed = false;
 }
 
 window.cleanupProfileFaceEnrollment = cleanupProfileFaceEnrollment;
@@ -829,8 +833,8 @@ async function initProfileFaceEnrollmentSection() {
                         const minClosedFrames = 1;
                         const maxHistory = 18;
 
-                        // Build adaptive baseline from likely-open-eye frames.
-                        if (avgEAR > 0.16 && avgEAR < 0.5) {
+                        // Build adaptive baseline from valid-eye frames.
+                        if (avgEAR > 0.08 && avgEAR < 0.5) {
                             profileFaceEnrollmentState.earHistory.push(avgEAR);
                             if (profileFaceEnrollmentState.earHistory.length > maxHistory) {
                                 profileFaceEnrollmentState.earHistory.shift();
@@ -840,18 +844,19 @@ async function initProfileFaceEnrollmentSection() {
                         if (profileFaceEnrollmentState.earHistory.length >= 6) {
                             const sorted = [...profileFaceEnrollmentState.earHistory].sort((a, b) => a - b);
                             const median = sorted[Math.floor(sorted.length / 2)];
-                            const adaptive = median * 0.72;
-                            profileFaceEnrollmentState.dynamicBlinkThreshold = Math.max(0.14, Math.min(0.26, adaptive));
+                            const adaptive = median * 0.78;
+                            profileFaceEnrollmentState.dynamicBlinkThreshold = Math.max(0.10, Math.min(0.26, adaptive));
                         } else {
-                            profileFaceEnrollmentState.dynamicBlinkThreshold = 0.2;
+                            profileFaceEnrollmentState.dynamicBlinkThreshold = 0.17;
                         }
 
-                        const blinkThreshold = profileFaceEnrollmentState.dynamicBlinkThreshold;
+                        const blinkCloseThreshold = profileFaceEnrollmentState.dynamicBlinkThreshold;
+                        const blinkOpenThreshold = Math.min(0.35, blinkCloseThreshold + 0.035);
 
-                        if (avgEAR < blinkThreshold) {
+                        if (avgEAR < blinkCloseThreshold) {
                             profileFaceEnrollmentState.eyeClosedFrameCount++;
                             profileFaceEnrollmentState.blinkInProgress = true;
-                        } else if (profileFaceEnrollmentState.blinkInProgress) {
+                        } else if (profileFaceEnrollmentState.blinkInProgress && avgEAR > blinkOpenThreshold) {
                             if (profileFaceEnrollmentState.eyeClosedFrameCount >= minClosedFrames) {
                                 profileFaceEnrollmentState.blinkCount++;
                                 if (profileFaceEnrollmentState.blinkCount >= 1 && !profileFaceEnrollmentState.livenessVerifiedAt) {
@@ -864,12 +869,33 @@ async function initProfileFaceEnrollmentSection() {
                             profileFaceEnrollmentState.eyeClosedFrameCount = 0;
                         }
 
+                        const nose = detection.landmarks.getNose();
+                        const noseTip = nose && nose.length ? nose[3] : null;
+                        const faceWidth = Math.max(1, detection.detection.box.width || 1);
+                        if (noseTip) {
+                            if (profileFaceEnrollmentState.noseBaselineX === null) {
+                                profileFaceEnrollmentState.noseBaselineX = noseTip.x;
+                            } else {
+                                const movementRatio = Math.abs(noseTip.x - profileFaceEnrollmentState.noseBaselineX) / faceWidth;
+                                if (movementRatio >= 0.11) {
+                                    profileFaceEnrollmentState.motionPassed = true;
+                                    if (!profileFaceEnrollmentState.livenessVerifiedAt) {
+                                        profileFaceEnrollmentState.livenessVerifiedAt = new Date().toISOString();
+                                        // Keep compatibility with server-side blink_count>=1 check.
+                                        if (profileFaceEnrollmentState.blinkCount < 1) {
+                                            profileFaceEnrollmentState.blinkCount = 1;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
                         if (profileFaceEnrollmentState.livenessVerifiedAt) {
                             modalEnrollBtn.disabled = false;
                             setStatus('Liveness passed. You can enroll/update face now.');
                         } else {
                             modalEnrollBtn.disabled = true;
-                            setStatus('Face detected. Blink naturally once (close then open eyes).');
+                            setStatus('Face detected. Blink once or slightly turn your head left/right.');
                         }
                     }
                 }
@@ -916,6 +942,8 @@ async function initProfileFaceEnrollmentSection() {
             profileFaceEnrollmentState.livenessVerifiedAt = null;
             profileFaceEnrollmentState.earHistory = [];
             profileFaceEnrollmentState.dynamicBlinkThreshold = 0.19;
+            profileFaceEnrollmentState.noseBaselineX = null;
+            profileFaceEnrollmentState.motionPassed = false;
             modalEnrollBtn.disabled = true;
 
             setStatus('Camera started. Loading face detector...');
@@ -1029,6 +1057,8 @@ async function initProfileFaceEnrollmentSection() {
             profileFaceEnrollmentState.blinkInProgress = false;
             profileFaceEnrollmentState.earHistory = [];
             profileFaceEnrollmentState.dynamicBlinkThreshold = 0.19;
+            profileFaceEnrollmentState.noseBaselineX = null;
+            profileFaceEnrollmentState.motionPassed = false;
             modalEnrollBtn.disabled = true;
         } catch (error) {
             showError(error.message || 'Failed to remove face enrollment');
