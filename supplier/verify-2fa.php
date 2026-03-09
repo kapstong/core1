@@ -334,7 +334,8 @@
                                     maxlength="6"
                                     pattern="[0-9]{6}"
                                     required
-                                    autocomplete="off"
+                                    autocomplete="one-time-code"
+                                    inputmode="numeric"
                                 >
                             </div>
                         </div>
@@ -395,15 +396,9 @@
         // Auto-focus on input
         document.getElementById('verification-code').focus();
 
-        // Format input as user types
+        // Keep input strictly numeric and max 6 digits
         document.getElementById('verification-code').addEventListener('input', function(e) {
-            // Remove non-numeric characters
-            this.value = this.value.replace(/\D/g, '');
-
-            // Add spacing every 3 digits for readability
-            if (this.value.length > 3) {
-                this.value = this.value.replace(/^(\d{3})(\d{1,3})$/, '$1 $2');
-            }
+            this.value = this.value.replace(/\D/g, '').slice(0, 6);
         });
 
         function showAlert(message, type = 'danger') {
