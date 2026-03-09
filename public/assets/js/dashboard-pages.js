@@ -442,10 +442,10 @@ async function ensureFaceApiLibraries() {
 
     profileFaceLibsPromise = (async () => {
         if (!window.tf) {
-            await loadScript('https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.22.0/dist/tf.min.js');
+            await loadScript('https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@3.21.0/dist/tf.min.js');
         }
         if (!window.faceapi) {
-            await loadScript('https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js');
+            await loadScript('https://cdn.jsdelivr.net/npm/@vladmandic/face-api@1.7.13/dist/face-api.js');
         }
     })();
 
@@ -462,10 +462,7 @@ async function ensureProfileFaceModels() {
         new Promise((_, reject) => setTimeout(() => reject(new Error(message)), ms))
     ]);
 
-    const modelBases = [
-        'https://cdn.jsdelivr.net/npm/@vladmandic/face-api@1.7.13/model',
-        'https://justadudewhohacks.github.io/face-api.js/models'
-    ];
+    const modelBases = ['https://cdn.jsdelivr.net/npm/@vladmandic/face-api@1.7.13/model'];
 
     let loaded = false;
     let lastError = null;
