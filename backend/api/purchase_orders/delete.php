@@ -44,12 +44,19 @@ if ($user['role'] !== 'admin') {
 
 try {
     $input = json_decode(file_get_contents('php://input'), true);
+    $requestId = null;
 
-    if ($input === null || !isset($input['id'])) {
+    if (is_array($input) && isset($input['id'])) {
+        $requestId = $input['id'];
+    } elseif (isset($_GET['id'])) {
+        $requestId = $_GET['id'];
+    }
+
+    if ($requestId === null || $requestId === '') {
         Response::error('Purchase order ID is required', 400);
     }
 
-    $poId = intval($input['id']);
+    $poId = intval($requestId);
 
     $db = Database::getInstance();
     $conn = $db->getConnection();
