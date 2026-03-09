@@ -3890,9 +3890,6 @@ async function loadStockAdjustmentsPage() {
 
                 <input type="text" id="adjustment-search" class="form-control" placeholder="Search products..." style="width: 200px;">
             </div>
-            <button class="btn btn-primary" onclick="openStockAdjustmentModal()">
-                <i class="fas fa-plus me-2"></i>New Adjustment
-            </button>
         </div>
 
         <div class="card" style="background: var(--bg-card); border: 1px solid var(--border-color);">
@@ -3951,10 +3948,7 @@ async function loadStockAdjustmentsPage() {
                 <div id="no-adjustments-message" class="text-center py-5 d-none">
                     <i class="fas fa-history fa-3x text-muted mb-3"></i>
                     <h5 class="text-muted">No Stock Adjustments Found</h5>
-                    <p class="text-muted">Start by making your first stock adjustment.</p>
-                    <button class="btn btn-primary" onclick="openStockAdjustmentModal()">
-                        <i class="fas fa-plus me-2"></i>Create First Adjustment
-                    </button>
+                    <p class="text-muted">Stock adjustments will appear here automatically.</p>
                 </div>
             </div>
         </div>
