@@ -407,7 +407,7 @@ function profileEyeAspectRatio(points) {
 }
 
 async function ensureFaceApiLibraries() {
-    if (window.faceapi && window.tf) {
+    if (window.faceapi) {
         profileFaceEnrollmentState.libsLoaded = true;
         return;
     }
@@ -420,7 +420,10 @@ async function ensureFaceApiLibraries() {
     const loadScript = (src) => new Promise((resolve, reject) => {
         const existing = Array.from(document.querySelectorAll('script')).find(s => s.src === src);
         if (existing) {
-            if (existing.dataset.loaded === 'true') {
+            const alreadyLoaded = existing.dataset.loaded === 'true'
+                || existing.readyState === 'complete'
+                || (src.includes('face-api') && !!window.faceapi);
+            if (alreadyLoaded) {
                 resolve();
                 return;
             }
@@ -441,9 +444,6 @@ async function ensureFaceApiLibraries() {
     });
 
     profileFaceLibsPromise = (async () => {
-        if (!window.tf) {
-            await loadScript('https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@3.21.0/dist/tf.min.js');
-        }
         if (!window.faceapi) {
             await loadScript('https://cdn.jsdelivr.net/npm/@vladmandic/face-api@1.7.13/dist/face-api.js');
         }
@@ -1000,6 +1000,12 @@ async function initProfileFaceEnrollmentSection() {
         } finally {
             removeBtn.disabled = false;
             removeBtn.innerHTML = original;
+        }
+    });
+
+    modalEl.addEventListener('hide.bs.modal', () => {
+        if (document.activeElement && modalEl.contains(document.activeElement)) {
+            document.activeElement.blur();
         }
     });
 
