@@ -1245,6 +1245,10 @@
         }
 
         async function showPage(pageName, updateUrl = true, filter = null) {
+            if (typeof window.cleanupProfileFaceEnrollment === 'function' && pageName !== 'profile') {
+                window.cleanupProfileFaceEnrollment();
+            }
+
             currentPage = pageName;
 
             // Store filter parameter globally for pages to access

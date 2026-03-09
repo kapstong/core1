@@ -376,7 +376,92 @@ async function loadSupplierHomePage() {
     }
 }
 
+const profileFaceEnrollmentState = {
+    stream: null,
+    rafHandle: null,
+    libsLoaded: false,
+    modelsLoaded: false,
+    lastDescriptor: null,
+    blinkCount: 0,
+    eyeClosedFrameCount: 0,
+    livenessVerifiedAt: null,
+    lastDetectionAt: 0
+};
+
+function profileFaceDistance2D(p1, p2) {
+    const dx = p1.x - p2.x;
+    const dy = p1.y - p2.y;
+    return Math.sqrt(dx * dx + dy * dy);
+}
+
+function profileEyeAspectRatio(points) {
+    if (!points || points.length < 6) return 1;
+
+    const verticalA = profileFaceDistance2D(points[1], points[5]);
+    const verticalB = profileFaceDistance2D(points[2], points[4]);
+    const horizontal = profileFaceDistance2D(points[0], points[3]);
+
+    if (horizontal === 0) return 1;
+    return (verticalA + verticalB) / (2 * horizontal);
+}
+
+async function ensureFaceApiLibraries() {
+    if (window.faceapi && window.tf) {
+        profileFaceEnrollmentState.libsLoaded = true;
+        return;
+    }
+
+    const loadScript = (src) => new Promise((resolve, reject) => {
+        const script = document.createElement('script');
+        script.src = src;
+        script.async = true;
+        script.onload = resolve;
+        script.onerror = reject;
+        document.head.appendChild(script);
+    });
+
+    await loadScript('https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.22.0/dist/tf.min.js');
+    await loadScript('https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js');
+    profileFaceEnrollmentState.libsLoaded = true;
+}
+
+async function ensureProfileFaceModels() {
+    if (profileFaceEnrollmentState.modelsLoaded) return;
+    await ensureFaceApiLibraries();
+
+    const modelBase = 'https://cdn.jsdelivr.net/npm/@vladmandic/face-api@1.7.13/model/';
+    await Promise.all([
+        faceapi.nets.tinyFaceDetector.loadFromUri(modelBase),
+        faceapi.nets.faceLandmark68Net.loadFromUri(modelBase),
+        faceapi.nets.faceRecognitionNet.loadFromUri(modelBase)
+    ]);
+    profileFaceEnrollmentState.modelsLoaded = true;
+}
+
+function cleanupProfileFaceEnrollment() {
+    if (profileFaceEnrollmentState.rafHandle) {
+        cancelAnimationFrame(profileFaceEnrollmentState.rafHandle);
+        profileFaceEnrollmentState.rafHandle = null;
+    }
+
+    if (profileFaceEnrollmentState.stream) {
+        profileFaceEnrollmentState.stream.getTracks().forEach(track => track.stop());
+        profileFaceEnrollmentState.stream = null;
+    }
+
+    profileFaceEnrollmentState.lastDescriptor = null;
+    profileFaceEnrollmentState.blinkCount = 0;
+    profileFaceEnrollmentState.eyeClosedFrameCount = 0;
+    profileFaceEnrollmentState.livenessVerifiedAt = null;
+}
+
+window.cleanupProfileFaceEnrollment = cleanupProfileFaceEnrollment;
+window.addEventListener('beforeunload', cleanupProfileFaceEnrollment);
+
 async function loadProfilePage() {
+    cleanupProfileFaceEnrollment();
+
+    const canUseFaceEnrollment = ['inventory_manager', 'staff'].includes(currentUser.role);
     const content = document.getElementById('page-content');
     content.innerHTML = `
         <div class="page-header">
@@ -460,6 +545,35 @@ async function loadProfilePage() {
                         </div>
                     </div>
                 </div>
+
+                ${canUseFaceEnrollment ? `
+                <div class="card mt-3" style="background: var(--bg-card); border: 1px solid var(--border-color);">
+                    <div class="card-header" style="background: var(--bg-tertiary); border-color: var(--border-color);">
+                        <h5 class="mb-0"><i class="fas fa-face-smile me-2"></i>Face Login Enrollment</h5>
+                    </div>
+                    <div class="card-body">
+                        <div id="face-enrollment-badge" class="mb-2 text-muted">Loading enrollment status...</div>
+                        <div style="position: relative; width: 100%; height: 220px; border-radius: 10px; overflow: hidden; border: 1px solid var(--border-color); background: rgba(0,0,0,0.25);">
+                            <video id="profile-face-video" autoplay muted playsinline style="width: 100%; height: 100%; object-fit: cover;"></video>
+                            <div id="profile-face-video-placeholder" style="position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; color: var(--text-muted); font-size: 0.9rem; text-align: center; padding: 0.5rem;">
+                                Start camera, look straight, then blink once.
+                            </div>
+                        </div>
+                        <div class="d-grid gap-2 mt-3">
+                            <button class="btn btn-outline-primary" type="button" id="profile-face-start-btn">
+                                <i class="fas fa-camera me-2"></i>Start Camera
+                            </button>
+                            <button class="btn btn-primary" type="button" id="profile-face-enroll-btn" disabled>
+                                <i class="fas fa-id-badge me-2"></i>Enroll / Update Face
+                            </button>
+                            <button class="btn btn-outline-danger" type="button" id="profile-face-remove-btn">
+                                <i class="fas fa-trash-alt me-2"></i>Remove Face Enrollment
+                            </button>
+                        </div>
+                        <small id="profile-face-status" class="d-block mt-2 text-muted">Liveness check not started.</small>
+                    </div>
+                </div>
+                ` : ''}
             </div>
         </div>
     `;
@@ -527,6 +641,237 @@ async function loadProfilePage() {
             showError('Failed to change password');
         }
     });
+
+    if (canUseFaceEnrollment) {
+        initProfileFaceEnrollmentSection();
+    }
+}
+
+async function initProfileFaceEnrollmentSection() {
+    const badgeEl = document.getElementById('face-enrollment-badge');
+    const statusEl = document.getElementById('profile-face-status');
+    const startBtn = document.getElementById('profile-face-start-btn');
+    const enrollBtn = document.getElementById('profile-face-enroll-btn');
+    const removeBtn = document.getElementById('profile-face-remove-btn');
+    const videoEl = document.getElementById('profile-face-video');
+    const placeholderEl = document.getElementById('profile-face-video-placeholder');
+
+    if (!badgeEl || !statusEl || !startBtn || !enrollBtn || !removeBtn || !videoEl || !placeholderEl) {
+        return;
+    }
+
+    const setStatus = (text, error = false) => {
+        statusEl.style.color = error ? 'var(--danger)' : 'var(--text-muted)';
+        statusEl.textContent = text;
+    };
+
+    const renderBadge = (isEnabled, enrolledAt = null) => {
+        if (isEnabled) {
+            const dateText = enrolledAt ? ` (Last: ${new Date(enrolledAt).toLocaleString()})` : '';
+            badgeEl.innerHTML = `<span class="badge bg-success"><i class="fas fa-check-circle me-1"></i>Enrolled${dateText}</span>`;
+        } else {
+            badgeEl.innerHTML = `<span class="badge bg-secondary"><i class="fas fa-circle-xmark me-1"></i>Not Enrolled</span>`;
+        }
+    };
+
+    const loadFaceStatus = async () => {
+        try {
+            const response = await fetch(`${API_BASE}/users/face-profile.php`, {
+                credentials: 'same-origin'
+            });
+            const result = await response.json();
+            if (!result.success) {
+                throw new Error(result.message || 'Failed to load face status');
+            }
+            renderBadge(!!result.data?.face_biometric_enabled, result.data?.face_last_enrolled_at || null);
+        } catch (error) {
+            renderBadge(false, null);
+            setStatus(error.message || 'Failed to load enrollment status', true);
+        }
+    };
+
+    const stopDetectionLoop = () => {
+        if (profileFaceEnrollmentState.rafHandle) {
+            cancelAnimationFrame(profileFaceEnrollmentState.rafHandle);
+            profileFaceEnrollmentState.rafHandle = null;
+        }
+    };
+
+    const runDetectionLoop = async () => {
+        stopDetectionLoop();
+
+        const detect = async () => {
+            try {
+                const now = Date.now();
+                if (now - profileFaceEnrollmentState.lastDetectionAt >= 220) {
+                    profileFaceEnrollmentState.lastDetectionAt = now;
+
+                    const detection = await faceapi
+                        .detectSingleFace(videoEl, new faceapi.TinyFaceDetectorOptions({ inputSize: 320 }))
+                        .withFaceLandmarks()
+                        .withFaceDescriptor();
+
+                    if (!detection) {
+                        profileFaceEnrollmentState.lastDescriptor = null;
+                        enrollBtn.disabled = true;
+                        setStatus('No face detected. Keep your face centered.');
+                    } else {
+                        profileFaceEnrollmentState.lastDescriptor = Array.from(detection.descriptor);
+
+                        const leftEAR = profileEyeAspectRatio(detection.landmarks.getLeftEye());
+                        const rightEAR = profileEyeAspectRatio(detection.landmarks.getRightEye());
+                        const avgEAR = (leftEAR + rightEAR) / 2;
+                        const blinkThreshold = 0.2;
+                        const minClosedFrames = 2;
+
+                        if (avgEAR < blinkThreshold) {
+                            profileFaceEnrollmentState.eyeClosedFrameCount++;
+                        } else if (profileFaceEnrollmentState.eyeClosedFrameCount >= minClosedFrames) {
+                            profileFaceEnrollmentState.blinkCount++;
+                            profileFaceEnrollmentState.eyeClosedFrameCount = 0;
+
+                            if (profileFaceEnrollmentState.blinkCount >= 1 && !profileFaceEnrollmentState.livenessVerifiedAt) {
+                                profileFaceEnrollmentState.livenessVerifiedAt = new Date().toISOString();
+                            }
+                        } else {
+                            profileFaceEnrollmentState.eyeClosedFrameCount = 0;
+                        }
+
+                        if (profileFaceEnrollmentState.livenessVerifiedAt) {
+                            enrollBtn.disabled = false;
+                            setStatus('Liveness passed. You can enroll/update face now.');
+                        } else {
+                            enrollBtn.disabled = true;
+                            setStatus('Face detected. Please blink once to pass liveness.');
+                        }
+                    }
+                }
+            } catch (error) {
+                enrollBtn.disabled = true;
+                setStatus('Face detector error. Restart camera.', true);
+            } finally {
+                profileFaceEnrollmentState.rafHandle = requestAnimationFrame(detect);
+            }
+        };
+
+        profileFaceEnrollmentState.rafHandle = requestAnimationFrame(detect);
+    };
+
+    startBtn.addEventListener('click', async () => {
+        startBtn.disabled = true;
+        setStatus('Loading models and camera...');
+
+        try {
+            await ensureProfileFaceModels();
+            cleanupProfileFaceEnrollment();
+
+            profileFaceEnrollmentState.stream = await navigator.mediaDevices.getUserMedia({
+                video: { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 480 } },
+                audio: false
+            });
+
+            videoEl.srcObject = profileFaceEnrollmentState.stream;
+            placeholderEl.style.display = 'none';
+            profileFaceEnrollmentState.blinkCount = 0;
+            profileFaceEnrollmentState.eyeClosedFrameCount = 0;
+            profileFaceEnrollmentState.lastDescriptor = null;
+            profileFaceEnrollmentState.livenessVerifiedAt = null;
+            enrollBtn.disabled = true;
+
+            await runDetectionLoop();
+            setStatus('Camera ready. Blink once for anti-spoof verification.');
+        } catch (error) {
+            setStatus('Unable to access camera. Check permission and retry.', true);
+        } finally {
+            startBtn.disabled = false;
+        }
+    });
+
+    enrollBtn.addEventListener('click', async () => {
+        if (!profileFaceEnrollmentState.lastDescriptor) {
+            showError('No face descriptor available. Start camera and align your face.');
+            return;
+        }
+
+        if (!profileFaceEnrollmentState.livenessVerifiedAt || profileFaceEnrollmentState.blinkCount < 1) {
+            showError('Liveness check failed. Please blink once before enrolling.');
+            return;
+        }
+
+        enrollBtn.disabled = true;
+        const original = enrollBtn.innerHTML;
+        enrollBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Enrolling...';
+
+        try {
+            const response = await fetch(`${API_BASE}/users/face-profile.php`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                credentials: 'same-origin',
+                body: JSON.stringify({
+                    descriptor: profileFaceEnrollmentState.lastDescriptor,
+                    blink_count: profileFaceEnrollmentState.blinkCount,
+                    liveness_verified_at: profileFaceEnrollmentState.livenessVerifiedAt
+                })
+            });
+            const result = await response.json();
+
+            if (!result.success) {
+                throw new Error(result.message || 'Failed to enroll face');
+            }
+
+            renderBadge(true, result.data?.face_last_enrolled_at || new Date().toISOString());
+            showSuccess('Face enrollment saved successfully');
+            setStatus('Enrollment complete. You can now use face login.');
+        } catch (error) {
+            showError(error.message || 'Failed to enroll face');
+            setStatus(error.message || 'Failed to enroll face', true);
+        } finally {
+            enrollBtn.innerHTML = original;
+            enrollBtn.disabled = !profileFaceEnrollmentState.livenessVerifiedAt;
+        }
+    });
+
+    removeBtn.addEventListener('click', async () => {
+        const confirmed = await showConfirm('Remove your face enrollment? Face login will be disabled until you enroll again.', {
+            title: 'Remove Face Enrollment',
+            confirmText: 'Remove',
+            cancelText: 'Cancel',
+            type: 'danger',
+            icon: 'fas fa-trash-alt'
+        });
+
+        if (!confirmed) return;
+
+        removeBtn.disabled = true;
+        const original = removeBtn.innerHTML;
+        removeBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Removing...';
+
+        try {
+            const response = await fetch(`${API_BASE}/users/face-profile.php`, {
+                method: 'DELETE',
+                credentials: 'same-origin'
+            });
+            const result = await response.json();
+            if (!result.success) {
+                throw new Error(result.message || 'Failed to remove face enrollment');
+            }
+
+            renderBadge(false, null);
+            showSuccess('Face enrollment removed');
+            setStatus('Face enrollment removed. Start camera to enroll again.');
+            profileFaceEnrollmentState.lastDescriptor = null;
+            profileFaceEnrollmentState.livenessVerifiedAt = null;
+            profileFaceEnrollmentState.blinkCount = 0;
+            enrollBtn.disabled = true;
+        } catch (error) {
+            showError(error.message || 'Failed to remove face enrollment');
+        } finally {
+            removeBtn.disabled = false;
+            removeBtn.innerHTML = original;
+        }
+    });
+
+    loadFaceStatus();
 }
 
 async function logoutAllSessions() {
