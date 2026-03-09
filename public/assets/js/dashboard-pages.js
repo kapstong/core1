@@ -387,6 +387,7 @@ const profileFaceEnrollmentState = {
     livenessVerifiedAt: null,
     lastDetectionAt: 0
 };
+let profileFaceLibsPromise = null;
 
 function profileFaceDistance2D(p1, p2) {
     const dx = p1.x - p2.x;
@@ -411,17 +412,44 @@ async function ensureFaceApiLibraries() {
         return;
     }
 
+    if (profileFaceLibsPromise) {
+        await profileFaceLibsPromise;
+        return;
+    }
+
     const loadScript = (src) => new Promise((resolve, reject) => {
+        const existing = Array.from(document.querySelectorAll('script')).find(s => s.src === src);
+        if (existing) {
+            if (existing.dataset.loaded === 'true') {
+                resolve();
+                return;
+            }
+            existing.addEventListener('load', () => resolve(), { once: true });
+            existing.addEventListener('error', () => reject(new Error(`Failed to load ${src}`)), { once: true });
+            return;
+        }
+
         const script = document.createElement('script');
         script.src = src;
         script.async = true;
-        script.onload = resolve;
-        script.onerror = reject;
+        script.onload = () => {
+            script.dataset.loaded = 'true';
+            resolve();
+        };
+        script.onerror = () => reject(new Error(`Failed to load ${src}`));
         document.head.appendChild(script);
     });
 
-    await loadScript('https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.22.0/dist/tf.min.js');
-    await loadScript('https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js');
+    profileFaceLibsPromise = (async () => {
+        if (!window.tf) {
+            await loadScript('https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.22.0/dist/tf.min.js');
+        }
+        if (!window.faceapi) {
+            await loadScript('https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js');
+        }
+    })();
+
+    await profileFaceLibsPromise;
     profileFaceEnrollmentState.libsLoaded = true;
 }
 
@@ -429,7 +457,7 @@ async function ensureProfileFaceModels() {
     if (profileFaceEnrollmentState.modelsLoaded) return;
     await ensureFaceApiLibraries();
 
-    const modelBase = 'https://cdn.jsdelivr.net/npm/@vladmandic/face-api@1.7.13/model/';
+    const modelBase = 'https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/weights';
     await Promise.all([
         faceapi.nets.tinyFaceDetector.loadFromUri(modelBase),
         faceapi.nets.faceLandmark68Net.loadFromUri(modelBase),
@@ -690,6 +718,25 @@ async function initProfileFaceEnrollmentSection() {
         }
     };
 
+    const requestVerificationCode = async (operation) => {
+        const response = await fetch(`${API_BASE}/users/face-profile.php`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'same-origin',
+            body: JSON.stringify({
+                action: 'send_verification_code',
+                operation
+            })
+        });
+
+        const result = await response.json();
+        if (!result.success) {
+            throw new Error(result.message || 'Failed to send verification code');
+        }
+
+        return result;
+    };
+
     const stopDetectionLoop = () => {
         if (profileFaceEnrollmentState.rafHandle) {
             cancelAnimationFrame(profileFaceEnrollmentState.rafHandle);
@@ -759,10 +806,9 @@ async function initProfileFaceEnrollmentSection() {
 
     startBtn.addEventListener('click', async () => {
         startBtn.disabled = true;
-        setStatus('Loading models and camera...');
+        setStatus('Starting camera...');
 
         try {
-            await ensureProfileFaceModels();
             cleanupProfileFaceEnrollment();
 
             profileFaceEnrollmentState.stream = await navigator.mediaDevices.getUserMedia({
@@ -771,6 +817,11 @@ async function initProfileFaceEnrollmentSection() {
             });
 
             videoEl.srcObject = profileFaceEnrollmentState.stream;
+            try {
+                await videoEl.play();
+            } catch (e) {
+                // ignore autoplay promise failures, stream is still attached
+            }
             placeholderEl.style.display = 'none';
             profileFaceEnrollmentState.blinkCount = 0;
             profileFaceEnrollmentState.eyeClosedFrameCount = 0;
@@ -778,10 +829,12 @@ async function initProfileFaceEnrollmentSection() {
             profileFaceEnrollmentState.livenessVerifiedAt = null;
             enrollBtn.disabled = true;
 
+            setStatus('Camera started. Loading face detector...');
+            await ensureProfileFaceModels();
             await runDetectionLoop();
             setStatus('Camera ready. Blink once for anti-spoof verification.');
         } catch (error) {
-            setStatus('Unable to access camera. Check permission and retry.', true);
+            setStatus((error && error.message) ? error.message : 'Unable to access camera. Check permission and retry.', true);
         } finally {
             startBtn.disabled = false;
         }
@@ -803,6 +856,14 @@ async function initProfileFaceEnrollmentSection() {
         enrollBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Enrolling...';
 
         try {
+            await requestVerificationCode('enroll');
+            showInfo('A 6-digit verification code was sent to your email.');
+
+            const verificationCode = (window.prompt('Enter the 6-digit code sent to your email to complete face enrollment:') || '').trim();
+            if (!/^\d{6}$/.test(verificationCode)) {
+                throw new Error('Enrollment cancelled. A valid 6-digit code is required.');
+            }
+
             const response = await fetch(`${API_BASE}/users/face-profile.php`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -810,7 +871,8 @@ async function initProfileFaceEnrollmentSection() {
                 body: JSON.stringify({
                     descriptor: profileFaceEnrollmentState.lastDescriptor,
                     blink_count: profileFaceEnrollmentState.blinkCount,
-                    liveness_verified_at: profileFaceEnrollmentState.livenessVerifiedAt
+                    liveness_verified_at: profileFaceEnrollmentState.livenessVerifiedAt,
+                    verification_code: verificationCode
                 })
             });
             const result = await response.json();
@@ -847,9 +909,21 @@ async function initProfileFaceEnrollmentSection() {
         removeBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Removing...';
 
         try {
+            await requestVerificationCode('delete');
+            showInfo('A 6-digit verification code was sent to your email.');
+
+            const verificationCode = (window.prompt('Enter the 6-digit code sent to your email to remove face enrollment:') || '').trim();
+            if (!/^\d{6}$/.test(verificationCode)) {
+                throw new Error('Removal cancelled. A valid 6-digit code is required.');
+            }
+
             const response = await fetch(`${API_BASE}/users/face-profile.php`, {
                 method: 'DELETE',
-                credentials: 'same-origin'
+                headers: { 'Content-Type': 'application/json' },
+                credentials: 'same-origin',
+                body: JSON.stringify({
+                    verification_code: verificationCode
+                })
             });
             const result = await response.json();
             if (!result.success) {
