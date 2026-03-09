@@ -527,6 +527,83 @@
             color: var(--accent);
         }
 
+        .face-auth-card {
+            margin-top: 1.5rem;
+            padding: 1rem;
+            background: rgba(0, 245, 255, 0.04);
+            border: 1px solid rgba(0, 245, 255, 0.15);
+            border-radius: 12px;
+        }
+
+        .face-auth-title {
+            color: var(--text-primary);
+            font-size: 0.95rem;
+            font-weight: 600;
+            margin-bottom: 0.75rem;
+        }
+
+        .face-preview-wrap {
+            position: relative;
+            width: 100%;
+            min-height: 220px;
+            background: rgba(10, 14, 39, 0.7);
+            border: 1px solid rgba(0, 245, 255, 0.2);
+            border-radius: 10px;
+            overflow: hidden;
+            margin-bottom: 0.75rem;
+        }
+
+        .face-preview {
+            width: 100%;
+            height: 220px;
+            object-fit: cover;
+            display: block;
+        }
+
+        .face-preview-placeholder {
+            position: absolute;
+            inset: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--text-muted);
+            font-size: 0.9rem;
+            background: rgba(10, 14, 39, 0.65);
+        }
+
+        .face-controls {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 0.5rem;
+        }
+
+        .btn-face {
+            height: 44px;
+            border-radius: 10px;
+            border: 1px solid rgba(0, 245, 255, 0.25);
+            background: rgba(0, 245, 255, 0.08);
+            color: var(--text-primary);
+            font-weight: 600;
+            transition: all 0.2s ease;
+        }
+
+        .btn-face:hover:not(:disabled) {
+            border-color: var(--accent);
+            background: rgba(0, 245, 255, 0.15);
+        }
+
+        .btn-face:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+
+        .face-status {
+            margin-top: 0.6rem;
+            color: var(--text-secondary);
+            font-size: 0.85rem;
+            min-height: 20px;
+        }
+
         /* Alerts */
         .alert {
             padding: 1rem 1.25rem;
@@ -710,6 +787,27 @@
                             Sign In
                         </button>
 
+                        <div class="face-auth-card">
+                            <div class="face-auth-title">
+                                <i class="fas fa-face-smile me-2"></i>Face Login (Inventory Staff)
+                            </div>
+                            <div class="face-preview-wrap">
+                                <video id="faceVideo" class="face-preview" autoplay muted playsinline></video>
+                                <div id="faceVideoPlaceholder" class="face-preview-placeholder">
+                                    Start camera, look straight, then blink once.
+                                </div>
+                            </div>
+                            <div class="face-controls">
+                                <button type="button" class="btn-face" id="startFaceCameraBtn">
+                                    <i class="fas fa-camera me-1"></i>Start Camera
+                                </button>
+                                <button type="button" class="btn-face" id="faceLoginBtn" disabled>
+                                    <i class="fas fa-unlock-alt me-1"></i>Login with Face
+                                </button>
+                            </div>
+                            <div id="faceStatus" class="face-status">Liveness check not started.</div>
+                        </div>
+
                         <div class="divider">
                             <span>Quick Access</span>
                         </div>
@@ -729,6 +827,8 @@
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.22.0/dist/tf.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
 
     <script>
         const IS_DEVELOPMENT = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
@@ -879,6 +979,230 @@
                 }
             }, type === 'success' ? 8000 : 6000);
         }
+
+        const faceVideo = document.getElementById('faceVideo');
+        const faceVideoPlaceholder = document.getElementById('faceVideoPlaceholder');
+        const startFaceCameraBtn = document.getElementById('startFaceCameraBtn');
+        const faceLoginBtn = document.getElementById('faceLoginBtn');
+        const faceStatus = document.getElementById('faceStatus');
+
+        let faceStream = null;
+        let faceModelsLoaded = false;
+        let faceDetectionLoop = null;
+        let latestFaceDescriptor = null;
+        let blinkCount = 0;
+        let eyeClosedFrameCount = 0;
+        let blinkChallengePassedAt = null;
+        let lastDetectionAt = 0;
+
+        function setFaceStatus(text, isError = false) {
+            faceStatus.style.color = isError ? '#ef4444' : 'var(--text-secondary)';
+            faceStatus.textContent = text;
+        }
+
+        function distance2D(p1, p2) {
+            const dx = p1.x - p2.x;
+            const dy = p1.y - p2.y;
+            return Math.sqrt(dx * dx + dy * dy);
+        }
+
+        function eyeAspectRatio(eyePoints) {
+            if (!eyePoints || eyePoints.length < 6) {
+                return 1;
+            }
+
+            const verticalA = distance2D(eyePoints[1], eyePoints[5]);
+            const verticalB = distance2D(eyePoints[2], eyePoints[4]);
+            const horizontal = distance2D(eyePoints[0], eyePoints[3]);
+
+            if (horizontal === 0) {
+                return 1;
+            }
+
+            return (verticalA + verticalB) / (2 * horizontal);
+        }
+
+        async function loadFaceModels() {
+            if (faceModelsLoaded) {
+                return;
+            }
+
+            const modelBase = 'https://cdn.jsdelivr.net/npm/@vladmandic/face-api@1.7.13/model/';
+            await Promise.all([
+                faceapi.nets.tinyFaceDetector.loadFromUri(modelBase),
+                faceapi.nets.faceLandmark68Net.loadFromUri(modelBase),
+                faceapi.nets.faceRecognitionNet.loadFromUri(modelBase)
+            ]);
+
+            faceModelsLoaded = true;
+        }
+
+        function stopFaceLoop() {
+            if (faceDetectionLoop) {
+                cancelAnimationFrame(faceDetectionLoop);
+                faceDetectionLoop = null;
+            }
+        }
+
+        async function startFaceLoop() {
+            stopFaceLoop();
+
+            const detect = async () => {
+                try {
+                    const now = Date.now();
+                    if (now - lastDetectionAt >= 220) {
+                        lastDetectionAt = now;
+
+                        const detection = await faceapi
+                            .detectSingleFace(faceVideo, new faceapi.TinyFaceDetectorOptions({ inputSize: 320 }))
+                            .withFaceLandmarks()
+                            .withFaceDescriptor();
+
+                        if (detection) {
+                            latestFaceDescriptor = Array.from(detection.descriptor);
+
+                            const leftEAR = eyeAspectRatio(detection.landmarks.getLeftEye());
+                            const rightEAR = eyeAspectRatio(detection.landmarks.getRightEye());
+                            const avgEAR = (leftEAR + rightEAR) / 2;
+                            const blinkThreshold = 0.2;
+                            const minClosedFrames = 2;
+
+                            if (avgEAR < blinkThreshold) {
+                                eyeClosedFrameCount++;
+                            } else if (eyeClosedFrameCount >= minClosedFrames) {
+                                blinkCount++;
+                                eyeClosedFrameCount = 0;
+
+                                if (blinkCount >= 1 && !blinkChallengePassedAt) {
+                                    blinkChallengePassedAt = new Date().toISOString();
+                                }
+                            } else {
+                                eyeClosedFrameCount = 0;
+                            }
+
+                            if (blinkChallengePassedAt) {
+                                setFaceStatus('Liveness passed. You can login with face now.');
+                                faceLoginBtn.disabled = false;
+                            } else {
+                                setFaceStatus('Face detected. Please blink once for anti-spoof check.');
+                            }
+                        } else {
+                            latestFaceDescriptor = null;
+                            faceLoginBtn.disabled = true;
+                            setFaceStatus('No face detected. Center your face in the camera view.');
+                        }
+                    }
+                } catch (err) {
+                    devLog('Face detection error:', err);
+                    faceLoginBtn.disabled = true;
+                    setFaceStatus('Face detector error. Retry camera start.', true);
+                } finally {
+                    faceDetectionLoop = requestAnimationFrame(detect);
+                }
+            };
+
+            faceDetectionLoop = requestAnimationFrame(detect);
+        }
+
+        async function startFaceCamera() {
+            startFaceCameraBtn.disabled = true;
+            setFaceStatus('Loading face models...');
+
+            try {
+                await loadFaceModels();
+
+                faceStream = await navigator.mediaDevices.getUserMedia({
+                    video: {
+                        facingMode: 'user',
+                        width: { ideal: 640 },
+                        height: { ideal: 480 }
+                    },
+                    audio: false
+                });
+
+                faceVideo.srcObject = faceStream;
+                faceVideoPlaceholder.style.display = 'none';
+
+                blinkCount = 0;
+                eyeClosedFrameCount = 0;
+                latestFaceDescriptor = null;
+                blinkChallengePassedAt = null;
+                faceLoginBtn.disabled = true;
+
+                await startFaceLoop();
+                setFaceStatus('Camera ready. Look at the camera and blink once.');
+            } catch (err) {
+                devLog('Start face camera error:', err);
+                setFaceStatus('Cannot start camera. Allow camera permission and try again.', true);
+            } finally {
+                startFaceCameraBtn.disabled = false;
+            }
+        }
+
+        async function faceLogin() {
+            const username = (document.getElementById('username').value || '').trim();
+            if (!username) {
+                showAlert('Enter your username before using face login.');
+                return;
+            }
+
+            if (!latestFaceDescriptor) {
+                showAlert('Face not detected. Keep your face centered and retry.');
+                return;
+            }
+
+            if (!blinkChallengePassedAt || blinkCount < 1) {
+                showAlert('Anti-spoof check failed. Please blink once in front of the camera.');
+                return;
+            }
+
+            faceLoginBtn.disabled = true;
+            const originalBtn = faceLoginBtn.innerHTML;
+            faceLoginBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Verifying Face...';
+
+            try {
+                const response = await fetch(`${API_BASE}/auth/facial-login.php`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    credentials: 'same-origin',
+                    body: JSON.stringify({
+                        username,
+                        descriptor: latestFaceDescriptor,
+                        blink_count: blinkCount,
+                        liveness_verified_at: blinkChallengePassedAt
+                    })
+                });
+
+                const data = await response.json();
+                if (!data.success) {
+                    showAlert(data.message || 'Face login failed.');
+                    return;
+                }
+
+                showAlert('<strong>Face verified.</strong> Redirecting to dashboard...', 'success');
+                faceLoginBtn.innerHTML = '<i class="fas fa-check-circle me-1"></i>Face Verified';
+                setTimeout(() => {
+                    window.location.href = 'dashboard.php';
+                }, 900);
+            } catch (err) {
+                devLog('Face login request error:', err);
+                showAlert('Failed to verify face. Please try again.');
+            } finally {
+                if (faceLoginBtn.innerHTML.includes('Face Verified') === false) {
+                    faceLoginBtn.disabled = false;
+                    faceLoginBtn.innerHTML = originalBtn;
+                }
+            }
+        }
+
+        startFaceCameraBtn.addEventListener('click', startFaceCamera);
+        faceLoginBtn.addEventListener('click', faceLogin);
+        window.addEventListener('beforeunload', () => {
+            stopFaceLoop();
+            if (faceStream) {
+                faceStream.getTracks().forEach(track => track.stop());
+            }
+        });
 
         document.getElementById('login-form').addEventListener('submit', async function(e) {
             e.preventDefault();
