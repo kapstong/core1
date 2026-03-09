@@ -4760,10 +4760,50 @@ async function loadSuppliersPage() {
                 </div>
             </div>
         </div>
+
+        <div class="card mt-4" style="background: var(--bg-card); border: 1px solid var(--border-color);">
+            <div class="card-header" style="background: var(--bg-tertiary); border-color: var(--border-color);">
+                <h5 class="mb-0"><i class="fas fa-clock me-2"></i>Pending Supplier Approvals</h5>
+            </div>
+            <div class="card-body">
+                <div id="pending-suppliers-loading" class="text-center py-4">
+                    <div class="spinner-border text-primary" role="status">
+                        <span class="visually-hidden">Loading...</span>
+                    </div>
+                    <p class="mt-2 text-muted">Loading pending suppliers...</p>
+                </div>
+
+                <div id="pending-suppliers-content" class="d-none">
+                    <div class="table-responsive">
+                        <table class="table table-hover">
+                            <thead>
+                                <tr>
+                                    <th>Username</th>
+                                    <th>Company</th>
+                                    <th>Email</th>
+                                    <th>Phone</th>
+                                    <th>Applied Date</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="pending-suppliers-table-body">
+                                <!-- Pending suppliers will be loaded here -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div id="no-pending-suppliers-message" class="text-center py-3 d-none">
+                    <i class="fas fa-check-circle fa-2x text-success mb-2"></i>
+                    <p class="text-muted">No pending supplier approvals.</p>
+                </div>
+            </div>
+        </div>
     `;
 
-    // Load suppliers
+    // Load suppliers and pending approvals
     await loadSuppliers();
+    await loadPendingSuppliers();
 
     // Add event listeners
     document.getElementById('supplier-search').addEventListener('input', debounce(() => loadSuppliers(), 500));
@@ -8633,50 +8673,10 @@ async function loadUsersPage() {
             </div>
         </div>
 
-        <!-- Pending Suppliers Section -->
-        <div class="card mt-4" style="background: var(--bg-card); border: 1px solid var(--border-color);">
-            <div class="card-header" style="background: var(--bg-tertiary); border-color: var(--border-color);">
-                <h5 class="mb-0"><i class="fas fa-clock me-2"></i>Pending Supplier Approvals</h5>
-            </div>
-            <div class="card-body">
-                <div id="pending-suppliers-loading" class="text-center py-4">
-                    <div class="spinner-border text-primary" role="status">
-                        <span class="visually-hidden">Loading...</span>
-                    </div>
-                    <p class="mt-2 text-muted">Loading pending suppliers...</p>
-                </div>
-
-                <div id="pending-suppliers-content" class="d-none">
-                    <div class="table-responsive">
-                        <table class="table table-hover">
-                            <thead>
-                                <tr>
-                                    <th>Username</th>
-                                    <th>Company</th>
-                                    <th>Email</th>
-                                    <th>Phone</th>
-                                    <th>Applied Date</th>
-                                    <th>Actions</th>
-                                </tr>
-                            </thead>
-                            <tbody id="pending-suppliers-table-body">
-                                <!-- Pending suppliers will be loaded here -->
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-
-                <div id="no-pending-suppliers-message" class="text-center py-3 d-none">
-                    <i class="fas fa-check-circle fa-2x text-success mb-2"></i>
-                    <p class="text-muted">No pending supplier approvals.</p>
-                </div>
-            </div>
-        </div>
     `;
 
-    // Load users and pending suppliers
+    // Load users
     await loadUsers();
-    await loadPendingSuppliers();
 
     // Add event listeners
     document.getElementById('user-role-filter').addEventListener('change', () => loadUsers());
@@ -8823,6 +8823,10 @@ async function loadPendingSuppliers() {
     const content = document.getElementById('pending-suppliers-content');
     const noPendingMessage = document.getElementById('no-pending-suppliers-message');
     const tbody = document.getElementById('pending-suppliers-table-body');
+
+    if (!loadingIndicator || !content || !noPendingMessage || !tbody) {
+        return;
+    }
 
     try {
         loadingIndicator.classList.remove('d-none');
