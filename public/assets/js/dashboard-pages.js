@@ -384,8 +384,11 @@ const profileFaceEnrollmentState = {
     lastDescriptor: null,
     blinkCount: 0,
     eyeClosedFrameCount: 0,
+    blinkInProgress: false,
     livenessVerifiedAt: null,
-    lastDetectionAt: 0
+    lastDetectionAt: 0,
+    earHistory: [],
+    dynamicBlinkThreshold: 0.19
 };
 let profileFaceLibsPromise = null;
 
@@ -501,7 +504,10 @@ function cleanupProfileFaceEnrollment() {
     profileFaceEnrollmentState.lastDescriptor = null;
     profileFaceEnrollmentState.blinkCount = 0;
     profileFaceEnrollmentState.eyeClosedFrameCount = 0;
+    profileFaceEnrollmentState.blinkInProgress = false;
     profileFaceEnrollmentState.livenessVerifiedAt = null;
+    profileFaceEnrollmentState.earHistory = [];
+    profileFaceEnrollmentState.dynamicBlinkThreshold = 0.19;
 }
 
 window.cleanupProfileFaceEnrollment = cleanupProfileFaceEnrollment;
@@ -820,18 +826,40 @@ async function initProfileFaceEnrollmentSection() {
                         const leftEAR = profileEyeAspectRatio(detection.landmarks.getLeftEye());
                         const rightEAR = profileEyeAspectRatio(detection.landmarks.getRightEye());
                         const avgEAR = (leftEAR + rightEAR) / 2;
-                        const blinkThreshold = 0.2;
-                        const minClosedFrames = 2;
+                        const minClosedFrames = 1;
+                        const maxHistory = 18;
+
+                        // Build adaptive baseline from likely-open-eye frames.
+                        if (avgEAR > 0.16 && avgEAR < 0.5) {
+                            profileFaceEnrollmentState.earHistory.push(avgEAR);
+                            if (profileFaceEnrollmentState.earHistory.length > maxHistory) {
+                                profileFaceEnrollmentState.earHistory.shift();
+                            }
+                        }
+
+                        if (profileFaceEnrollmentState.earHistory.length >= 6) {
+                            const sorted = [...profileFaceEnrollmentState.earHistory].sort((a, b) => a - b);
+                            const median = sorted[Math.floor(sorted.length / 2)];
+                            const adaptive = median * 0.72;
+                            profileFaceEnrollmentState.dynamicBlinkThreshold = Math.max(0.14, Math.min(0.26, adaptive));
+                        } else {
+                            profileFaceEnrollmentState.dynamicBlinkThreshold = 0.2;
+                        }
+
+                        const blinkThreshold = profileFaceEnrollmentState.dynamicBlinkThreshold;
 
                         if (avgEAR < blinkThreshold) {
                             profileFaceEnrollmentState.eyeClosedFrameCount++;
-                        } else if (profileFaceEnrollmentState.eyeClosedFrameCount >= minClosedFrames) {
-                            profileFaceEnrollmentState.blinkCount++;
-                            profileFaceEnrollmentState.eyeClosedFrameCount = 0;
-
-                            if (profileFaceEnrollmentState.blinkCount >= 1 && !profileFaceEnrollmentState.livenessVerifiedAt) {
-                                profileFaceEnrollmentState.livenessVerifiedAt = new Date().toISOString();
+                            profileFaceEnrollmentState.blinkInProgress = true;
+                        } else if (profileFaceEnrollmentState.blinkInProgress) {
+                            if (profileFaceEnrollmentState.eyeClosedFrameCount >= minClosedFrames) {
+                                profileFaceEnrollmentState.blinkCount++;
+                                if (profileFaceEnrollmentState.blinkCount >= 1 && !profileFaceEnrollmentState.livenessVerifiedAt) {
+                                    profileFaceEnrollmentState.livenessVerifiedAt = new Date().toISOString();
+                                }
                             }
+                            profileFaceEnrollmentState.eyeClosedFrameCount = 0;
+                            profileFaceEnrollmentState.blinkInProgress = false;
                         } else {
                             profileFaceEnrollmentState.eyeClosedFrameCount = 0;
                         }
@@ -841,7 +869,7 @@ async function initProfileFaceEnrollmentSection() {
                             setStatus('Liveness passed. You can enroll/update face now.');
                         } else {
                             modalEnrollBtn.disabled = true;
-                            setStatus('Face detected. Please blink once to pass liveness.');
+                            setStatus('Face detected. Blink naturally once (close then open eyes).');
                         }
                     }
                 }
@@ -883,8 +911,11 @@ async function initProfileFaceEnrollmentSection() {
             modalPlaceholderEl.style.display = 'none';
             profileFaceEnrollmentState.blinkCount = 0;
             profileFaceEnrollmentState.eyeClosedFrameCount = 0;
+            profileFaceEnrollmentState.blinkInProgress = false;
             profileFaceEnrollmentState.lastDescriptor = null;
             profileFaceEnrollmentState.livenessVerifiedAt = null;
+            profileFaceEnrollmentState.earHistory = [];
+            profileFaceEnrollmentState.dynamicBlinkThreshold = 0.19;
             modalEnrollBtn.disabled = true;
 
             setStatus('Camera started. Loading face detector...');
@@ -994,6 +1025,10 @@ async function initProfileFaceEnrollmentSection() {
             profileFaceEnrollmentState.lastDescriptor = null;
             profileFaceEnrollmentState.livenessVerifiedAt = null;
             profileFaceEnrollmentState.blinkCount = 0;
+            profileFaceEnrollmentState.eyeClosedFrameCount = 0;
+            profileFaceEnrollmentState.blinkInProgress = false;
+            profileFaceEnrollmentState.earHistory = [];
+            profileFaceEnrollmentState.dynamicBlinkThreshold = 0.19;
             modalEnrollBtn.disabled = true;
         } catch (error) {
             showError(error.message || 'Failed to remove face enrollment');
