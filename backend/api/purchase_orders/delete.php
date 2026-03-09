@@ -71,9 +71,10 @@ try {
         Response::error('Purchase order not found', 404);
     }
 
-    // Business rule: can only delete draft POs
-    if ($po['status'] !== 'draft') {
-        Response::error('Can only delete purchase orders in draft status', 400);
+    // Business rule: allow delete for non-finalized POs only
+    $deletableStatuses = ['draft', 'pending', 'pending_supplier', 'submitted', 'pending_approval'];
+    if (!in_array($po['status'], $deletableStatuses, true)) {
+        Response::error('Cannot delete purchase order in status: ' . $po['status'], 400);
     }
 
     // Get PO details for logging before deletion
