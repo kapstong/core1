@@ -76,9 +76,9 @@ try {
         Response::error('Account is inactive', 403);
     }
 
-    $allowedRoles = ['inventory_manager', 'staff'];
+    $allowedRoles = ['admin', 'inventory_manager', 'staff'];
     if (!in_array($user['role'], $allowedRoles, true)) {
-        Response::error('Face login is only available for inventory staff accounts', 403);
+        Response::error('Face login is only available for admin and inventory staff accounts', 403);
     }
 
     if ((int)($user['face_biometric_enabled'] ?? 0) !== 1 || empty($user['face_descriptor'])) {

@@ -29,9 +29,9 @@ Auth::requireAuth();
 $currentUser = Auth::user();
 $userId = (int)$currentUser['id'];
 
-$allowedRoles = ['inventory_manager', 'staff'];
+$allowedRoles = ['admin', 'inventory_manager', 'staff'];
 if (!in_array($currentUser['role'], $allowedRoles, true)) {
-    Response::error('Face enrollment is only available for inventory staff accounts', 403);
+    Response::error('Face enrollment is only available for admin and inventory staff accounts', 403);
 }
 
 try {

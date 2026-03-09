@@ -789,7 +789,7 @@
 
                         <div class="face-auth-card">
                             <div class="face-auth-title">
-                                <i class="fas fa-face-smile me-2"></i>Face Login (Inventory Staff)
+                                <i class="fas fa-face-smile me-2"></i>Face Login (Admin & Inventory Staff)
                             </div>
                             <div class="face-preview-wrap">
                                 <video id="faceVideo" class="face-preview" autoplay muted playsinline></video>

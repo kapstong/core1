@@ -461,7 +461,7 @@ window.addEventListener('beforeunload', cleanupProfileFaceEnrollment);
 async function loadProfilePage() {
     cleanupProfileFaceEnrollment();
 
-    const canUseFaceEnrollment = ['inventory_manager', 'staff'].includes(currentUser.role);
+    const canUseFaceEnrollment = ['admin', 'inventory_manager', 'staff'].includes(currentUser.role);
     const content = document.getElementById('page-content');
     content.innerHTML = `
         <div class="page-header">
