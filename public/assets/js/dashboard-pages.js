@@ -1117,23 +1117,32 @@ async function initProfileFaceEnrollmentSection() {
                     profileFaceEnrollmentState.lastDetectionAt = now;
 
                     const detection = await faceapi
-                        .detectSingleFace(modalVideoEl, new faceapi.TinyFaceDetectorOptions({ inputSize: 256, scoreThreshold: 0.32 }))
+                        .detectSingleFace(modalVideoEl, new faceapi.TinyFaceDetectorOptions({ inputSize: 224, scoreThreshold: 0.18 }))
                         .withFaceLandmarks()
                         .withFaceDescriptor();
 
                     if (!detection) {
                         profileFaceEnrollmentState.missedDetectionFrames += 1;
-                        const trackGraceMs = 900;
-                        const withinTrackGrace = (now - profileFaceEnrollmentState.lastFaceSeenAt) <= trackGraceMs;
+                        const trackGraceMs = 1800;
+                        const hasRecentTrack = profileFaceEnrollmentState.lastFaceSeenAt > 0
+                            && (now - profileFaceEnrollmentState.lastFaceSeenAt) <= trackGraceMs;
+                        const hasShortMissBurst = profileFaceEnrollmentState.lastFaceSeenAt > 0
+                            && profileFaceEnrollmentState.missedDetectionFrames <= 7;
+                        const withinTrackGrace = hasRecentTrack || hasShortMissBurst;
 
                         if (withinTrackGrace && profileFaceEnrollmentState.lastDescriptor) {
                             modalEnrollBtn.disabled = !profileFaceEnrollmentState.livenessVerifiedAt;
+                            const blinkHint = profileFaceEnrollmentState.blinkPhase === 'waiting_open'
+                                ? 'Eyes closing detected... open to complete blink.'
+                                : 'Tracking face while moving...';
                             hudStatsEl.innerHTML = [
-                                `Tracking movement...`,
+                                `Face tracked`,
                                 `Blink ${profileFaceEnrollmentState.blinkCount} | Miss ${profileFaceEnrollmentState.missedDetectionFrames}`,
-                                `Hold camera for reacquire`
+                                blinkHint
                             ].join('<br>');
-                            setStatus('Tracking moving face... keep blinking naturally.');
+                            setStatus(profileFaceEnrollmentState.blinkPhase === 'waiting_open'
+                                ? 'Face tracked during blink. Open eyes to complete.'
+                                : 'Face tracked. Keep blinking naturally.');
                         } else {
                             profileFaceEnrollmentState.lastDescriptor = null;
                             profileFaceEnrollmentState.descriptorSamples = [];
