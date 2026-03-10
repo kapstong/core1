@@ -396,8 +396,12 @@ const profileFaceEnrollmentState = {
     earSmoothed: 0,
     openBaseline: 0,
     blinkPhase: 'waiting_close',
+    blinkPhaseEnteredAt: 0,
     closedFrameStreak: 0,
     openFrameStreak: 0,
+    closePhaseDropPeak: 0,
+    rollingEarMax: 0,
+    rollingDrop: 0,
     calibrationFrames: 0,
     autoEnrollTriggered: false,
     enrollmentInProgress: false
@@ -527,8 +531,12 @@ function cleanupProfileFaceEnrollment() {
     profileFaceEnrollmentState.earSmoothed = 0;
     profileFaceEnrollmentState.openBaseline = 0;
     profileFaceEnrollmentState.blinkPhase = 'waiting_close';
+    profileFaceEnrollmentState.blinkPhaseEnteredAt = 0;
     profileFaceEnrollmentState.closedFrameStreak = 0;
     profileFaceEnrollmentState.openFrameStreak = 0;
+    profileFaceEnrollmentState.closePhaseDropPeak = 0;
+    profileFaceEnrollmentState.rollingEarMax = 0;
+    profileFaceEnrollmentState.rollingDrop = 0;
     profileFaceEnrollmentState.calibrationFrames = 0;
     profileFaceEnrollmentState.autoEnrollTriggered = false;
     profileFaceEnrollmentState.enrollmentInProgress = false;
@@ -886,8 +894,12 @@ async function initProfileFaceEnrollmentSection() {
                 profileFaceEnrollmentState.eyeClosedFrameCount = 0;
                 profileFaceEnrollmentState.blinkInProgress = false;
                 profileFaceEnrollmentState.blinkPhase = 'waiting_close';
+                profileFaceEnrollmentState.blinkPhaseEnteredAt = 0;
                 profileFaceEnrollmentState.closedFrameStreak = 0;
                 profileFaceEnrollmentState.openFrameStreak = 0;
+                profileFaceEnrollmentState.closePhaseDropPeak = 0;
+                profileFaceEnrollmentState.rollingEarMax = 0;
+                profileFaceEnrollmentState.rollingDrop = 0;
                 profileFaceEnrollmentState.autoEnrollTriggered = false;
             }
         } finally {
@@ -1063,8 +1075,12 @@ async function initProfileFaceEnrollmentSection() {
                         modalEnrollBtn.disabled = true;
                         profileFaceEnrollmentState.autoEnrollTriggered = false;
                         profileFaceEnrollmentState.blinkPhase = 'waiting_close';
+                        profileFaceEnrollmentState.blinkPhaseEnteredAt = 0;
                         profileFaceEnrollmentState.closedFrameStreak = 0;
                         profileFaceEnrollmentState.openFrameStreak = 0;
+                        profileFaceEnrollmentState.closePhaseDropPeak = 0;
+                        profileFaceEnrollmentState.rollingEarMax = 0;
+                        profileFaceEnrollmentState.rollingDrop = 0;
                         clearOverlay();
                         setStatus('No face detected. Keep your face centered.');
                     } else {
@@ -1073,60 +1089,88 @@ async function initProfileFaceEnrollmentSection() {
                         const leftEAR = profileEyeAspectRatio(detection.landmarks.getLeftEye());
                         const rightEAR = profileEyeAspectRatio(detection.landmarks.getRightEye());
                         const avgEAR = (leftEAR + rightEAR) / 2;
+                        const dominantEyeEAR = Math.min(leftEAR, rightEAR);
+                        const eyeSignal = (avgEAR * 0.62) + (dominantEyeEAR * 0.38);
                         const minClosedFrames = 1;
                         const minOpenFrames = 1;
-                        const maxHistory = 28;
+                        const maxHistory = 30;
 
                         // Build adaptive baseline from valid-eye frames.
-                        if (avgEAR > 0.08 && avgEAR < 0.5) {
-                            profileFaceEnrollmentState.earHistory.push(avgEAR);
+                        if (eyeSignal > 0.06 && eyeSignal < 0.5) {
+                            profileFaceEnrollmentState.earHistory.push(eyeSignal);
                             if (profileFaceEnrollmentState.earHistory.length > maxHistory) {
                                 profileFaceEnrollmentState.earHistory.shift();
                             }
-                            profileFaceEnrollmentState.earPeak = Math.max(avgEAR, profileFaceEnrollmentState.earPeak * 0.995);
+                            profileFaceEnrollmentState.earPeak = Math.max(eyeSignal, profileFaceEnrollmentState.earPeak * 0.995);
                             profileFaceEnrollmentState.earSmoothed = profileFaceEnrollmentState.earSmoothed
-                                ? (profileFaceEnrollmentState.earSmoothed * 0.65) + (avgEAR * 0.35)
-                                : avgEAR;
+                                ? (profileFaceEnrollmentState.earSmoothed * 0.45) + (eyeSignal * 0.55)
+                                : eyeSignal;
                         }
 
-                        if (profileFaceEnrollmentState.earHistory.length >= 8) {
+                        if (profileFaceEnrollmentState.earHistory.length >= 6) {
                             const sorted = [...profileFaceEnrollmentState.earHistory].sort((a, b) => a - b);
-                            const p80 = sorted[Math.floor(sorted.length * 0.8)];
-                            const openBase = Math.max(p80 || 0.2, profileFaceEnrollmentState.earPeak || 0.2);
-                            const closeAdaptive = openBase * 0.68;
-                            const openAdaptive = openBase * 0.82;
-                            profileFaceEnrollmentState.dynamicBlinkThreshold = Math.max(0.09, Math.min(0.24, closeAdaptive));
-                            profileFaceEnrollmentState.dynamicOpenThreshold = Math.max(profileFaceEnrollmentState.dynamicBlinkThreshold + 0.025, Math.min(0.36, openAdaptive));
-                            if (profileFaceEnrollmentState.calibrationFrames < 36) {
+                            const p85 = sorted[Math.floor((sorted.length - 1) * 0.85)];
+                            const p25 = sorted[Math.floor((sorted.length - 1) * 0.25)];
+                            const openBase = Math.max(p85 || 0.18, profileFaceEnrollmentState.earPeak || 0.18);
+                            const eyeRange = Math.max(0.015, openBase - (p25 || (openBase - 0.015)));
+                            const closeAdaptive = openBase - (eyeRange * 0.62);
+                            const openAdaptive = openBase - (eyeRange * 0.2);
+                            profileFaceEnrollmentState.dynamicBlinkThreshold = Math.max(0.075, Math.min(0.23, closeAdaptive));
+                            profileFaceEnrollmentState.dynamicOpenThreshold = Math.max(profileFaceEnrollmentState.dynamicBlinkThreshold + 0.015, Math.min(0.33, openAdaptive));
+                            if (profileFaceEnrollmentState.calibrationFrames < 22) {
                                 profileFaceEnrollmentState.openBaseline = profileFaceEnrollmentState.openBaseline
                                     ? (profileFaceEnrollmentState.openBaseline * 0.92) + (openBase * 0.08)
                                     : openBase;
                                 profileFaceEnrollmentState.calibrationFrames++;
                             }
                         } else {
-                            profileFaceEnrollmentState.dynamicBlinkThreshold = 0.14;
-                            profileFaceEnrollmentState.dynamicOpenThreshold = 0.19;
+                            profileFaceEnrollmentState.dynamicBlinkThreshold = 0.12;
+                            profileFaceEnrollmentState.dynamicOpenThreshold = 0.165;
                         }
 
                         const blinkCloseThreshold = profileFaceEnrollmentState.dynamicBlinkThreshold;
                         const blinkOpenThreshold = profileFaceEnrollmentState.dynamicOpenThreshold;
-                        const earForDecision = profileFaceEnrollmentState.earSmoothed || avgEAR;
+                        const earForDecision = profileFaceEnrollmentState.earSmoothed || eyeSignal;
+
+                        profileFaceEnrollmentState.rollingEarMax = Math.max(
+                            earForDecision,
+                            profileFaceEnrollmentState.rollingEarMax * 0.993
+                        );
+                        const baselineForDrop = Math.max(
+                            profileFaceEnrollmentState.openBaseline || 0,
+                            profileFaceEnrollmentState.rollingEarMax || 0,
+                            blinkOpenThreshold + 0.01
+                        );
+                        const relativeDrop = baselineForDrop > 0
+                            ? Math.max(0, (baselineForDrop - earForDecision) / baselineForDrop)
+                            : 0;
+                        profileFaceEnrollmentState.rollingDrop = (profileFaceEnrollmentState.rollingDrop * 0.7) + (relativeDrop * 0.3);
+                        const shouldClose = (earForDecision <= blinkCloseThreshold) || (profileFaceEnrollmentState.rollingDrop >= 0.11);
+                        const shouldOpen = (earForDecision >= blinkOpenThreshold) || (profileFaceEnrollmentState.rollingDrop <= 0.055);
 
                         if (profileFaceEnrollmentState.blinkPhase === 'waiting_close') {
-                            if (earForDecision < blinkCloseThreshold) {
+                            if (shouldClose) {
                                 profileFaceEnrollmentState.closedFrameStreak++;
                                 if (profileFaceEnrollmentState.closedFrameStreak >= minClosedFrames) {
                                     profileFaceEnrollmentState.blinkPhase = 'waiting_open';
+                                    profileFaceEnrollmentState.blinkPhaseEnteredAt = now;
+                                    profileFaceEnrollmentState.closePhaseDropPeak = profileFaceEnrollmentState.rollingDrop;
                                     profileFaceEnrollmentState.openFrameStreak = 0;
                                 }
                             } else {
                                 profileFaceEnrollmentState.closedFrameStreak = 0;
                             }
                         } else {
-                            if (earForDecision > blinkOpenThreshold) {
+                            profileFaceEnrollmentState.closePhaseDropPeak = Math.max(
+                                profileFaceEnrollmentState.closePhaseDropPeak,
+                                profileFaceEnrollmentState.rollingDrop
+                            );
+                            if (shouldOpen) {
                                 profileFaceEnrollmentState.openFrameStreak++;
                                 if (profileFaceEnrollmentState.openFrameStreak >= minOpenFrames) {
-                                    if (now > profileFaceEnrollmentState.blinkCooldownUntil) {
+                                    const closeWasMeaningful = profileFaceEnrollmentState.closePhaseDropPeak >= 0.08
+                                        || earForDecision <= (blinkCloseThreshold + 0.01);
+                                    if (closeWasMeaningful && now > profileFaceEnrollmentState.blinkCooldownUntil) {
                                         profileFaceEnrollmentState.blinkCount++;
                                         profileFaceEnrollmentState.blinkCooldownUntil = now + 850;
                                         if (profileFaceEnrollmentState.blinkCount >= 1 && !profileFaceEnrollmentState.livenessVerifiedAt) {
@@ -1134,11 +1178,21 @@ async function initProfileFaceEnrollmentSection() {
                                         }
                                     }
                                     profileFaceEnrollmentState.blinkPhase = 'waiting_close';
+                                    profileFaceEnrollmentState.blinkPhaseEnteredAt = 0;
                                     profileFaceEnrollmentState.closedFrameStreak = 0;
                                     profileFaceEnrollmentState.openFrameStreak = 0;
+                                    profileFaceEnrollmentState.closePhaseDropPeak = 0;
                                 }
-                            } else if (earForDecision < blinkCloseThreshold) {
+                            } else if (shouldClose) {
                                 profileFaceEnrollmentState.openFrameStreak = 0;
+                            }
+
+                            if (profileFaceEnrollmentState.blinkPhaseEnteredAt > 0 && (now - profileFaceEnrollmentState.blinkPhaseEnteredAt) > 1600) {
+                                profileFaceEnrollmentState.blinkPhase = 'waiting_close';
+                                profileFaceEnrollmentState.blinkPhaseEnteredAt = 0;
+                                profileFaceEnrollmentState.closedFrameStreak = 0;
+                                profileFaceEnrollmentState.openFrameStreak = 0;
+                                profileFaceEnrollmentState.closePhaseDropPeak = 0;
                             }
                         }
 
@@ -1151,11 +1205,11 @@ async function initProfileFaceEnrollmentSection() {
                             openThreshold: blinkOpenThreshold
                         });
 
-                        const calibrationPct = Math.max(0, Math.min(100, Math.round((profileFaceEnrollmentState.calibrationFrames / 36) * 100)));
+                        const calibrationPct = Math.max(0, Math.min(100, Math.round((profileFaceEnrollmentState.calibrationFrames / 22) * 100)));
                         hudStatsEl.innerHTML = [
                             `EAR ${earForDecision.toFixed(3)} | Blink ${profileFaceEnrollmentState.blinkCount}`,
                             `Close<${blinkCloseThreshold.toFixed(3)} Open>${blinkOpenThreshold.toFixed(3)}`,
-                            `Phase ${profileFaceEnrollmentState.blinkPhase.replace('_', ' ')} | Cal ${calibrationPct}%`
+                            `Drop ${(profileFaceEnrollmentState.rollingDrop * 100).toFixed(1)}% | ${profileFaceEnrollmentState.blinkPhase.replace('_', ' ')} | Cal ${calibrationPct}%`
                         ].join('<br>');
 
                         if (profileFaceEnrollmentState.livenessVerifiedAt) {
@@ -1223,8 +1277,12 @@ async function initProfileFaceEnrollmentSection() {
             profileFaceEnrollmentState.earSmoothed = 0;
             profileFaceEnrollmentState.openBaseline = 0;
             profileFaceEnrollmentState.blinkPhase = 'waiting_close';
+            profileFaceEnrollmentState.blinkPhaseEnteredAt = 0;
             profileFaceEnrollmentState.closedFrameStreak = 0;
             profileFaceEnrollmentState.openFrameStreak = 0;
+            profileFaceEnrollmentState.closePhaseDropPeak = 0;
+            profileFaceEnrollmentState.rollingEarMax = 0;
+            profileFaceEnrollmentState.rollingDrop = 0;
             profileFaceEnrollmentState.calibrationFrames = 0;
             profileFaceEnrollmentState.autoEnrollTriggered = false;
             profileFaceEnrollmentState.enrollmentInProgress = false;
@@ -1300,8 +1358,12 @@ async function initProfileFaceEnrollmentSection() {
             profileFaceEnrollmentState.earSmoothed = 0;
             profileFaceEnrollmentState.openBaseline = 0;
             profileFaceEnrollmentState.blinkPhase = 'waiting_close';
+            profileFaceEnrollmentState.blinkPhaseEnteredAt = 0;
             profileFaceEnrollmentState.closedFrameStreak = 0;
             profileFaceEnrollmentState.openFrameStreak = 0;
+            profileFaceEnrollmentState.closePhaseDropPeak = 0;
+            profileFaceEnrollmentState.rollingEarMax = 0;
+            profileFaceEnrollmentState.rollingDrop = 0;
             profileFaceEnrollmentState.calibrationFrames = 0;
             profileFaceEnrollmentState.autoEnrollTriggered = false;
             profileFaceEnrollmentState.enrollmentInProgress = false;
