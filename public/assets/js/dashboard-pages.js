@@ -1106,6 +1106,11 @@ async function initProfileFaceEnrollmentSection() {
         return;
     }
 
+    // Mount modal at document root to prevent z-index/stacking issues on small screens.
+    if (modalEl.parentElement !== document.body) {
+        document.body.appendChild(modalEl);
+    }
+
     const modalInstance = window.bootstrap ? bootstrap.Modal.getOrCreateInstance(modalEl) : null;
     const overlayCtx = modalOverlayEl.getContext('2d');
     let enrollmentSaved = false;

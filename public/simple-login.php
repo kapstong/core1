@@ -1317,6 +1317,12 @@
         const faceChipBlink = document.getElementById('faceChipBlink');
         const faceChipVerify = document.getElementById('faceChipVerify');
         const faceOverlayCtx = faceOverlay ? faceOverlay.getContext('2d') : null;
+
+        // Prevent modal/backdrop layering issues caused by container stacking contexts.
+        if (faceScannerModalEl && faceScannerModalEl.parentElement !== document.body) {
+            document.body.appendChild(faceScannerModalEl);
+        }
+
         const faceScannerModal = (window.bootstrap && faceScannerModalEl)
             ? bootstrap.Modal.getOrCreateInstance(faceScannerModalEl)
             : null;
