@@ -403,6 +403,7 @@ const profileFaceEnrollmentState = {
     rollingEarMax: 0,
     rollingDrop: 0,
     calibrationFrames: 0,
+    lightBoostEnabled: true,
     autoEnrollTriggered: false,
     enrollmentInProgress: false
 };
@@ -538,6 +539,7 @@ function cleanupProfileFaceEnrollment() {
     profileFaceEnrollmentState.rollingEarMax = 0;
     profileFaceEnrollmentState.rollingDrop = 0;
     profileFaceEnrollmentState.calibrationFrames = 0;
+    profileFaceEnrollmentState.lightBoostEnabled = true;
     profileFaceEnrollmentState.autoEnrollTriggered = false;
     profileFaceEnrollmentState.enrollmentInProgress = false;
 }
@@ -668,6 +670,7 @@ async function loadProfilePage() {
                             <div class="modal-body">
                                 <div style="position: relative; width: 100%; height: min(70vh, 560px); border-radius: 14px; overflow: hidden; border: 1px solid rgba(0,255,188,0.22); background: radial-gradient(circle at 20% 15%, rgba(0,170,255,0.14), rgba(7,18,44,0.95)); box-shadow: inset 0 0 60px rgba(0,0,0,0.45), 0 16px 40px rgba(0,0,0,0.35);">
                                     <video id="profile-face-video-modal" autoplay muted playsinline style="width: 100%; height: 100%; object-fit: cover;"></video>
+                                    <div id="profile-face-screen-fill" style="position: absolute; inset: 0; pointer-events: none; mix-blend-mode: screen; background: radial-gradient(circle at center, rgba(255,255,255,0.06) 0%, rgba(255,255,255,0.14) 48%, rgba(255,255,255,0.28) 100%); opacity: 0.65; transition: opacity 180ms ease;"></div>
                                     <canvas id="profile-face-overlay-modal" style="position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none;"></canvas>
                                     <div id="profile-face-hud-stats" style="position: absolute; top: 12px; left: 12px; font-size: 0.78rem; line-height: 1.3; letter-spacing: 0.06em; text-transform: uppercase; color: #8cf9ff; background: rgba(5,16,36,0.64); border: 1px solid rgba(90,245,255,0.4); border-radius: 8px; padding: 8px 10px; backdrop-filter: blur(4px);">
                                         Initializing scanner...
@@ -679,6 +682,9 @@ async function loadProfilePage() {
                                 <small id="profile-face-status-modal" class="d-block mt-2 text-muted">Waiting for camera...</small>
                             </div>
                             <div class="modal-footer" style="border-top: 1px solid var(--border-color);">
+                                <button class="btn btn-outline-warning me-auto" type="button" id="profile-face-light-boost-btn">
+                                    <i class="fas fa-sun me-2"></i>Low-Light Boost: ON
+                                </button>
                                 <button class="btn btn-primary" type="button" id="profile-face-enroll-btn-modal" disabled>
                                     <i class="fas fa-id-badge me-2"></i>Enroll / Update Face
                                 </button>
@@ -771,12 +777,14 @@ async function initProfileFaceEnrollmentSection() {
     const placeholderEl = document.getElementById('profile-face-video-placeholder');
     const modalEl = document.getElementById('faceEnrollmentModal');
     const modalVideoEl = document.getElementById('profile-face-video-modal');
+    const modalScreenFillEl = document.getElementById('profile-face-screen-fill');
     const modalOverlayEl = document.getElementById('profile-face-overlay-modal');
     const hudStatsEl = document.getElementById('profile-face-hud-stats');
     const modalPlaceholderEl = document.getElementById('profile-face-video-placeholder-modal');
     const modalStatusEl = document.getElementById('profile-face-status-modal');
+    const lightBoostBtn = document.getElementById('profile-face-light-boost-btn');
 
-    if (!badgeEl || !statusEl || !startBtn || !modalEnrollBtn || !removeBtn || !videoEl || !placeholderEl || !modalEl || !modalVideoEl || !modalOverlayEl || !hudStatsEl || !modalPlaceholderEl || !modalStatusEl) {
+    if (!badgeEl || !statusEl || !startBtn || !modalEnrollBtn || !removeBtn || !videoEl || !placeholderEl || !modalEl || !modalVideoEl || !modalScreenFillEl || !modalOverlayEl || !hudStatsEl || !modalPlaceholderEl || !modalStatusEl || !lightBoostBtn) {
         return;
     }
 
@@ -790,6 +798,61 @@ async function initProfileFaceEnrollmentSection() {
         modalStatusEl.textContent = text;
     };
 
+    const applyLightBoostUI = (enabled) => {
+        profileFaceEnrollmentState.lightBoostEnabled = !!enabled;
+        modalVideoEl.style.filter = enabled
+            ? 'brightness(1.34) contrast(1.16) saturate(1.06)'
+            : 'brightness(1.00) contrast(1.00) saturate(1.00)';
+        modalScreenFillEl.style.opacity = enabled ? '0.72' : '0.0';
+        lightBoostBtn.className = enabled ? 'btn btn-warning me-auto' : 'btn btn-outline-warning me-auto';
+        lightBoostBtn.innerHTML = enabled
+            ? '<i class="fas fa-sun me-2"></i>Low-Light Boost: ON'
+            : '<i class="fas fa-sun me-2"></i>Low-Light Boost: OFF';
+    };
+
+    const applyCameraLowLightBoost = async (enabled) => {
+        const track = profileFaceEnrollmentState.stream?.getVideoTracks?.()[0];
+        if (!track || typeof track.getCapabilities !== 'function' || typeof track.applyConstraints !== 'function') {
+            return;
+        }
+
+        try {
+            const caps = track.getCapabilities() || {};
+            const advanced = [];
+
+            if (enabled) {
+                if (caps.exposureMode && Array.isArray(caps.exposureMode) && caps.exposureMode.includes('continuous')) {
+                    advanced.push({ exposureMode: 'continuous' });
+                }
+                if (caps.whiteBalanceMode && Array.isArray(caps.whiteBalanceMode) && caps.whiteBalanceMode.includes('continuous')) {
+                    advanced.push({ whiteBalanceMode: 'continuous' });
+                }
+                if (caps.brightness && typeof caps.brightness.max === 'number') {
+                    advanced.push({ brightness: caps.brightness.max });
+                }
+                if (caps.exposureCompensation && typeof caps.exposureCompensation.max === 'number') {
+                    advanced.push({ exposureCompensation: caps.exposureCompensation.max });
+                }
+                if (caps.contrast && typeof caps.contrast.max === 'number' && typeof caps.contrast.min === 'number') {
+                    advanced.push({ contrast: caps.contrast.min + ((caps.contrast.max - caps.contrast.min) * 0.85) });
+                }
+                if (typeof caps.torch === 'boolean' && caps.torch) {
+                    advanced.push({ torch: true });
+                }
+            } else {
+                if (typeof caps.torch === 'boolean' && caps.torch) {
+                    advanced.push({ torch: false });
+                }
+            }
+
+            if (advanced.length > 0) {
+                await track.applyConstraints({ advanced });
+            }
+        } catch (error) {
+            // Capability support varies widely across cameras/browser engines.
+        }
+    };
+
     const renderBadge = (isEnabled, enrolledAt = null) => {
         if (isEnabled) {
             const dateText = enrolledAt ? ` (Last: ${new Date(enrolledAt).toLocaleString()})` : '';
@@ -798,6 +861,8 @@ async function initProfileFaceEnrollmentSection() {
             badgeEl.innerHTML = `<span class="badge bg-secondary"><i class="fas fa-circle-xmark me-1"></i>Not Enrolled</span>`;
         }
     };
+
+    applyLightBoostUI(true);
 
     const loadFaceStatus = async () => {
         try {
@@ -1288,6 +1353,8 @@ async function initProfileFaceEnrollmentSection() {
             profileFaceEnrollmentState.enrollmentInProgress = false;
             modalEnrollBtn.disabled = true;
             hudStatsEl.textContent = 'Calibrating eye pattern...';
+            applyLightBoostUI(true);
+            await applyCameraLowLightBoost(true);
 
             setStatus('Camera started. Loading face detector...');
             await ensureProfileFaceModels();
@@ -1302,6 +1369,15 @@ async function initProfileFaceEnrollmentSection() {
 
     modalEnrollBtn.addEventListener('click', async () => {
         await performFaceEnrollment(false);
+    });
+
+    lightBoostBtn.addEventListener('click', async () => {
+        const next = !profileFaceEnrollmentState.lightBoostEnabled;
+        applyLightBoostUI(next);
+        await applyCameraLowLightBoost(next);
+        setStatus(next
+            ? 'Low-light boost enabled for better face capture.'
+            : 'Low-light boost disabled.');
     });
 
     removeBtn.addEventListener('click', async () => {
