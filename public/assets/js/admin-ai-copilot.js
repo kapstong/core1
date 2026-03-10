@@ -78,9 +78,6 @@
                 <button type="button" class="admin-ai-chip" data-ai-mode="history">Historical Trends</button>
                 <button type="button" class="admin-ai-chip" data-ai-mode="forecast">Trend Forecast</button>
                 <button type="button" class="admin-ai-chip" data-ai-mode="reorder">Reorder Suggestions</button>
-                <button type="button" class="admin-ai-chip" data-ai-mode="anomalies">Anomaly Scan</button>
-                <button type="button" class="admin-ai-chip" data-ai-mode="memory">Session Memory</button>
-                <button type="button" class="admin-ai-chip" data-ai-mode="evaluate">Self Check</button>
             </div>
             <div class="admin-ai-disclosure">Every assistant response is marked with source and can be approved/rejected for audit logging.</div>
 
@@ -420,15 +417,6 @@
         if (mode === 'reorder') {
             return renderReorder(data.suggestions || []);
         }
-        if (mode === 'anomalies') {
-            return renderAnomalies(data.anomalies || {});
-        }
-        if (mode === 'memory') {
-            return renderMemory(data.memory || {});
-        }
-        if (mode === 'evaluate') {
-            return renderEvaluation(data.evaluation || {});
-        }
         return `<div>${escapeHtml(JSON.stringify(data))}</div>`;
     }
 
@@ -537,87 +525,6 @@
                             <th>Date</th>
                             <th>Orders</th>
                             <th>Revenue</th>
-                        </tr>
-                    </thead>
-                    <tbody>${rows}</tbody>
-                </table>
-            </div>
-        `;
-    }
-
-    function renderAnomalies(anomalies) {
-        const items = Array.isArray(anomalies.items) ? anomalies.items : [];
-        const counts = anomalies.counts || {};
-        if (items.length === 0) {
-            return '<div class="admin-ai-block-title">Anomaly Scan</div><p>No major anomalies detected.</p>';
-        }
-
-        const top = items.slice(0, 8);
-        const list = top.map((item) => `
-            <li>
-                <strong>[${escapeHtml((item.severity || 'low').toUpperCase())}] ${escapeHtml(item.title || '')}</strong><br>
-                <span>${escapeHtml(item.detail || '')}</span>
-            </li>
-        `).join('');
-
-        return `
-            <div class="admin-ai-block-title">Anomaly Scan</div>
-            <p>Critical: ${Number(counts.critical || 0)} | High: ${Number(counts.high || 0)} | Medium: ${Number(counts.medium || 0)}</p>
-            <ul class="admin-ai-anomaly-list">${list}</ul>
-        `;
-    }
-
-    function renderMemory(memory) {
-        const rows = Array.isArray(memory.recent_messages) ? memory.recent_messages.slice(-6).reverse() : [];
-        const approvals = Array.isArray(memory.recent_approvals) ? memory.recent_approvals.slice(-4).reverse() : [];
-        const pending = Boolean(memory.pending_clarification);
-        const roleLabel = memory.user_profile?.role_label || memory.user_profile?.role || 'n/a';
-        const items = rows.map((row) => `
-            <li>
-                <strong>${escapeHtml(row.intent || 'general')}</strong> (${escapeHtml(row.language || 'en')})
-                <br>
-                <span>${escapeHtml(row.message || '')}</span>
-            </li>
-        `).join('');
-        const approvalItems = approvals.map((row) => `
-            <li>
-                <strong>${escapeHtml(row.decision || 'approved').toUpperCase()}</strong>
-                response ${escapeHtml(row.response_id || '')}
-                (${escapeHtml(row.response_source || 'rules')})
-            </li>
-        `).join('');
-
-        return `
-            <div class="admin-ai-block-title">Session Memory</div>
-            <p class="admin-ai-meta">Last intent: ${escapeHtml(memory.last_intent || 'n/a')} | Last language: ${escapeHtml(memory.last_language || 'n/a')} | Role: ${escapeHtml(roleLabel)} | Pending clarification: ${pending ? 'yes' : 'no'} | Feedback: ${Number(memory.feedback_count || 0)} | Approvals: ${Number(memory.approvals_count || 0)}</p>
-            ${items ? `<ul class="admin-ai-anomaly-list">${items}</ul>` : '<p>No prior turns recorded in this session.</p>'}
-            ${approvalItems ? `<div class="admin-ai-meta" style="margin-top:8px;">Recent approvals</div><ul class="admin-ai-anomaly-list">${approvalItems}</ul>` : ''}
-        `;
-    }
-
-    function renderEvaluation(evaluation) {
-        const summary = evaluation.summary || {};
-        const cases = Array.isArray(evaluation.cases) ? evaluation.cases : [];
-        const rows = cases.map((item) => `
-            <tr>
-                <td>${escapeHtml(item.input || '')}</td>
-                <td>${escapeHtml(item.actual_intent || '')}</td>
-                <td>${escapeHtml(item.router_strategy || '')}</td>
-                <td>${item.passed ? 'PASS' : 'FAIL'}</td>
-            </tr>
-        `).join('');
-
-        return `
-            <div class="admin-ai-block-title">Copilot Self Check</div>
-            <p>Score: ${Number(summary.score_pct || 0).toFixed(1)}% (${Number(summary.passed || 0)} / ${Number(summary.total || 0)})</p>
-            <div class="admin-ai-table-wrap">
-                <table class="admin-ai-table">
-                    <thead>
-                        <tr>
-                            <th>Input</th>
-                            <th>Intent</th>
-                            <th>Router</th>
-                            <th>Result</th>
                         </tr>
                     </thead>
                     <tbody>${rows}</tbody>
