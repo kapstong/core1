@@ -393,6 +393,12 @@ const profileFaceEnrollmentState = {
     earPeak: 0,
     blinkCooldownUntil: 0,
     scanLinePhase: 0,
+    earSmoothed: 0,
+    openBaseline: 0,
+    blinkPhase: 'waiting_close',
+    closedFrameStreak: 0,
+    openFrameStreak: 0,
+    calibrationFrames: 0,
     autoEnrollTriggered: false,
     enrollmentInProgress: false
 };
@@ -518,6 +524,12 @@ function cleanupProfileFaceEnrollment() {
     profileFaceEnrollmentState.earPeak = 0;
     profileFaceEnrollmentState.blinkCooldownUntil = 0;
     profileFaceEnrollmentState.scanLinePhase = 0;
+    profileFaceEnrollmentState.earSmoothed = 0;
+    profileFaceEnrollmentState.openBaseline = 0;
+    profileFaceEnrollmentState.blinkPhase = 'waiting_close';
+    profileFaceEnrollmentState.closedFrameStreak = 0;
+    profileFaceEnrollmentState.openFrameStreak = 0;
+    profileFaceEnrollmentState.calibrationFrames = 0;
     profileFaceEnrollmentState.autoEnrollTriggered = false;
     profileFaceEnrollmentState.enrollmentInProgress = false;
 }
@@ -646,9 +658,12 @@ async function loadProfilePage() {
                                 <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
                             </div>
                             <div class="modal-body">
-                                <div style="position: relative; width: 100%; height: min(70vh, 560px); border-radius: 12px; overflow: hidden; border: 1px solid var(--border-color); background: rgba(0,0,0,0.3);">
+                                <div style="position: relative; width: 100%; height: min(70vh, 560px); border-radius: 14px; overflow: hidden; border: 1px solid rgba(0,255,188,0.22); background: radial-gradient(circle at 20% 15%, rgba(0,170,255,0.14), rgba(7,18,44,0.95)); box-shadow: inset 0 0 60px rgba(0,0,0,0.45), 0 16px 40px rgba(0,0,0,0.35);">
                                     <video id="profile-face-video-modal" autoplay muted playsinline style="width: 100%; height: 100%; object-fit: cover;"></video>
                                     <canvas id="profile-face-overlay-modal" style="position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none;"></canvas>
+                                    <div id="profile-face-hud-stats" style="position: absolute; top: 12px; left: 12px; font-size: 0.78rem; line-height: 1.3; letter-spacing: 0.06em; text-transform: uppercase; color: #8cf9ff; background: rgba(5,16,36,0.64); border: 1px solid rgba(90,245,255,0.4); border-radius: 8px; padding: 8px 10px; backdrop-filter: blur(4px);">
+                                        Initializing scanner...
+                                    </div>
                                     <div id="profile-face-video-placeholder-modal" style="position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; color: var(--text-muted); font-size: 1rem; text-align: center; padding: 1rem;">
                                         Camera preview will appear here. Keep your face centered and blink once.
                                     </div>
@@ -749,10 +764,11 @@ async function initProfileFaceEnrollmentSection() {
     const modalEl = document.getElementById('faceEnrollmentModal');
     const modalVideoEl = document.getElementById('profile-face-video-modal');
     const modalOverlayEl = document.getElementById('profile-face-overlay-modal');
+    const hudStatsEl = document.getElementById('profile-face-hud-stats');
     const modalPlaceholderEl = document.getElementById('profile-face-video-placeholder-modal');
     const modalStatusEl = document.getElementById('profile-face-status-modal');
 
-    if (!badgeEl || !statusEl || !startBtn || !modalEnrollBtn || !removeBtn || !videoEl || !placeholderEl || !modalEl || !modalVideoEl || !modalOverlayEl || !modalPlaceholderEl || !modalStatusEl) {
+    if (!badgeEl || !statusEl || !startBtn || !modalEnrollBtn || !removeBtn || !videoEl || !placeholderEl || !modalEl || !modalVideoEl || !modalOverlayEl || !hudStatsEl || !modalPlaceholderEl || !modalStatusEl) {
         return;
     }
 
@@ -869,6 +885,9 @@ async function initProfileFaceEnrollmentSection() {
                 profileFaceEnrollmentState.blinkCount = 0;
                 profileFaceEnrollmentState.eyeClosedFrameCount = 0;
                 profileFaceEnrollmentState.blinkInProgress = false;
+                profileFaceEnrollmentState.blinkPhase = 'waiting_close';
+                profileFaceEnrollmentState.closedFrameStreak = 0;
+                profileFaceEnrollmentState.openFrameStreak = 0;
                 profileFaceEnrollmentState.autoEnrollTriggered = false;
             }
         } finally {
@@ -897,22 +916,78 @@ async function initProfileFaceEnrollmentSection() {
         if (!overlayCtx) return;
         resizeOverlay();
         overlayCtx.clearRect(0, 0, modalOverlayEl.width, modalOverlayEl.height);
+        hudStatsEl.textContent = 'Waiting for face...';
     };
 
-    const drawPolyline = (points, color, width = 2, closed = false) => {
+    const drawPolyline = (points, color, width = 2, closed = false, alpha = 1) => {
         if (!overlayCtx || !points || points.length < 2) return;
         overlayCtx.beginPath();
         overlayCtx.strokeStyle = color;
+        overlayCtx.globalAlpha = alpha;
         overlayCtx.lineWidth = width;
+        overlayCtx.lineJoin = 'round';
+        overlayCtx.lineCap = 'round';
         overlayCtx.moveTo(points[0].x, points[0].y);
         for (let i = 1; i < points.length; i++) {
             overlayCtx.lineTo(points[i].x, points[i].y);
         }
         if (closed) overlayCtx.closePath();
         overlayCtx.stroke();
+        overlayCtx.globalAlpha = 1;
     };
 
-    const drawLandmarkOverlay = (detection) => {
+    const drawGlowPolyline = (points, color, width = 2, closed = false) => {
+        if (!overlayCtx || !points || points.length < 2) return;
+        overlayCtx.save();
+        overlayCtx.shadowColor = color;
+        overlayCtx.shadowBlur = 12;
+        drawPolyline(points, color, width + 0.8, closed, 0.42);
+        overlayCtx.restore();
+        drawPolyline(points, color, width, closed, 0.95);
+    };
+
+    const drawCornerBrackets = (box, color) => {
+        if (!overlayCtx || !box) return;
+        const len = Math.min(26, Math.max(14, box.width * 0.1));
+        overlayCtx.strokeStyle = color;
+        overlayCtx.lineWidth = 2.6;
+        overlayCtx.beginPath();
+        overlayCtx.moveTo(box.x, box.y + len);
+        overlayCtx.lineTo(box.x, box.y);
+        overlayCtx.lineTo(box.x + len, box.y);
+        overlayCtx.moveTo(box.x + box.width - len, box.y);
+        overlayCtx.lineTo(box.x + box.width, box.y);
+        overlayCtx.lineTo(box.x + box.width, box.y + len);
+        overlayCtx.moveTo(box.x + box.width, box.y + box.height - len);
+        overlayCtx.lineTo(box.x + box.width, box.y + box.height);
+        overlayCtx.lineTo(box.x + box.width - len, box.y + box.height);
+        overlayCtx.moveTo(box.x + len, box.y + box.height);
+        overlayCtx.lineTo(box.x, box.y + box.height);
+        overlayCtx.lineTo(box.x, box.y + box.height - len);
+        overlayCtx.stroke();
+    };
+
+    const drawEyeMeter = (eyePoints, ratio, closeThreshold, openThreshold) => {
+        if (!overlayCtx || !eyePoints || !eyePoints.length) return;
+        const centerX = eyePoints.reduce((sum, p) => sum + p.x, 0) / eyePoints.length;
+        const topY = Math.min(...eyePoints.map(p => p.y)) - 14;
+        const meterWidth = 48;
+        const meterHeight = 5;
+        const progress = Math.max(0, Math.min(1, (ratio - closeThreshold) / Math.max(0.0001, openThreshold - closeThreshold)));
+        overlayCtx.fillStyle = 'rgba(12, 26, 48, 0.72)';
+        overlayCtx.fillRect(centerX - meterWidth / 2, topY, meterWidth, meterHeight);
+        const gradient = overlayCtx.createLinearGradient(centerX - meterWidth / 2, topY, centerX + meterWidth / 2, topY);
+        gradient.addColorStop(0, '#ff5f7a');
+        gradient.addColorStop(0.55, '#ffd166');
+        gradient.addColorStop(1, '#41ff9b');
+        overlayCtx.fillStyle = gradient;
+        overlayCtx.fillRect(centerX - meterWidth / 2, topY, meterWidth * progress, meterHeight);
+        overlayCtx.strokeStyle = 'rgba(162, 241, 255, 0.45)';
+        overlayCtx.lineWidth = 1;
+        overlayCtx.strokeRect(centerX - meterWidth / 2, topY, meterWidth, meterHeight);
+    };
+
+    const drawLandmarkOverlay = (detection, liveMetrics = {}) => {
         if (!overlayCtx || !detection) return;
         resizeOverlay();
         const width = modalOverlayEl.width;
@@ -926,26 +1001,47 @@ async function initProfileFaceEnrollmentSection() {
         const lm = resized.landmarks;
         const box = resized.detection.box;
 
-        drawPolyline(lm.getLeftEye(), '#00d1ff', 2, true);
-        drawPolyline(lm.getRightEye(), '#00d1ff', 2, true);
-        drawPolyline(lm.getNose(), '#49ff9f', 2, false);
-        drawPolyline(lm.getMouth(), '#ffc857', 2, true);
-        drawPolyline(lm.getJawOutline(), 'rgba(255,255,255,0.35)', 1.5, false);
-        drawPolyline([lm.getLeftEyeBrow()[0], ...lm.getLeftEyeBrow()], 'rgba(0,209,255,0.8)', 1.5, false);
-        drawPolyline([lm.getRightEyeBrow()[0], ...lm.getRightEyeBrow()], 'rgba(0,209,255,0.8)', 1.5, false);
-
-        overlayCtx.strokeStyle = 'rgba(73,255,159,0.95)';
-        overlayCtx.lineWidth = 2;
+        const frameGradient = overlayCtx.createLinearGradient(box.x, box.y, box.x + box.width, box.y + box.height);
+        frameGradient.addColorStop(0, 'rgba(66, 234, 255, 0.95)');
+        frameGradient.addColorStop(1, 'rgba(75, 255, 176, 0.95)');
+        overlayCtx.strokeStyle = frameGradient;
+        overlayCtx.lineWidth = 1.6;
         overlayCtx.strokeRect(box.x, box.y, box.width, box.height);
+        drawCornerBrackets(box, '#73ffe7');
+
+        // subtle target grid
+        overlayCtx.strokeStyle = 'rgba(142, 233, 255, 0.12)';
+        overlayCtx.lineWidth = 1;
+        for (let i = 1; i < 4; i++) {
+            const x = box.x + (box.width * i / 4);
+            const y = box.y + (box.height * i / 4);
+            overlayCtx.beginPath();
+            overlayCtx.moveTo(x, box.y);
+            overlayCtx.lineTo(x, box.y + box.height);
+            overlayCtx.moveTo(box.x, y);
+            overlayCtx.lineTo(box.x + box.width, y);
+            overlayCtx.stroke();
+        }
+
+        drawGlowPolyline(lm.getLeftEye(), '#00e5ff', 2.2, true);
+        drawGlowPolyline(lm.getRightEye(), '#00e5ff', 2.2, true);
+        drawGlowPolyline(lm.getNose(), '#45ffb5', 2.1, false);
+        drawGlowPolyline(lm.getMouth(), '#ffd166', 2.1, true);
+        drawPolyline(lm.getJawOutline(), 'rgba(255,255,255,0.42)', 1.5, false);
+        drawPolyline(lm.getLeftEyeBrow(), 'rgba(87, 227, 255, 0.85)', 1.8, false);
+        drawPolyline(lm.getRightEyeBrow(), 'rgba(87, 227, 255, 0.85)', 1.8, false);
 
         profileFaceEnrollmentState.scanLinePhase += 0.18;
         const scanY = box.y + ((Math.sin(profileFaceEnrollmentState.scanLinePhase) + 1) * 0.5 * box.height);
         overlayCtx.beginPath();
-        overlayCtx.strokeStyle = 'rgba(73,255,159,0.85)';
-        overlayCtx.lineWidth = 2;
+        overlayCtx.strokeStyle = 'rgba(73,255,159,0.88)';
+        overlayCtx.lineWidth = 2.2;
         overlayCtx.moveTo(box.x, scanY);
         overlayCtx.lineTo(box.x + box.width, scanY);
         overlayCtx.stroke();
+
+        drawEyeMeter(lm.getLeftEye(), liveMetrics.avgEAR || 0, liveMetrics.closeThreshold || 0.14, liveMetrics.openThreshold || 0.2);
+        drawEyeMeter(lm.getRightEye(), liveMetrics.avgEAR || 0, liveMetrics.closeThreshold || 0.14, liveMetrics.openThreshold || 0.2);
     };
 
     const runDetectionLoop = async () => {
@@ -966,16 +1062,19 @@ async function initProfileFaceEnrollmentSection() {
                         profileFaceEnrollmentState.lastDescriptor = null;
                         modalEnrollBtn.disabled = true;
                         profileFaceEnrollmentState.autoEnrollTriggered = false;
+                        profileFaceEnrollmentState.blinkPhase = 'waiting_close';
+                        profileFaceEnrollmentState.closedFrameStreak = 0;
+                        profileFaceEnrollmentState.openFrameStreak = 0;
                         clearOverlay();
                         setStatus('No face detected. Keep your face centered.');
                     } else {
-                        drawLandmarkOverlay(detection);
                         profileFaceEnrollmentState.lastDescriptor = Array.from(detection.descriptor);
 
                         const leftEAR = profileEyeAspectRatio(detection.landmarks.getLeftEye());
                         const rightEAR = profileEyeAspectRatio(detection.landmarks.getRightEye());
                         const avgEAR = (leftEAR + rightEAR) / 2;
                         const minClosedFrames = 1;
+                        const minOpenFrames = 1;
                         const maxHistory = 28;
 
                         // Build adaptive baseline from valid-eye frames.
@@ -985,6 +1084,9 @@ async function initProfileFaceEnrollmentSection() {
                                 profileFaceEnrollmentState.earHistory.shift();
                             }
                             profileFaceEnrollmentState.earPeak = Math.max(avgEAR, profileFaceEnrollmentState.earPeak * 0.995);
+                            profileFaceEnrollmentState.earSmoothed = profileFaceEnrollmentState.earSmoothed
+                                ? (profileFaceEnrollmentState.earSmoothed * 0.65) + (avgEAR * 0.35)
+                                : avgEAR;
                         }
 
                         if (profileFaceEnrollmentState.earHistory.length >= 8) {
@@ -995,6 +1097,12 @@ async function initProfileFaceEnrollmentSection() {
                             const openAdaptive = openBase * 0.82;
                             profileFaceEnrollmentState.dynamicBlinkThreshold = Math.max(0.09, Math.min(0.24, closeAdaptive));
                             profileFaceEnrollmentState.dynamicOpenThreshold = Math.max(profileFaceEnrollmentState.dynamicBlinkThreshold + 0.025, Math.min(0.36, openAdaptive));
+                            if (profileFaceEnrollmentState.calibrationFrames < 36) {
+                                profileFaceEnrollmentState.openBaseline = profileFaceEnrollmentState.openBaseline
+                                    ? (profileFaceEnrollmentState.openBaseline * 0.92) + (openBase * 0.08)
+                                    : openBase;
+                                profileFaceEnrollmentState.calibrationFrames++;
+                            }
                         } else {
                             profileFaceEnrollmentState.dynamicBlinkThreshold = 0.14;
                             profileFaceEnrollmentState.dynamicOpenThreshold = 0.19;
@@ -1002,23 +1110,53 @@ async function initProfileFaceEnrollmentSection() {
 
                         const blinkCloseThreshold = profileFaceEnrollmentState.dynamicBlinkThreshold;
                         const blinkOpenThreshold = profileFaceEnrollmentState.dynamicOpenThreshold;
+                        const earForDecision = profileFaceEnrollmentState.earSmoothed || avgEAR;
 
-                        if (avgEAR < blinkCloseThreshold) {
-                            profileFaceEnrollmentState.eyeClosedFrameCount++;
-                            profileFaceEnrollmentState.blinkInProgress = true;
-                        } else if (profileFaceEnrollmentState.blinkInProgress && avgEAR > blinkOpenThreshold) {
-                            if (profileFaceEnrollmentState.eyeClosedFrameCount >= minClosedFrames && now > profileFaceEnrollmentState.blinkCooldownUntil) {
-                                profileFaceEnrollmentState.blinkCount++;
-                                profileFaceEnrollmentState.blinkCooldownUntil = now + 900;
-                                if (profileFaceEnrollmentState.blinkCount >= 1 && !profileFaceEnrollmentState.livenessVerifiedAt) {
-                                    profileFaceEnrollmentState.livenessVerifiedAt = new Date().toISOString();
+                        if (profileFaceEnrollmentState.blinkPhase === 'waiting_close') {
+                            if (earForDecision < blinkCloseThreshold) {
+                                profileFaceEnrollmentState.closedFrameStreak++;
+                                if (profileFaceEnrollmentState.closedFrameStreak >= minClosedFrames) {
+                                    profileFaceEnrollmentState.blinkPhase = 'waiting_open';
+                                    profileFaceEnrollmentState.openFrameStreak = 0;
                                 }
+                            } else {
+                                profileFaceEnrollmentState.closedFrameStreak = 0;
                             }
-                            profileFaceEnrollmentState.eyeClosedFrameCount = 0;
-                            profileFaceEnrollmentState.blinkInProgress = false;
                         } else {
-                            profileFaceEnrollmentState.eyeClosedFrameCount = 0;
+                            if (earForDecision > blinkOpenThreshold) {
+                                profileFaceEnrollmentState.openFrameStreak++;
+                                if (profileFaceEnrollmentState.openFrameStreak >= minOpenFrames) {
+                                    if (now > profileFaceEnrollmentState.blinkCooldownUntil) {
+                                        profileFaceEnrollmentState.blinkCount++;
+                                        profileFaceEnrollmentState.blinkCooldownUntil = now + 850;
+                                        if (profileFaceEnrollmentState.blinkCount >= 1 && !profileFaceEnrollmentState.livenessVerifiedAt) {
+                                            profileFaceEnrollmentState.livenessVerifiedAt = new Date().toISOString();
+                                        }
+                                    }
+                                    profileFaceEnrollmentState.blinkPhase = 'waiting_close';
+                                    profileFaceEnrollmentState.closedFrameStreak = 0;
+                                    profileFaceEnrollmentState.openFrameStreak = 0;
+                                }
+                            } else if (earForDecision < blinkCloseThreshold) {
+                                profileFaceEnrollmentState.openFrameStreak = 0;
+                            }
                         }
+
+                        profileFaceEnrollmentState.eyeClosedFrameCount = profileFaceEnrollmentState.closedFrameStreak;
+                        profileFaceEnrollmentState.blinkInProgress = profileFaceEnrollmentState.blinkPhase === 'waiting_open';
+
+                        drawLandmarkOverlay(detection, {
+                            avgEAR: earForDecision,
+                            closeThreshold: blinkCloseThreshold,
+                            openThreshold: blinkOpenThreshold
+                        });
+
+                        const calibrationPct = Math.max(0, Math.min(100, Math.round((profileFaceEnrollmentState.calibrationFrames / 36) * 100)));
+                        hudStatsEl.innerHTML = [
+                            `EAR ${earForDecision.toFixed(3)} | Blink ${profileFaceEnrollmentState.blinkCount}`,
+                            `Close<${blinkCloseThreshold.toFixed(3)} Open>${blinkOpenThreshold.toFixed(3)}`,
+                            `Phase ${profileFaceEnrollmentState.blinkPhase.replace('_', ' ')} | Cal ${calibrationPct}%`
+                        ].join('<br>');
 
                         if (profileFaceEnrollmentState.livenessVerifiedAt) {
                             modalEnrollBtn.disabled = false;
@@ -1031,7 +1169,7 @@ async function initProfileFaceEnrollmentSection() {
                             }
                         } else {
                             modalEnrollBtn.disabled = true;
-                            setStatus('Face detected. Please blink once to auto-enroll.');
+                            setStatus('Face detected. Blink naturally once (close and open).');
                         }
                     }
                 }
@@ -1082,9 +1220,16 @@ async function initProfileFaceEnrollmentSection() {
             profileFaceEnrollmentState.earPeak = 0;
             profileFaceEnrollmentState.blinkCooldownUntil = 0;
             profileFaceEnrollmentState.scanLinePhase = 0;
+            profileFaceEnrollmentState.earSmoothed = 0;
+            profileFaceEnrollmentState.openBaseline = 0;
+            profileFaceEnrollmentState.blinkPhase = 'waiting_close';
+            profileFaceEnrollmentState.closedFrameStreak = 0;
+            profileFaceEnrollmentState.openFrameStreak = 0;
+            profileFaceEnrollmentState.calibrationFrames = 0;
             profileFaceEnrollmentState.autoEnrollTriggered = false;
             profileFaceEnrollmentState.enrollmentInProgress = false;
             modalEnrollBtn.disabled = true;
+            hudStatsEl.textContent = 'Calibrating eye pattern...';
 
             setStatus('Camera started. Loading face detector...');
             await ensureProfileFaceModels();
@@ -1152,6 +1297,12 @@ async function initProfileFaceEnrollmentSection() {
             profileFaceEnrollmentState.earPeak = 0;
             profileFaceEnrollmentState.blinkCooldownUntil = 0;
             profileFaceEnrollmentState.scanLinePhase = 0;
+            profileFaceEnrollmentState.earSmoothed = 0;
+            profileFaceEnrollmentState.openBaseline = 0;
+            profileFaceEnrollmentState.blinkPhase = 'waiting_close';
+            profileFaceEnrollmentState.closedFrameStreak = 0;
+            profileFaceEnrollmentState.openFrameStreak = 0;
+            profileFaceEnrollmentState.calibrationFrames = 0;
             profileFaceEnrollmentState.autoEnrollTriggered = false;
             profileFaceEnrollmentState.enrollmentInProgress = false;
             modalEnrollBtn.disabled = true;
