@@ -73,12 +73,6 @@
                 </div>
             </div>
 
-            <div class="admin-ai-quick-actions">
-                <button type="button" class="admin-ai-chip" data-ai-mode="summary">Daily Summary</button>
-                <button type="button" class="admin-ai-chip" data-ai-mode="history">Historical Trends</button>
-                <button type="button" class="admin-ai-chip" data-ai-mode="forecast">Trend Forecast</button>
-                <button type="button" class="admin-ai-chip" data-ai-mode="reorder">Reorder Suggestions</button>
-            </div>
             <div class="admin-ai-disclosure">Every assistant response is marked with source and can be approved/rejected for audit logging.</div>
 
             <div class="admin-ai-feed" id="admin-ai-feed"></div>

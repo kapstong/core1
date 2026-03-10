@@ -653,7 +653,7 @@
 
     <!-- Include all page loaders -->
     <script src="assets/js/dashboard-pages.js?v=5.9"></script>
-    <script src="assets/js/admin-ai-copilot.js?v=1.5"></script>
+    <script src="assets/js/admin-ai-copilot.js?v=<?= urlencode((string)@filemtime(__DIR__ . '/assets/js/admin-ai-copilot.js')) ?>"></script>
 
     <!-- NEW: Complete GRN Management System -->
     <script src="assets/js/grn-new.js?v=3.5"></script>
