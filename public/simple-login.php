@@ -616,12 +616,12 @@
             position: relative;
             width: 100%;
             min-height: 264px;
-            background: radial-gradient(circle at 20% 10%, rgba(0, 134, 255, 0.16), rgba(8, 13, 32, 0.95));
+            background: radial-gradient(circle at 20% 10%, rgba(0, 172, 255, 0.22), rgba(8, 20, 46, 0.78));
             border: 1px solid rgba(0, 245, 255, 0.24);
             border-radius: 12px;
             overflow: hidden;
             margin-bottom: 0.75rem;
-            box-shadow: inset 0 0 55px rgba(0, 0, 0, 0.44);
+            box-shadow: inset 0 0 26px rgba(0, 0, 0, 0.2);
         }
 
         .face-preview {
@@ -629,7 +629,7 @@
             height: 264px;
             object-fit: cover;
             display: block;
-            filter: saturate(1.06) contrast(1.03);
+            filter: brightness(1.25) contrast(1.08) saturate(1.12);
         }
 
         .face-overlay-canvas {
@@ -716,7 +716,7 @@
         }
 
         .face-scanner-modal .modal-content {
-            background: linear-gradient(165deg, rgba(10, 24, 56, 0.96), rgba(7, 14, 34, 0.95));
+            background: linear-gradient(165deg, rgba(13, 33, 74, 0.94), rgba(9, 21, 48, 0.92));
             border: 1px solid rgba(117, 228, 255, 0.22);
             border-radius: 14px;
             overflow: hidden;
@@ -736,8 +736,8 @@
             min-height: min(74vh, 600px);
             margin-bottom: 0.95rem;
             border-color: rgba(0,255,188,0.26);
-            background: radial-gradient(circle at 20% 15%, rgba(0,170,255,0.14), rgba(7,18,44,0.95));
-            box-shadow: inset 0 0 60px rgba(0,0,0,0.45), 0 16px 40px rgba(0,0,0,0.35);
+            background: radial-gradient(circle at 20% 15%, rgba(0,170,255,0.2), rgba(9,25,58,0.72));
+            box-shadow: inset 0 0 30px rgba(0,0,0,0.2), 0 14px 34px rgba(0,0,0,0.24);
         }
 
         .face-preview-modal {
@@ -1116,15 +1116,6 @@
             } else {
                 clearUsernameBtn.classList.remove('show');
             }
-
-            if (typeof faceState !== 'undefined'
-                && faceState.autoLoginPending
-                && faceState.livenessAt
-                && faceState.lastDescriptor
-                && !faceState.verifying
-                && !faceState.verified) {
-                scheduleAutoFaceLogin(true);
-            }
         });
 
         passwordInput.addEventListener('input', function() {
@@ -1220,7 +1211,6 @@
             verifying: false,
             verified: false,
             autoLoginAttempted: false,
-            autoLoginPending: false,
             autoLoginTimer: null
         };
 
@@ -1330,7 +1320,6 @@
             faceState.verifying = false;
             faceState.verified = false;
             faceState.autoLoginAttempted = false;
-            faceState.autoLoginPending = false;
             if (faceState.autoLoginTimer) {
                 clearTimeout(faceState.autoLoginTimer);
                 faceState.autoLoginTimer = null;
@@ -1455,21 +1444,19 @@
             updateFaceChips();
         }
 
-        function scheduleAutoFaceLogin(fromUsernameInput = false) {
-            if (faceState.verifying || faceState.verified || faceState.autoLoginAttempted) {
+        function scheduleAutoFaceLogin() {
+            if (
+                faceState.verifying
+                || faceState.verified
+                || faceState.autoLoginAttempted
+                || !faceState.lastDescriptor
+                || !faceState.livenessAt
+            ) {
                 return;
             }
 
-            const username = (usernameInput.value || '').trim();
-            if (!username) {
-                faceState.autoLoginPending = true;
-                setFaceStatus('Blink verified. Enter username to auto-login.');
-                return;
-            }
-
-            faceState.autoLoginPending = false;
             faceState.autoLoginAttempted = true;
-            setFaceStatus('Blink verified. Auto login in progress...');
+            setFaceStatus('Blink verified. Identifying account...');
             updateFaceChips();
 
             if (faceState.autoLoginTimer) {
@@ -1478,7 +1465,7 @@
             faceState.autoLoginTimer = setTimeout(() => {
                 faceState.autoLoginTimer = null;
                 faceLogin(true);
-            }, fromUsernameInput ? 220 : 420);
+            }, 280);
         }
 
         function cleanupFaceScannerSession(preserveStatus = false) {
@@ -1533,7 +1520,6 @@
                                 faceState.rollDrop = 0;
                                 faceState.lastSignal = 0;
                                 faceState.autoLoginAttempted = false;
-                                faceState.autoLoginPending = false;
                                 if (faceState.autoLoginTimer) {
                                     clearTimeout(faceState.autoLoginTimer);
                                     faceState.autoLoginTimer = null;
@@ -1647,12 +1633,8 @@
                                 faceLoginBtn.disabled = faceState.verifying;
                                 if (!faceState.autoLoginAttempted && !faceState.verifying && !faceState.verified) {
                                     scheduleAutoFaceLogin();
-                                } else if (!faceState.verifying) {
-                                    if (faceState.autoLoginPending) {
-                                        setFaceStatus('Blink verified. Enter username to auto-login.');
-                                    } else {
-                                        setFaceStatus('Blink verified. Auto login armed.');
-                                    }
+                                } else if (!faceState.verifying && !faceState.verified) {
+                                    setFaceStatus('Blink verified. Auto login armed.');
                                 }
                             } else {
                                 faceLoginBtn.disabled = true;
@@ -1737,16 +1719,6 @@
 
         async function faceLogin(autoTriggered = false) {
             const username = (document.getElementById('username').value || '').trim();
-            if (!username) {
-                if (autoTriggered) {
-                    faceState.autoLoginAttempted = false;
-                    faceState.autoLoginPending = true;
-                    setFaceStatus('Enter username to continue auto-login.');
-                } else {
-                    showAlert('Enter your username before using face login.');
-                }
-                return;
-            }
 
             if (!faceState.lastDescriptor) {
                 if (!autoTriggered) {
@@ -1762,7 +1734,6 @@
                 return;
             }
 
-            faceState.autoLoginPending = false;
             faceState.verifying = true;
             faceState.verified = false;
             updateFaceChips();
@@ -2197,9 +2168,9 @@
     <style>
         .modal-backdrop {
             z-index: 1040 !important;
-            background-color: rgba(0, 0, 0, 0.75) !important;
-            backdrop-filter: blur(8px);
-            -webkit-backdrop-filter: blur(8px);
+            background-color: rgba(2, 12, 32, 0.42) !important;
+            backdrop-filter: blur(3px);
+            -webkit-backdrop-filter: blur(3px);
         }
 
         .modal {
