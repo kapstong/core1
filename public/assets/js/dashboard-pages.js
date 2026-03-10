@@ -583,8 +583,162 @@ function cleanupProfileFaceEnrollment() {
 window.cleanupProfileFaceEnrollment = cleanupProfileFaceEnrollment;
 window.addEventListener('beforeunload', cleanupProfileFaceEnrollment);
 
+function ensureProfileFaceDesignStyles() {
+    if (document.getElementById('profile-face-design-styles')) return;
+
+    const style = document.createElement('style');
+    style.id = 'profile-face-design-styles';
+    style.textContent = `
+        .profile-face-card {
+            background: linear-gradient(155deg, rgba(10, 24, 56, 0.92), rgba(9, 18, 40, 0.9));
+            border: 1px solid rgba(124, 232, 255, 0.2);
+            border-radius: 14px;
+            box-shadow: inset 0 0 0 1px rgba(255,255,255,0.04), 0 16px 34px rgba(0, 0, 0, 0.24);
+            overflow: hidden;
+            position: relative;
+        }
+        .profile-face-card::before {
+            content: '';
+            position: absolute;
+            inset: -42% -12% auto -12%;
+            height: 120px;
+            background: radial-gradient(circle at center, rgba(0, 228, 255, 0.22), transparent 72%);
+            pointer-events: none;
+        }
+        .profile-face-head {
+            padding: 0.95rem 1rem 0.7rem;
+            border-bottom: 1px solid rgba(130, 228, 255, 0.14);
+            position: relative;
+            z-index: 1;
+        }
+        .profile-face-title {
+            color: #eefcff;
+            font-size: 0.95rem;
+            font-weight: 700;
+            margin-bottom: 0.2rem;
+        }
+        .profile-face-sub {
+            color: rgba(195, 216, 233, 0.85);
+            font-size: 0.78rem;
+            margin-bottom: 0.55rem;
+        }
+        .profile-face-chip-row {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.45rem;
+        }
+        .profile-face-chip {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.28rem;
+            padding: 0.22rem 0.55rem;
+            border-radius: 999px;
+            border: 1px solid rgba(142, 234, 255, 0.2);
+            color: #99aec8;
+            background: rgba(8, 19, 44, 0.62);
+            letter-spacing: 0.05em;
+            text-transform: uppercase;
+            font-size: 0.63rem;
+        }
+        .profile-face-chip.active {
+            color: #ecfdff;
+            border-color: rgba(0, 245, 255, 0.64);
+            background: rgba(0, 245, 255, 0.14);
+            box-shadow: 0 0 16px rgba(0, 245, 255, 0.24);
+        }
+        .profile-face-chip.completed {
+            color: #c9ffe2;
+            border-color: rgba(52, 211, 153, 0.58);
+            background: rgba(16, 185, 129, 0.16);
+        }
+        .profile-face-mini-preview {
+            position: relative;
+            width: 100%;
+            height: 176px;
+            border-radius: 12px;
+            overflow: hidden;
+            border: 1px solid rgba(124, 232, 255, 0.22);
+            background: radial-gradient(circle at 18% 14%, rgba(0, 143, 255, 0.18), rgba(6, 12, 32, 0.94));
+            box-shadow: inset 0 0 56px rgba(0, 0, 0, 0.44);
+        }
+        .profile-face-mini-video, .profile-face-video {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            display: block;
+        }
+        .profile-face-mini-placeholder {
+            position: absolute;
+            inset: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            padding: 0.8rem;
+            font-size: 0.84rem;
+            color: rgba(195, 216, 233, 0.9);
+            background: rgba(8, 14, 34, 0.64);
+        }
+        .profile-face-actions .btn {
+            border-radius: 10px;
+            font-weight: 700;
+        }
+        .profile-face-status {
+            margin-top: 0.7rem;
+            font-size: 0.82rem;
+            color: rgba(195, 216, 233, 0.9);
+            min-height: 22px;
+            padding: 0.55rem 0.64rem;
+            border: 1px solid rgba(111, 220, 255, 0.18);
+            border-radius: 9px;
+            background: rgba(8, 19, 43, 0.5);
+        }
+        .profile-face-modal .modal-content {
+            background: linear-gradient(165deg, rgba(10, 24, 56, 0.96), rgba(7, 14, 34, 0.95));
+            border: 1px solid rgba(117, 228, 255, 0.22);
+            border-radius: 14px;
+            overflow: hidden;
+        }
+        .profile-face-frame {
+            position: relative;
+            width: 100%;
+            height: min(74vh, 600px);
+            border-radius: 14px;
+            overflow: hidden;
+            border: 1px solid rgba(0,255,188,0.26);
+            background: radial-gradient(circle at 20% 15%, rgba(0,170,255,0.14), rgba(7,18,44,0.95));
+            box-shadow: inset 0 0 60px rgba(0,0,0,0.45), 0 16px 40px rgba(0,0,0,0.35);
+        }
+        .profile-face-overlay {
+            position: absolute;
+            inset: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+        }
+        .profile-face-hud {
+            position: absolute;
+            top: 12px;
+            left: 12px;
+            font-size: 0.76rem;
+            line-height: 1.3;
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+            color: #8cf9ff;
+            background: rgba(5,16,36,0.64);
+            border: 1px solid rgba(90,245,255,0.4);
+            border-radius: 8px;
+            padding: 8px 10px;
+            backdrop-filter: blur(4px);
+            max-width: calc(100% - 24px);
+        }
+    `;
+    document.head.appendChild(style);
+}
+
 async function loadProfilePage() {
     cleanupProfileFaceEnrollment();
+    ensureProfileFaceDesignStyles();
 
     const canUseFaceEnrollment = ['admin', 'inventory_manager', 'staff'].includes(currentUser.role);
     const content = document.getElementById('page-content');
@@ -672,51 +826,57 @@ async function loadProfilePage() {
                 </div>
 
                 ${canUseFaceEnrollment ? `
-                <div class="card mt-3" style="background: var(--bg-card); border: 1px solid var(--border-color);">
-                    <div class="card-header" style="background: var(--bg-tertiary); border-color: var(--border-color);">
-                        <h5 class="mb-0"><i class="fas fa-face-smile me-2"></i>Face Login Enrollment</h5>
+                <div class="profile-face-card mt-3">
+                    <div class="profile-face-head">
+                        <div class="profile-face-title"><i class="fas fa-face-smile me-2"></i>Face Login Enrollment</div>
+                        <div class="profile-face-sub">Adaptive blink detection with movement-tolerant scanning.</div>
+                        <div class="profile-face-chip-row">
+                            <span class="profile-face-chip" id="profileFaceChipDetect"><i class="fas fa-camera"></i>Detect</span>
+                            <span class="profile-face-chip" id="profileFaceChipBlink"><i class="fas fa-eye"></i>Blink</span>
+                            <span class="profile-face-chip" id="profileFaceChipEnroll"><i class="fas fa-id-badge"></i>Enroll</span>
+                        </div>
                     </div>
-                    <div class="card-body">
+                    <div class="card-body position-relative" style="z-index: 1;">
                         <div id="face-enrollment-badge" class="mb-2 text-muted">Loading enrollment status...</div>
-                        <div style="position: relative; width: 100%; height: 160px; border-radius: 10px; overflow: hidden; border: 1px solid var(--border-color); background: rgba(0,0,0,0.25);">
-                            <video id="profile-face-video" autoplay muted playsinline style="width: 100%; height: 100%; object-fit: cover;"></video>
-                            <div id="profile-face-video-placeholder" style="position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; color: var(--text-muted); font-size: 0.9rem; text-align: center; padding: 0.5rem;">
-                                Click Start Camera to open large enrollment popup.
+                        <div class="profile-face-mini-preview">
+                            <video id="profile-face-video" class="profile-face-mini-video" autoplay muted playsinline></video>
+                            <div id="profile-face-video-placeholder" class="profile-face-mini-placeholder">
+                                Start camera to launch the full-screen enrollment scanner.
                             </div>
                         </div>
-                        <div class="d-grid gap-2 mt-3">
-                            <button class="btn btn-outline-primary" type="button" id="profile-face-start-btn">
-                                <i class="fas fa-camera me-2"></i>Start Camera (Popup)
+                        <div class="d-grid gap-2 mt-3 profile-face-actions">
+                            <button class="btn btn-outline-info" type="button" id="profile-face-start-btn">
+                                <i class="fas fa-camera-retro me-2"></i>Start Scanner (Popup)
                             </button>
                             <button class="btn btn-outline-danger" type="button" id="profile-face-remove-btn">
                                 <i class="fas fa-trash-alt me-2"></i>Remove Face Enrollment
                             </button>
                         </div>
-                        <small id="profile-face-status" class="d-block mt-2 text-muted">Liveness check not started.</small>
+                        <div id="profile-face-status" class="profile-face-status">Liveness check not started.</div>
                     </div>
                 </div>
 
-                <div class="modal fade" id="faceEnrollmentModal" tabindex="-1" aria-hidden="true">
+                <div class="modal fade profile-face-modal" id="faceEnrollmentModal" tabindex="-1" aria-hidden="true">
                     <div class="modal-dialog modal-xl modal-dialog-centered">
-                        <div class="modal-content" style="background: var(--bg-card); border: 1px solid var(--border-color);">
-                            <div class="modal-header" style="border-bottom: 1px solid var(--border-color);">
-                                <h5 class="modal-title"><i class="fas fa-camera me-2"></i>Face Enrollment</h5>
+                        <div class="modal-content">
+                            <div class="modal-header" style="border-bottom: 1px solid rgba(122, 231, 255, 0.2);">
+                                <h5 class="modal-title"><i class="fas fa-satellite-dish me-2"></i>Face Enrollment Console</h5>
                                 <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
                             </div>
-                            <div class="modal-body">
-                                <div style="position: relative; width: 100%; height: min(70vh, 560px); border-radius: 14px; overflow: hidden; border: 1px solid rgba(0,255,188,0.22); background: radial-gradient(circle at 20% 15%, rgba(0,170,255,0.14), rgba(7,18,44,0.95)); box-shadow: inset 0 0 60px rgba(0,0,0,0.45), 0 16px 40px rgba(0,0,0,0.35);">
-                                    <video id="profile-face-video-modal" autoplay muted playsinline style="width: 100%; height: 100%; object-fit: cover;"></video>
-                                    <canvas id="profile-face-overlay-modal" style="position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none;"></canvas>
-                                    <div id="profile-face-hud-stats" style="position: absolute; top: 12px; left: 12px; font-size: 0.78rem; line-height: 1.3; letter-spacing: 0.06em; text-transform: uppercase; color: #8cf9ff; background: rgba(5,16,36,0.64); border: 1px solid rgba(90,245,255,0.4); border-radius: 8px; padding: 8px 10px; backdrop-filter: blur(4px);">
+                            <div class="modal-body pt-2">
+                                <div class="profile-face-frame">
+                                    <video id="profile-face-video-modal" class="profile-face-video" autoplay muted playsinline></video>
+                                    <canvas id="profile-face-overlay-modal" class="profile-face-overlay"></canvas>
+                                    <div id="profile-face-hud-stats" class="profile-face-hud">
                                         Initializing scanner...
                                     </div>
-                                    <div id="profile-face-video-placeholder-modal" style="position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; color: var(--text-muted); font-size: 1rem; text-align: center; padding: 1rem;">
+                                    <div id="profile-face-video-placeholder-modal" class="profile-face-mini-placeholder" style="font-size: 1rem;">
                                         Camera preview will appear here. Keep your face centered and blink once.
                                     </div>
                                 </div>
-                                <small id="profile-face-status-modal" class="d-block mt-2 text-muted">Waiting for camera...</small>
+                                <div id="profile-face-status-modal" class="profile-face-status mt-2">Waiting for camera...</div>
                             </div>
-                            <div class="modal-footer" style="border-top: 1px solid var(--border-color);">
+                            <div class="modal-footer" style="border-top: 1px solid rgba(122, 231, 255, 0.2);">
                                 <button class="btn btn-primary" type="button" id="profile-face-enroll-btn-modal" disabled>
                                     <i class="fas fa-id-badge me-2"></i>Enroll / Update Face
                                 </button>
@@ -813,6 +973,9 @@ async function initProfileFaceEnrollmentSection() {
     const hudStatsEl = document.getElementById('profile-face-hud-stats');
     const modalPlaceholderEl = document.getElementById('profile-face-video-placeholder-modal');
     const modalStatusEl = document.getElementById('profile-face-status-modal');
+    const chipDetectEl = document.getElementById('profileFaceChipDetect');
+    const chipBlinkEl = document.getElementById('profileFaceChipBlink');
+    const chipEnrollEl = document.getElementById('profileFaceChipEnroll');
 
     if (!badgeEl || !statusEl || !startBtn || !modalEnrollBtn || !removeBtn || !videoEl || !placeholderEl || !modalEl || !modalVideoEl || !modalOverlayEl || !hudStatsEl || !modalPlaceholderEl || !modalStatusEl) {
         return;
@@ -820,21 +983,53 @@ async function initProfileFaceEnrollmentSection() {
 
     const modalInstance = window.bootstrap ? bootstrap.Modal.getOrCreateInstance(modalEl) : null;
     const overlayCtx = modalOverlayEl.getContext('2d');
+    let enrollmentSaved = false;
+
+    const setChipState = (chip, state) => {
+        if (!chip) return;
+        chip.classList.remove('active', 'completed');
+        if (state === 'active') chip.classList.add('active');
+        if (state === 'completed') chip.classList.add('completed');
+    };
+
+    const updateEnrollmentChips = () => {
+        const now = Date.now();
+        const hasFaceTrack = !!(
+            profileFaceEnrollmentState.lastDescriptor
+            && (
+                (profileFaceEnrollmentState.lastFaceSeenAt > 0 && (now - profileFaceEnrollmentState.lastFaceSeenAt) <= 2200)
+                || profileFaceEnrollmentState.missedDetectionFrames <= 6
+            )
+        );
+        setChipState(chipDetectEl, hasFaceTrack ? 'completed' : (profileFaceEnrollmentState.stream ? 'active' : ''));
+        setChipState(chipBlinkEl, profileFaceEnrollmentState.livenessVerifiedAt ? 'completed' : (hasFaceTrack ? 'active' : ''));
+        if (enrollmentSaved) {
+            setChipState(chipEnrollEl, 'completed');
+        } else if (profileFaceEnrollmentState.enrollmentInProgress || profileFaceEnrollmentState.livenessVerifiedAt) {
+            setChipState(chipEnrollEl, 'active');
+        } else {
+            setChipState(chipEnrollEl, '');
+        }
+    };
+    updateEnrollmentChips();
 
     const setStatus = (text, error = false) => {
         statusEl.style.color = error ? 'var(--danger)' : 'var(--text-muted)';
         statusEl.textContent = text;
         modalStatusEl.style.color = error ? 'var(--danger)' : 'var(--text-muted)';
         modalStatusEl.textContent = text;
+        updateEnrollmentChips();
     };
 
     const renderBadge = (isEnabled, enrolledAt = null) => {
+        enrollmentSaved = !!isEnabled;
         if (isEnabled) {
             const dateText = enrolledAt ? ` (Last: ${new Date(enrolledAt).toLocaleString()})` : '';
             badgeEl.innerHTML = `<span class="badge bg-success"><i class="fas fa-check-circle me-1"></i>Enrolled${dateText}</span>`;
         } else {
             badgeEl.innerHTML = `<span class="badge bg-secondary"><i class="fas fa-circle-xmark me-1"></i>Not Enrolled</span>`;
         }
+        updateEnrollmentChips();
     };
 
     const loadFaceStatus = async () => {
@@ -888,6 +1083,7 @@ async function initProfileFaceEnrollmentSection() {
         }
 
         profileFaceEnrollmentState.enrollmentInProgress = true;
+        updateEnrollmentChips();
         modalEnrollBtn.disabled = true;
         const original = modalEnrollBtn.innerHTML;
         modalEnrollBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Enrolling...';
@@ -946,6 +1142,7 @@ async function initProfileFaceEnrollmentSection() {
             }
         } finally {
             profileFaceEnrollmentState.enrollmentInProgress = false;
+            updateEnrollmentChips();
             modalEnrollBtn.innerHTML = original;
             modalEnrollBtn.disabled = !profileFaceEnrollmentState.livenessVerifiedAt;
         }

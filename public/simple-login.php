@@ -528,36 +528,117 @@
         }
 
         .face-auth-card {
-            margin-top: 1.5rem;
+            margin-top: 1.6rem;
             padding: 1rem;
-            background: rgba(0, 245, 255, 0.04);
-            border: 1px solid rgba(0, 245, 255, 0.15);
-            border-radius: 12px;
+            background: linear-gradient(145deg, rgba(9, 20, 48, 0.78), rgba(7, 14, 33, 0.84));
+            border: 1px solid rgba(111, 250, 255, 0.18);
+            border-radius: 14px;
+            box-shadow: inset 0 0 0 1px rgba(255,255,255,0.04), 0 14px 34px rgba(0, 0, 0, 0.28);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .face-auth-card::before {
+            content: '';
+            position: absolute;
+            inset: -40% -10% auto -10%;
+            height: 120px;
+            background: radial-gradient(circle at center, rgba(0, 245, 255, 0.18), transparent 70%);
+            pointer-events: none;
+        }
+
+        .face-auth-head {
+            position: relative;
+            z-index: 1;
+            margin-bottom: 0.75rem;
         }
 
         .face-auth-title {
             color: var(--text-primary);
-            font-size: 0.95rem;
-            font-weight: 600;
-            margin-bottom: 0.75rem;
+            font-size: 0.98rem;
+            font-weight: 700;
+            margin-bottom: 0.6rem;
+            letter-spacing: 0.02em;
+        }
+
+        .face-chip-row {
+            display: flex;
+            gap: 0.45rem;
+            flex-wrap: wrap;
+        }
+
+        .face-chip {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.28rem;
+            padding: 0.25rem 0.5rem;
+            border-radius: 999px;
+            border: 1px solid rgba(143, 228, 255, 0.2);
+            color: #99aec8;
+            font-size: 0.66rem;
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+            background: rgba(8, 18, 44, 0.64);
+            transition: all 0.2s ease;
+        }
+
+        .face-chip.active {
+            color: #e7fdff;
+            border-color: rgba(0, 245, 255, 0.6);
+            background: rgba(0, 245, 255, 0.14);
+            box-shadow: 0 0 18px rgba(0, 245, 255, 0.25);
+        }
+
+        .face-chip.completed {
+            color: #b8ffd6;
+            border-color: rgba(52, 211, 153, 0.58);
+            background: rgba(16, 185, 129, 0.16);
         }
 
         .face-preview-wrap {
             position: relative;
             width: 100%;
-            min-height: 220px;
-            background: rgba(10, 14, 39, 0.7);
-            border: 1px solid rgba(0, 245, 255, 0.2);
-            border-radius: 10px;
+            min-height: 264px;
+            background: radial-gradient(circle at 20% 10%, rgba(0, 134, 255, 0.16), rgba(8, 13, 32, 0.95));
+            border: 1px solid rgba(0, 245, 255, 0.24);
+            border-radius: 12px;
             overflow: hidden;
             margin-bottom: 0.75rem;
+            box-shadow: inset 0 0 55px rgba(0, 0, 0, 0.44);
         }
 
         .face-preview {
             width: 100%;
-            height: 220px;
+            height: 264px;
             object-fit: cover;
             display: block;
+            filter: saturate(1.06) contrast(1.03);
+        }
+
+        .face-overlay-canvas {
+            position: absolute;
+            inset: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+        }
+
+        .face-hud-stats {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            z-index: 3;
+            color: #94f9ff;
+            background: rgba(5, 14, 33, 0.62);
+            border: 1px solid rgba(110, 244, 255, 0.36);
+            border-radius: 8px;
+            padding: 0.45rem 0.55rem;
+            font-size: 0.67rem;
+            line-height: 1.26;
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+            backdrop-filter: blur(3px);
+            max-width: calc(100% - 20px);
         }
 
         .face-preview-placeholder {
@@ -568,6 +649,8 @@
             justify-content: center;
             color: var(--text-muted);
             font-size: 0.9rem;
+            text-align: center;
+            padding: 1rem;
             background: rgba(10, 14, 39, 0.65);
         }
 
@@ -579,29 +662,36 @@
 
         .btn-face {
             height: 44px;
-            border-radius: 10px;
-            border: 1px solid rgba(0, 245, 255, 0.25);
-            background: rgba(0, 245, 255, 0.08);
+            border-radius: 11px;
+            border: 1px solid rgba(0, 245, 255, 0.28);
+            background: linear-gradient(145deg, rgba(0, 245, 255, 0.12), rgba(11, 33, 66, 0.72));
             color: var(--text-primary);
-            font-weight: 600;
+            font-weight: 700;
+            letter-spacing: 0.02em;
             transition: all 0.2s ease;
         }
 
         .btn-face:hover:not(:disabled) {
             border-color: var(--accent);
-            background: rgba(0, 245, 255, 0.15);
+            background: linear-gradient(145deg, rgba(0, 245, 255, 0.24), rgba(16, 45, 88, 0.86));
+            transform: translateY(-1px);
+            box-shadow: 0 8px 22px rgba(0, 245, 255, 0.22);
         }
 
         .btn-face:disabled {
-            opacity: 0.6;
+            opacity: 0.56;
             cursor: not-allowed;
         }
 
         .face-status {
-            margin-top: 0.6rem;
+            margin-top: 0.65rem;
             color: var(--text-secondary);
-            font-size: 0.85rem;
-            min-height: 20px;
+            font-size: 0.83rem;
+            min-height: 22px;
+            padding: 0.55rem 0.65rem;
+            border: 1px solid rgba(100, 216, 255, 0.18);
+            border-radius: 8px;
+            background: rgba(8, 18, 42, 0.5);
         }
 
         /* Alerts */
@@ -788,13 +878,22 @@
                         </button>
 
                         <div class="face-auth-card">
-                            <div class="face-auth-title">
-                                <i class="fas fa-face-smile me-2"></i>Face Login (Admin & Inventory Staff)
+                            <div class="face-auth-head">
+                                <div class="face-auth-title">
+                                    <i class="fas fa-face-smile me-2"></i>Face Login (Admin & Inventory Staff)
+                                </div>
+                                <div class="face-chip-row">
+                                    <span class="face-chip" id="faceChipDetect"><i class="fas fa-camera"></i>Detect</span>
+                                    <span class="face-chip" id="faceChipBlink"><i class="fas fa-eye"></i>Blink</span>
+                                    <span class="face-chip" id="faceChipVerify"><i class="fas fa-shield-halved"></i>Verify</span>
+                                </div>
                             </div>
                             <div class="face-preview-wrap">
                                 <video id="faceVideo" class="face-preview" autoplay muted playsinline></video>
+                                <canvas id="faceVideoOverlay" class="face-overlay-canvas"></canvas>
+                                <div id="faceHudStats" class="face-hud-stats">Initializing scanner...</div>
                                 <div id="faceVideoPlaceholder" class="face-preview-placeholder">
-                                    Start camera, look straight, then blink once.
+                                    Start camera, keep face visible, blink naturally once.
                                 </div>
                             </div>
                             <div class="face-controls">
@@ -827,8 +926,7 @@
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.22.0/dist/tf.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@vladmandic/face-api@1.7.13/dist/face-api.js"></script>
 
     <script>
         const IS_DEVELOPMENT = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
@@ -981,23 +1079,78 @@
         }
 
         const faceVideo = document.getElementById('faceVideo');
+        const faceOverlay = document.getElementById('faceVideoOverlay');
+        const faceHudStats = document.getElementById('faceHudStats');
         const faceVideoPlaceholder = document.getElementById('faceVideoPlaceholder');
         const startFaceCameraBtn = document.getElementById('startFaceCameraBtn');
         const faceLoginBtn = document.getElementById('faceLoginBtn');
         const faceStatus = document.getElementById('faceStatus');
+        const faceChipDetect = document.getElementById('faceChipDetect');
+        const faceChipBlink = document.getElementById('faceChipBlink');
+        const faceChipVerify = document.getElementById('faceChipVerify');
+        const faceOverlayCtx = faceOverlay ? faceOverlay.getContext('2d') : null;
 
-        let faceStream = null;
-        let faceModelsLoaded = false;
-        let faceDetectionLoop = null;
-        let latestFaceDescriptor = null;
-        let blinkCount = 0;
-        let eyeClosedFrameCount = 0;
-        let blinkChallengePassedAt = null;
-        let lastDetectionAt = 0;
+        const faceState = {
+            stream: null,
+            modelsLoaded: false,
+            rafHandle: null,
+            lastDescriptor: null,
+            descriptorSamples: [],
+            blinkCount: 0,
+            livenessAt: null,
+            lastDetectAt: 0,
+            lastSeenAt: 0,
+            missed: 0,
+            earHistory: [],
+            earSmooth: 0,
+            earPeak: 0,
+            openBase: 0,
+            dynClose: 0.12,
+            dynOpen: 0.165,
+            phase: 'wait_close',
+            phaseAt: 0,
+            closeStreak: 0,
+            openStreak: 0,
+            dropPeak: 0,
+            rollMax: 0,
+            rollDrop: 0,
+            lastSignal: 0,
+            cooldownUntil: 0,
+            calibFrames: 0,
+            scanPhase: 0,
+            verifying: false,
+            verified: false
+        };
 
         function setFaceStatus(text, isError = false) {
-            faceStatus.style.color = isError ? '#ef4444' : 'var(--text-secondary)';
+            faceStatus.style.color = isError ? '#ff7f8b' : 'var(--text-secondary)';
             faceStatus.textContent = text;
+        }
+
+        function setFaceHud(lines) {
+            if (!faceHudStats) return;
+            faceHudStats.innerHTML = Array.isArray(lines) ? lines.join('<br>') : String(lines || '');
+        }
+
+        function setChip(chip, mode) {
+            if (!chip) return;
+            chip.classList.remove('active', 'completed');
+            if (mode === 'active') chip.classList.add('active');
+            if (mode === 'completed') chip.classList.add('completed');
+        }
+
+        function updateFaceChips() {
+            const now = Date.now();
+            const hasFace = !!(
+                faceState.lastDescriptor
+                && ((faceState.lastSeenAt > 0 && (now - faceState.lastSeenAt) <= 2200) || faceState.missed <= 6)
+            );
+
+            setChip(faceChipDetect, hasFace ? 'completed' : (faceState.stream ? 'active' : ''));
+            setChip(faceChipBlink, faceState.livenessAt ? 'completed' : (hasFace ? 'active' : ''));
+            if (faceState.verified) setChip(faceChipVerify, 'completed');
+            else if (faceState.verifying || (faceState.livenessAt && hasFace)) setChip(faceChipVerify, 'active');
+            else setChip(faceChipVerify, '');
         }
 
         function distance2D(p1, p2) {
@@ -1007,40 +1160,169 @@
         }
 
         function eyeAspectRatio(eyePoints) {
-            if (!eyePoints || eyePoints.length < 6) {
-                return 1;
-            }
-
+            if (!eyePoints || eyePoints.length < 6) return 1;
             const verticalA = distance2D(eyePoints[1], eyePoints[5]);
             const verticalB = distance2D(eyePoints[2], eyePoints[4]);
             const horizontal = distance2D(eyePoints[0], eyePoints[3]);
-
-            if (horizontal === 0) {
-                return 1;
-            }
-
+            if (horizontal === 0) return 1;
             return (verticalA + verticalB) / (2 * horizontal);
         }
 
-        async function loadFaceModels() {
-            if (faceModelsLoaded) {
-                return;
+        function normalizeDescriptor(descriptor) {
+            if (!Array.isArray(descriptor) || descriptor.length !== 128) return null;
+            let sumSquares = 0;
+            for (let i = 0; i < descriptor.length; i++) {
+                const value = Number(descriptor[i]) || 0;
+                sumSquares += value * value;
             }
+            const magnitude = Math.sqrt(sumSquares) || 1;
+            return descriptor.map(value => (Number(value) || 0) / magnitude);
+        }
 
-            const modelBase = 'https://cdn.jsdelivr.net/npm/@vladmandic/face-api@1.7.13/model/';
-            await Promise.all([
+        function averageDescriptors(list) {
+            if (!Array.isArray(list) || !list.length) return null;
+            const sum = new Array(128).fill(0);
+            let count = 0;
+            for (const descriptor of list) {
+                if (!Array.isArray(descriptor) || descriptor.length !== 128) continue;
+                for (let i = 0; i < 128; i++) sum[i] += Number(descriptor[i]) || 0;
+                count++;
+            }
+            if (!count) return null;
+            return normalizeDescriptor(sum.map(value => value / count));
+        }
+
+        function addDescriptorSample(descriptor) {
+            if (!Array.isArray(descriptor) || descriptor.length !== 128) return;
+            faceState.descriptorSamples.push(descriptor);
+            if (faceState.descriptorSamples.length > 18) faceState.descriptorSamples.shift();
+            const average = averageDescriptors(faceState.descriptorSamples);
+            if (average) faceState.lastDescriptor = average;
+        }
+
+        function resetFaceState() {
+            faceState.lastDescriptor = null;
+            faceState.descriptorSamples = [];
+            faceState.blinkCount = 0;
+            faceState.livenessAt = null;
+            faceState.lastDetectAt = 0;
+            faceState.lastSeenAt = 0;
+            faceState.missed = 0;
+            faceState.earHistory = [];
+            faceState.earSmooth = 0;
+            faceState.earPeak = 0;
+            faceState.openBase = 0;
+            faceState.dynClose = 0.12;
+            faceState.dynOpen = 0.165;
+            faceState.phase = 'wait_close';
+            faceState.phaseAt = 0;
+            faceState.closeStreak = 0;
+            faceState.openStreak = 0;
+            faceState.dropPeak = 0;
+            faceState.rollMax = 0;
+            faceState.rollDrop = 0;
+            faceState.lastSignal = 0;
+            faceState.cooldownUntil = 0;
+            faceState.calibFrames = 0;
+            faceState.scanPhase = 0;
+            faceState.verifying = false;
+            faceState.verified = false;
+        }
+
+        function resizeOverlay() {
+            if (!faceOverlay || !faceVideo) return;
+            const width = faceVideo.clientWidth || 0;
+            const height = faceVideo.clientHeight || 0;
+            if (!width || !height) return;
+            if (faceOverlay.width !== width) faceOverlay.width = width;
+            if (faceOverlay.height !== height) faceOverlay.height = height;
+        }
+
+        function clearOverlay() {
+            if (!faceOverlayCtx) return;
+            resizeOverlay();
+            faceOverlayCtx.clearRect(0, 0, faceOverlay.width, faceOverlay.height);
+        }
+
+        function drawPath(points, color, width = 2, closed = false, glow = false) {
+            if (!faceOverlayCtx || !points || points.length < 2) return;
+            if (glow) {
+                faceOverlayCtx.save();
+                faceOverlayCtx.shadowColor = color;
+                faceOverlayCtx.shadowBlur = 12;
+            }
+            faceOverlayCtx.beginPath();
+            faceOverlayCtx.strokeStyle = color;
+            faceOverlayCtx.lineWidth = width;
+            faceOverlayCtx.lineJoin = 'round';
+            faceOverlayCtx.lineCap = 'round';
+            faceOverlayCtx.moveTo(points[0].x, points[0].y);
+            for (let i = 1; i < points.length; i++) faceOverlayCtx.lineTo(points[i].x, points[i].y);
+            if (closed) faceOverlayCtx.closePath();
+            faceOverlayCtx.stroke();
+            if (glow) faceOverlayCtx.restore();
+        }
+
+        function drawFaceOverlay(detection, metrics) {
+            if (!faceOverlayCtx || !window.faceapi || !detection) return;
+            resizeOverlay();
+            const width = faceOverlay.width;
+            const height = faceOverlay.height;
+            if (!width || !height) return;
+
+            faceOverlayCtx.clearRect(0, 0, width, height);
+            const resized = faceapi.resizeResults(detection, { width, height });
+            const box = resized.detection.box;
+            const landmarks = resized.landmarks;
+
+            const frameGradient = faceOverlayCtx.createLinearGradient(box.x, box.y, box.x + box.width, box.y + box.height);
+            frameGradient.addColorStop(0, 'rgba(70,236,255,0.95)');
+            frameGradient.addColorStop(1, 'rgba(85,255,171,0.95)');
+            faceOverlayCtx.strokeStyle = frameGradient;
+            faceOverlayCtx.lineWidth = 1.8;
+            faceOverlayCtx.strokeRect(box.x, box.y, box.width, box.height);
+
+            drawPath(landmarks.getLeftEye(), '#00e6ff', 2.1, true, true);
+            drawPath(landmarks.getRightEye(), '#00e6ff', 2.1, true, true);
+            drawPath(landmarks.getNose(), '#47ffb7', 2.0, false, true);
+            drawPath(landmarks.getMouth(), '#ffd166', 2.0, true, true);
+            drawPath(landmarks.getJawOutline(), 'rgba(255,255,255,0.42)', 1.45, false, false);
+            drawPath(landmarks.getLeftEyeBrow(), 'rgba(88,229,255,0.86)', 1.7, false, false);
+            drawPath(landmarks.getRightEyeBrow(), 'rgba(88,229,255,0.86)', 1.7, false, false);
+
+            faceState.scanPhase += 0.18;
+            const scanY = box.y + ((Math.sin(faceState.scanPhase) + 1) * 0.5 * box.height);
+            faceOverlayCtx.beginPath();
+            faceOverlayCtx.strokeStyle = 'rgba(78,255,162,0.9)';
+            faceOverlayCtx.lineWidth = 2.1;
+            faceOverlayCtx.moveTo(box.x, scanY);
+            faceOverlayCtx.lineTo(box.x + box.width, scanY);
+            faceOverlayCtx.stroke();
+        }
+
+        async function loadFaceModels() {
+            if (faceState.modelsLoaded) return;
+            if (!window.faceapi) throw new Error('Face detector library failed to load.');
+
+            const timeout = (promise, ms, message) => Promise.race([
+                promise,
+                new Promise((_, reject) => setTimeout(() => reject(new Error(message)), ms))
+            ]);
+
+            const modelBase = 'https://cdn.jsdelivr.net/npm/@vladmandic/face-api@1.7.13/model';
+            await timeout(Promise.all([
                 faceapi.nets.tinyFaceDetector.loadFromUri(modelBase),
                 faceapi.nets.faceLandmark68Net.loadFromUri(modelBase),
                 faceapi.nets.faceRecognitionNet.loadFromUri(modelBase)
-            ]);
+            ]), 20000, 'Face model loading timeout.');
 
-            faceModelsLoaded = true;
+            faceState.modelsLoaded = true;
         }
 
         function stopFaceLoop() {
-            if (faceDetectionLoop) {
-                cancelAnimationFrame(faceDetectionLoop);
-                faceDetectionLoop = null;
+            if (faceState.rafHandle) {
+                cancelAnimationFrame(faceState.rafHandle);
+                faceState.rafHandle = null;
             }
         }
 
@@ -1050,90 +1332,218 @@
             const detect = async () => {
                 try {
                     const now = Date.now();
-                    if (now - lastDetectionAt >= 220) {
-                        lastDetectionAt = now;
+                    if (now - faceState.lastDetectAt >= 75) {
+                        faceState.lastDetectAt = now;
 
                         const detection = await faceapi
-                            .detectSingleFace(faceVideo, new faceapi.TinyFaceDetectorOptions({ inputSize: 320 }))
+                            .detectSingleFace(faceVideo, new faceapi.TinyFaceDetectorOptions({ inputSize: 224, scoreThreshold: 0.18 }))
                             .withFaceLandmarks()
                             .withFaceDescriptor();
 
-                        if (detection) {
-                            latestFaceDescriptor = Array.from(detection.descriptor);
+                        if (!detection) {
+                            faceState.missed++;
+                            const tracking = faceState.lastSeenAt > 0
+                                && ((now - faceState.lastSeenAt) <= 1800 || faceState.missed <= 7);
 
-                            const leftEAR = eyeAspectRatio(detection.landmarks.getLeftEye());
-                            const rightEAR = eyeAspectRatio(detection.landmarks.getRightEye());
-                            const avgEAR = (leftEAR + rightEAR) / 2;
-                            const blinkThreshold = 0.2;
-                            const minClosedFrames = 2;
+                            if (tracking && faceState.lastDescriptor) {
+                                faceLoginBtn.disabled = !faceState.livenessAt;
+                                setFaceHud([
+                                    'Face tracked',
+                                    `Blink ${faceState.blinkCount} | Miss ${faceState.missed}`,
+                                    faceState.phase === 'wait_open'
+                                        ? 'Eyes closed detected. Open to complete blink.'
+                                        : 'Tracking while moving...'
+                                ]);
+                                setFaceStatus(faceState.phase === 'wait_open'
+                                    ? 'Face tracked during blink. Open eyes to complete.'
+                                    : 'Face tracked. Blink once naturally.');
+                            } else {
+                                faceState.lastDescriptor = null;
+                                faceState.descriptorSamples = [];
+                                faceState.blinkCount = 0;
+                                faceState.livenessAt = null;
+                                faceState.phase = 'wait_close';
+                                faceState.phaseAt = 0;
+                                faceState.closeStreak = 0;
+                                faceState.openStreak = 0;
+                                faceState.dropPeak = 0;
+                                faceState.rollMax = 0;
+                                faceState.rollDrop = 0;
+                                faceState.lastSignal = 0;
+                                faceLoginBtn.disabled = true;
+                                clearOverlay();
+                                setFaceHud('Waiting for face...');
+                                setFaceStatus('No face detected. Keep your face centered.');
+                            }
 
-                            if (avgEAR < blinkThreshold) {
-                                eyeClosedFrameCount++;
-                            } else if (eyeClosedFrameCount >= minClosedFrames) {
-                                blinkCount++;
-                                eyeClosedFrameCount = 0;
+                            updateFaceChips();
+                        } else {
+                            faceState.lastSeenAt = now;
+                            faceState.missed = 0;
+                            addDescriptorSample(Array.from(detection.descriptor));
 
-                                if (blinkCount >= 1 && !blinkChallengePassedAt) {
-                                    blinkChallengePassedAt = new Date().toISOString();
+                            const left = eyeAspectRatio(detection.landmarks.getLeftEye());
+                            const right = eyeAspectRatio(detection.landmarks.getRightEye());
+                            const signalRaw = ((left + right) / 2) * 0.62 + (Math.min(left, right) * 0.38);
+
+                            if (signalRaw > 0.06 && signalRaw < 0.5) {
+                                faceState.earHistory.push(signalRaw);
+                                if (faceState.earHistory.length > 30) faceState.earHistory.shift();
+                                faceState.earPeak = Math.max(signalRaw, faceState.earPeak * 0.995);
+                                faceState.earSmooth = faceState.earSmooth
+                                    ? (faceState.earSmooth * 0.45) + (signalRaw * 0.55)
+                                    : signalRaw;
+                            }
+
+                            if (faceState.earHistory.length >= 6) {
+                                const sorted = [...faceState.earHistory].sort((a, b) => a - b);
+                                const p85 = sorted[Math.floor((sorted.length - 1) * 0.85)];
+                                const p25 = sorted[Math.floor((sorted.length - 1) * 0.25)];
+                                const openBase = Math.max(p85 || 0.18, faceState.earPeak || 0.18);
+                                const range = Math.max(0.015, openBase - (p25 || (openBase - 0.015)));
+                                faceState.dynClose = Math.max(0.075, Math.min(0.23, openBase - (range * 0.62)));
+                                faceState.dynOpen = Math.max(faceState.dynClose + 0.015, Math.min(0.33, openBase - (range * 0.2)));
+
+                                if (faceState.calibFrames < 22) {
+                                    faceState.openBase = faceState.openBase
+                                        ? (faceState.openBase * 0.92) + (openBase * 0.08)
+                                        : openBase;
+                                    faceState.calibFrames++;
+                                }
+                            }
+
+                            const signal = faceState.earSmooth || signalRaw;
+                            faceState.rollMax = Math.max(signal, faceState.rollMax * 0.993);
+                            const baseForDrop = Math.max(faceState.openBase || 0, faceState.rollMax || 0, faceState.dynOpen + 0.01);
+                            const relDrop = baseForDrop > 0 ? Math.max(0, (baseForDrop - signal) / baseForDrop) : 0;
+                            faceState.rollDrop = (faceState.rollDrop * 0.7) + (relDrop * 0.3);
+                            const signalDelta = signal - (faceState.lastSignal || signal);
+                            faceState.lastSignal = signal;
+
+                            const shouldClose = signal <= faceState.dynClose || faceState.rollDrop >= 0.11;
+                            const shouldOpen = signal >= faceState.dynOpen || faceState.rollDrop <= 0.055;
+                            const rapidClose = signalDelta <= -0.016 && faceState.rollDrop >= 0.055;
+                            const rapidOpen = signalDelta >= 0.013 && faceState.rollDrop <= 0.095;
+
+                            if (faceState.phase === 'wait_close') {
+                                if (shouldClose || rapidClose) {
+                                    faceState.closeStreak++;
+                                    if (faceState.closeStreak >= 1) {
+                                        faceState.phase = 'wait_open';
+                                        faceState.phaseAt = now;
+                                        faceState.dropPeak = faceState.rollDrop;
+                                        faceState.openStreak = 0;
+                                    }
+                                } else {
+                                    faceState.closeStreak = 0;
                                 }
                             } else {
-                                eyeClosedFrameCount = 0;
+                                faceState.dropPeak = Math.max(faceState.dropPeak, faceState.rollDrop);
+                                if (shouldOpen || rapidOpen) {
+                                    faceState.openStreak++;
+                                    if (faceState.openStreak >= 1) {
+                                        const meaningfulClose = faceState.dropPeak >= 0.08 || signal <= (faceState.dynClose + 0.01);
+                                        if (meaningfulClose && now > faceState.cooldownUntil) {
+                                            faceState.blinkCount++;
+                                            faceState.cooldownUntil = now + 850;
+                                            if (!faceState.livenessAt) faceState.livenessAt = new Date().toISOString();
+                                        }
+                                        faceState.phase = 'wait_close';
+                                        faceState.phaseAt = 0;
+                                        faceState.closeStreak = 0;
+                                        faceState.openStreak = 0;
+                                        faceState.dropPeak = 0;
+                                    }
+                                } else if (shouldClose) {
+                                    faceState.openStreak = 0;
+                                }
+
+                                if (faceState.phaseAt > 0 && (now - faceState.phaseAt) > 1600) {
+                                    faceState.phase = 'wait_close';
+                                    faceState.phaseAt = 0;
+                                    faceState.closeStreak = 0;
+                                    faceState.openStreak = 0;
+                                    faceState.dropPeak = 0;
+                                }
                             }
 
-                            if (blinkChallengePassedAt) {
-                                setFaceStatus('Liveness passed. You can login with face now.');
+                            drawFaceOverlay(detection, { signal, close: faceState.dynClose, open: faceState.dynOpen });
+                            const calibrationPct = Math.max(0, Math.min(100, Math.round((faceState.calibFrames / 22) * 100)));
+                            setFaceHud([
+                                `EAR ${signal.toFixed(3)} | Blink ${faceState.blinkCount} | Samples ${faceState.descriptorSamples.length}`,
+                                `Close<${faceState.dynClose.toFixed(3)} Open>${faceState.dynOpen.toFixed(3)}`,
+                                `Drop ${(faceState.rollDrop * 100).toFixed(1)}% | ${faceState.phase.replace('_', ' ')} | Cal ${calibrationPct}%`
+                            ]);
+
+                            if (faceState.livenessAt) {
                                 faceLoginBtn.disabled = false;
+                                setFaceStatus('Blink verified. Face login is ready.');
                             } else {
-                                setFaceStatus('Face detected. Please blink once for anti-spoof check.');
+                                faceLoginBtn.disabled = true;
+                                setFaceStatus('Face detected. Blink once (close and open eyes).');
                             }
-                        } else {
-                            latestFaceDescriptor = null;
-                            faceLoginBtn.disabled = true;
-                            setFaceStatus('No face detected. Center your face in the camera view.');
+
+                            updateFaceChips();
                         }
                     }
                 } catch (err) {
                     devLog('Face detection error:', err);
                     faceLoginBtn.disabled = true;
-                    setFaceStatus('Face detector error. Retry camera start.', true);
+                    clearOverlay();
+                    setFaceHud('Detector error');
+                    setFaceStatus('Face detector error. Restart camera.', true);
+                    updateFaceChips();
                 } finally {
-                    faceDetectionLoop = requestAnimationFrame(detect);
+                    faceState.rafHandle = requestAnimationFrame(detect);
                 }
             };
 
-            faceDetectionLoop = requestAnimationFrame(detect);
+            faceState.rafHandle = requestAnimationFrame(detect);
         }
 
         async function startFaceCamera() {
             startFaceCameraBtn.disabled = true;
-            setFaceStatus('Loading face models...');
+            setFaceStatus('Loading face detector...');
+            setFaceHud('Booting scanner...');
 
             try {
+                if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+                    throw new Error('Camera API is not available in this browser.');
+                }
+
+                stopFaceLoop();
+                if (faceState.stream) {
+                    faceState.stream.getTracks().forEach(track => track.stop());
+                    faceState.stream = null;
+                }
+
                 await loadFaceModels();
 
-                faceStream = await navigator.mediaDevices.getUserMedia({
-                    video: {
-                        facingMode: 'user',
-                        width: { ideal: 640 },
-                        height: { ideal: 480 }
-                    },
+                faceState.stream = await navigator.mediaDevices.getUserMedia({
+                    video: { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 480 } },
                     audio: false
                 });
 
-                faceVideo.srcObject = faceStream;
+                faceVideo.srcObject = faceState.stream;
+                try {
+                    await faceVideo.play();
+                } catch (playError) {
+                    devLog('Video autoplay warning:', playError);
+                }
                 faceVideoPlaceholder.style.display = 'none';
-
-                blinkCount = 0;
-                eyeClosedFrameCount = 0;
-                latestFaceDescriptor = null;
-                blinkChallengePassedAt = null;
+                resetFaceState();
+                clearOverlay();
+                setFaceHud('Calibrating eye pattern...');
                 faceLoginBtn.disabled = true;
+                updateFaceChips();
 
                 await startFaceLoop();
-                setFaceStatus('Camera ready. Look at the camera and blink once.');
+                setFaceStatus('Camera ready. Blink once to pass anti-spoof check.');
             } catch (err) {
                 devLog('Start face camera error:', err);
-                setFaceStatus('Cannot start camera. Allow camera permission and try again.', true);
+                setFaceStatus((err && err.message) ? err.message : 'Cannot start camera. Allow camera permission and retry.', true);
+                setFaceHud('Scanner offline');
+                faceVideoPlaceholder.style.display = 'flex';
             } finally {
                 startFaceCameraBtn.disabled = false;
             }
@@ -1146,19 +1556,23 @@
                 return;
             }
 
-            if (!latestFaceDescriptor) {
+            if (!faceState.lastDescriptor) {
                 showAlert('Face not detected. Keep your face centered and retry.');
                 return;
             }
 
-            if (!blinkChallengePassedAt || blinkCount < 1) {
-                showAlert('Anti-spoof check failed. Please blink once in front of the camera.');
+            if (!faceState.livenessAt || faceState.blinkCount < 1) {
+                showAlert('Blink verification is required before face login.');
                 return;
             }
 
+            faceState.verifying = true;
+            faceState.verified = false;
+            updateFaceChips();
             faceLoginBtn.disabled = true;
             const originalBtn = faceLoginBtn.innerHTML;
             faceLoginBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Verifying Face...';
+            setFaceStatus('Verifying your facial signature...');
 
             try {
                 const response = await fetch(`${API_BASE}/auth/facial-login.php`, {
@@ -1167,30 +1581,37 @@
                     credentials: 'same-origin',
                     body: JSON.stringify({
                         username,
-                        descriptor: latestFaceDescriptor,
-                        blink_count: blinkCount,
-                        liveness_verified_at: blinkChallengePassedAt
+                        descriptor: faceState.lastDescriptor,
+                        blink_count: faceState.blinkCount,
+                        liveness_verified_at: faceState.livenessAt
                     })
                 });
 
                 const data = await response.json();
                 if (!data.success) {
                     showAlert(data.message || 'Face login failed.');
+                    setFaceStatus(data.message || 'Face login failed.', true);
                     return;
                 }
 
+                faceState.verified = true;
+                updateFaceChips();
                 showAlert('<strong>Face verified.</strong> Redirecting to dashboard...', 'success');
                 faceLoginBtn.innerHTML = '<i class="fas fa-check-circle me-1"></i>Face Verified';
+                setFaceStatus('Verification complete. Redirecting...');
                 setTimeout(() => {
                     window.location.href = 'dashboard.php';
                 }, 900);
             } catch (err) {
                 devLog('Face login request error:', err);
                 showAlert('Failed to verify face. Please try again.');
+                setFaceStatus('Network error during face verification.', true);
             } finally {
-                if (faceLoginBtn.innerHTML.includes('Face Verified') === false) {
+                faceState.verifying = false;
+                if (!faceState.verified) {
                     faceLoginBtn.disabled = false;
                     faceLoginBtn.innerHTML = originalBtn;
+                    updateFaceChips();
                 }
             }
         }
@@ -1199,10 +1620,12 @@
         faceLoginBtn.addEventListener('click', faceLogin);
         window.addEventListener('beforeunload', () => {
             stopFaceLoop();
-            if (faceStream) {
-                faceStream.getTracks().forEach(track => track.stop());
+            if (faceState.stream) {
+                faceState.stream.getTracks().forEach(track => track.stop());
+                faceState.stream = null;
             }
         });
+        updateFaceChips();
 
         document.getElementById('login-form').addEventListener('submit', async function(e) {
             e.preventDefault();
