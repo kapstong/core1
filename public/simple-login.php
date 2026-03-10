@@ -812,6 +812,14 @@
             .login-header h2 {
                 font-size: 1.75rem;
             }
+
+            .face-preview-wrap-modal {
+                min-height: 62vh;
+            }
+
+            .face-preview-modal {
+                height: 62vh;
+            }
         }
 
         @media (max-width: 576px) {
@@ -837,18 +845,151 @@
                 flex-direction: column;
             }
 
+            .face-auth-card {
+                margin-top: 1.2rem;
+                padding: 0.88rem;
+                border-radius: 12px;
+            }
+
+            .face-auth-title {
+                font-size: 0.88rem;
+            }
+
+            .face-auth-copy {
+                font-size: 0.74rem;
+            }
+
             .face-controls {
                 grid-template-columns: 1fr;
             }
-        }
 
-        @media (max-width: 576px) {
+            .btn-face {
+                height: 42px;
+                font-size: 0.84rem;
+            }
+
+            .face-chip {
+                font-size: 0.58rem;
+                padding: 0.2rem 0.42rem;
+            }
+
+            .face-status {
+                font-size: 0.74rem;
+                padding: 0.48rem 0.56rem;
+                margin-top: 0.55rem;
+            }
+
+            .face-hud-stats {
+                top: 8px;
+                left: 8px;
+                font-size: 0.58rem;
+                padding: 0.34rem 0.42rem;
+                max-width: calc(100% - 16px);
+            }
+
+            .face-preview-placeholder {
+                font-size: 0.8rem;
+                padding: 0.68rem;
+            }
+
+            .face-scanner-modal .modal-dialog {
+                margin: 0;
+                max-width: 100%;
+                height: 100%;
+            }
+
+            .face-scanner-modal .modal-content {
+                height: 100%;
+                border-radius: 0;
+                border-left: 0;
+                border-right: 0;
+            }
+
+            .face-scanner-modal .modal-header {
+                padding: 0.62rem 0.72rem;
+            }
+
+            .face-scanner-modal .modal-title {
+                font-size: 0.84rem;
+            }
+
+            .face-scanner-modal .modal-body {
+                padding: 0.58rem 0.6rem 0.76rem;
+            }
+
             .face-preview-wrap-modal {
-                min-height: 56vh;
+                min-height: 48vh;
             }
 
             .face-preview-modal {
-                height: 56vh;
+                height: 48vh;
+            }
+        }
+
+        @media (max-width: 420px) {
+            .login-container {
+                padding: 0.75rem;
+            }
+
+            .login-right {
+                padding: 1.5rem 1rem;
+            }
+
+            .face-chip-row {
+                gap: 0.3rem;
+            }
+
+            .face-chip {
+                font-size: 0.54rem;
+                letter-spacing: 0.03em;
+                padding: 0.18rem 0.36rem;
+            }
+
+            .face-preview-wrap {
+                min-height: 220px;
+            }
+
+            .face-preview {
+                height: 220px;
+            }
+
+            .face-preview-wrap-modal {
+                min-height: 44vh;
+            }
+
+            .face-preview-modal {
+                height: 44vh;
+            }
+        }
+
+        @media (max-width: 360px) {
+            .face-auth-card {
+                padding: 0.75rem;
+            }
+
+            .face-auth-title {
+                font-size: 0.82rem;
+            }
+
+            .face-auth-copy {
+                font-size: 0.7rem;
+            }
+
+            .btn-face {
+                height: 40px;
+                font-size: 0.78rem;
+            }
+
+            .face-status {
+                font-size: 0.68rem;
+            }
+
+            .face-preview-wrap-modal {
+                min-height: 42vh;
+            }
+
+            .face-preview-modal {
+                height: 42vh;
             }
         }
     </style>
@@ -957,7 +1098,7 @@
                         </div>
 
                         <div class="modal fade face-scanner-modal" id="faceScannerModal" tabindex="-1" aria-hidden="true">
-                            <div class="modal-dialog modal-xl modal-dialog-centered">
+                            <div class="modal-dialog modal-xl modal-dialog-centered modal-fullscreen-sm-down face-scanner-dialog">
                                 <div class="modal-content">
                                     <div class="modal-header">
                                         <h5 class="modal-title">

@@ -693,6 +693,10 @@ function ensureProfileFaceDesignStyles() {
             border-radius: 9px;
             background: rgba(8, 19, 43, 0.5);
         }
+        .profile-face-actions .btn {
+            min-height: 42px;
+            font-size: 0.88rem;
+        }
         .profile-face-modal .modal-content {
             background: linear-gradient(165deg, rgba(10, 24, 56, 0.96), rgba(7, 14, 34, 0.95));
             border: 1px solid rgba(117, 228, 255, 0.22);
@@ -731,6 +735,127 @@ function ensureProfileFaceDesignStyles() {
             padding: 8px 10px;
             backdrop-filter: blur(4px);
             max-width: calc(100% - 24px);
+        }
+        @media (max-width: 992px) {
+            .profile-face-mini-preview {
+                height: 164px;
+            }
+            .profile-face-frame {
+                height: min(66vh, 520px);
+            }
+        }
+        @media (max-width: 768px) {
+            .profile-face-head {
+                padding: 0.85rem 0.85rem 0.6rem;
+            }
+            .profile-face-title {
+                font-size: 0.9rem;
+            }
+            .profile-face-sub {
+                font-size: 0.74rem;
+            }
+            .profile-face-chip {
+                font-size: 0.58rem;
+                padding: 0.2rem 0.45rem;
+            }
+            .profile-face-status {
+                font-size: 0.76rem;
+                padding: 0.5rem 0.54rem;
+            }
+            .profile-face-frame {
+                height: min(58vh, 460px);
+                border-radius: 11px;
+            }
+            .profile-face-hud {
+                top: 8px;
+                left: 8px;
+                font-size: 0.64rem;
+                padding: 6px 8px;
+                max-width: calc(100% - 16px);
+            }
+            .profile-face-modal .modal-body {
+                padding: 0.6rem;
+            }
+        }
+        @media (max-width: 576px) {
+            .profile-face-mini-preview {
+                height: 150px;
+            }
+            .profile-face-actions .btn {
+                min-height: 40px;
+                font-size: 0.82rem;
+                padding-left: 0.6rem;
+                padding-right: 0.6rem;
+            }
+            .profile-face-status {
+                font-size: 0.72rem;
+                min-height: 20px;
+                margin-top: 0.58rem;
+            }
+            .profile-face-modal .modal-dialog {
+                margin: 0;
+                width: 100%;
+                max-width: 100%;
+                height: 100%;
+            }
+            .profile-face-modal .modal-content {
+                height: 100%;
+                border-radius: 0;
+                border-left: 0;
+                border-right: 0;
+            }
+            .profile-face-modal .modal-header {
+                padding: 0.62rem 0.75rem;
+            }
+            .profile-face-modal .modal-title {
+                font-size: 0.86rem;
+            }
+            .profile-face-modal .modal-footer {
+                padding: 0.62rem 0.75rem;
+                gap: 0.45rem;
+            }
+            .profile-face-modal .modal-footer .btn {
+                width: 100%;
+                margin: 0;
+            }
+            .profile-face-frame {
+                height: 48vh;
+                min-height: 240px;
+                border-radius: 10px;
+            }
+        }
+        @media (max-width: 380px) {
+            .profile-face-card {
+                border-radius: 12px;
+            }
+            .profile-face-head {
+                padding: 0.75rem 0.72rem 0.55rem;
+            }
+            .profile-face-title {
+                font-size: 0.84rem;
+            }
+            .profile-face-sub {
+                font-size: 0.69rem;
+            }
+            .profile-face-chip {
+                font-size: 0.54rem;
+                letter-spacing: 0.04em;
+                padding: 0.18rem 0.36rem;
+            }
+            .profile-face-mini-preview {
+                height: 136px;
+            }
+            .profile-face-frame {
+                height: 44vh;
+                min-height: 210px;
+            }
+            .profile-face-status {
+                font-size: 0.68rem;
+            }
+            .profile-face-hud {
+                font-size: 0.58rem;
+                padding: 5px 7px;
+            }
         }
     `;
     document.head.appendChild(style);
@@ -857,7 +982,7 @@ async function loadProfilePage() {
                 </div>
 
                 <div class="modal fade profile-face-modal" id="faceEnrollmentModal" tabindex="-1" aria-hidden="true">
-                    <div class="modal-dialog modal-xl modal-dialog-centered">
+                    <div class="modal-dialog modal-xl modal-dialog-centered modal-fullscreen-md-down profile-face-dialog">
                         <div class="modal-content">
                             <div class="modal-header" style="border-bottom: 1px solid rgba(122, 231, 255, 0.2);">
                                 <h5 class="modal-title"><i class="fas fa-satellite-dish me-2"></i>Face Enrollment Console</h5>
