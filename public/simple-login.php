@@ -561,6 +561,23 @@
             letter-spacing: 0.02em;
         }
 
+        .face-auth-copy {
+            margin: 0;
+            color: var(--text-secondary);
+            font-size: 0.82rem;
+            line-height: 1.45;
+        }
+
+        .face-auth-compact .face-auth-head {
+            margin-bottom: 0.55rem;
+        }
+
+        .face-quick-actions {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 0.5rem;
+        }
+
         .face-chip-row {
             display: flex;
             gap: 0.45rem;
@@ -660,6 +677,10 @@
             gap: 0.5rem;
         }
 
+        .btn-face-launch {
+            width: 100%;
+        }
+
         .btn-face {
             height: 44px;
             border-radius: 11px;
@@ -692,6 +713,35 @@
             border: 1px solid rgba(100, 216, 255, 0.18);
             border-radius: 8px;
             background: rgba(8, 18, 42, 0.5);
+        }
+
+        .face-scanner-modal .modal-content {
+            background: linear-gradient(165deg, rgba(10, 24, 56, 0.96), rgba(7, 14, 34, 0.95));
+            border: 1px solid rgba(117, 228, 255, 0.22);
+            border-radius: 14px;
+            overflow: hidden;
+        }
+
+        .face-scanner-modal .modal-header {
+            border-bottom: 1px solid rgba(124, 232, 255, 0.2);
+        }
+
+        .face-scanner-modal .modal-title {
+            color: var(--text-primary);
+            font-size: 1.02rem;
+            font-weight: 700;
+        }
+
+        .face-preview-wrap-modal {
+            min-height: min(74vh, 600px);
+            margin-bottom: 0.95rem;
+            border-color: rgba(0,255,188,0.26);
+            background: radial-gradient(circle at 20% 15%, rgba(0,170,255,0.14), rgba(7,18,44,0.95));
+            box-shadow: inset 0 0 60px rgba(0,0,0,0.45), 0 16px 40px rgba(0,0,0,0.35);
+        }
+
+        .face-preview-modal {
+            height: min(74vh, 600px);
         }
 
         /* Alerts */
@@ -786,6 +836,20 @@
             .quick-links {
                 flex-direction: column;
             }
+
+            .face-controls {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        @media (max-width: 576px) {
+            .face-preview-wrap-modal {
+                min-height: 56vh;
+            }
+
+            .face-preview-modal {
+                height: 56vh;
+            }
         }
     </style>
 </head>
@@ -877,34 +941,55 @@
                             Sign In
                         </button>
 
-                        <div class="face-auth-card">
+                        <div class="face-auth-card face-auth-compact">
                             <div class="face-auth-head">
                                 <div class="face-auth-title">
-                                    <i class="fas fa-face-smile me-2"></i>Face Login (Admin & Inventory Staff)
+                                    <i class="fas fa-face-smile me-2"></i>Face Login (Auto)
                                 </div>
-                                <div class="face-chip-row">
-                                    <span class="face-chip" id="faceChipDetect"><i class="fas fa-camera"></i>Detect</span>
-                                    <span class="face-chip" id="faceChipBlink"><i class="fas fa-eye"></i>Blink</span>
-                                    <span class="face-chip" id="faceChipVerify"><i class="fas fa-shield-halved"></i>Verify</span>
-                                </div>
+                                <p class="face-auth-copy">For admin and inventory staff. Open scanner popup and blink once to login automatically.</p>
                             </div>
-                            <div class="face-preview-wrap">
-                                <video id="faceVideo" class="face-preview" autoplay muted playsinline></video>
-                                <canvas id="faceVideoOverlay" class="face-overlay-canvas"></canvas>
-                                <div id="faceHudStats" class="face-hud-stats">Initializing scanner...</div>
-                                <div id="faceVideoPlaceholder" class="face-preview-placeholder">
-                                    Start camera, keep face visible, blink naturally once.
-                                </div>
-                            </div>
-                            <div class="face-controls">
-                                <button type="button" class="btn-face" id="startFaceCameraBtn">
-                                    <i class="fas fa-camera me-1"></i>Start Camera
-                                </button>
-                                <button type="button" class="btn-face" id="faceLoginBtn" disabled>
-                                    <i class="fas fa-unlock-alt me-1"></i>Login with Face
+                            <div class="face-quick-actions">
+                                <button type="button" class="btn-face btn-face-launch" id="openFaceScannerBtn">
+                                    <i class="fas fa-expand me-1"></i>Open Face Scanner
                                 </button>
                             </div>
                             <div id="faceStatus" class="face-status">Liveness check not started.</div>
+                        </div>
+
+                        <div class="modal fade face-scanner-modal" id="faceScannerModal" tabindex="-1" aria-hidden="true">
+                            <div class="modal-dialog modal-xl modal-dialog-centered">
+                                <div class="modal-content">
+                                    <div class="modal-header">
+                                        <h5 class="modal-title">
+                                            <i class="fas fa-satellite-dish me-2"></i>Face Scanner Console
+                                        </h5>
+                                        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                                    </div>
+                                    <div class="modal-body pt-2">
+                                        <div class="face-chip-row mb-2">
+                                            <span class="face-chip" id="faceChipDetect"><i class="fas fa-camera"></i>Detect</span>
+                                            <span class="face-chip" id="faceChipBlink"><i class="fas fa-eye"></i>Blink</span>
+                                            <span class="face-chip" id="faceChipVerify"><i class="fas fa-shield-halved"></i>Verify</span>
+                                        </div>
+                                        <div class="face-preview-wrap face-preview-wrap-modal">
+                                            <video id="faceVideo" class="face-preview face-preview-modal" autoplay muted playsinline></video>
+                                            <canvas id="faceVideoOverlay" class="face-overlay-canvas"></canvas>
+                                            <div id="faceHudStats" class="face-hud-stats">Initializing scanner...</div>
+                                            <div id="faceVideoPlaceholder" class="face-preview-placeholder">
+                                                Start camera, keep face visible, blink naturally once.
+                                            </div>
+                                        </div>
+                                        <div class="face-controls">
+                                            <button type="button" class="btn-face" id="startFaceCameraBtn">
+                                                <i class="fas fa-camera me-1"></i>Start Camera
+                                            </button>
+                                            <button type="button" class="btn-face" id="faceLoginBtn" disabled>
+                                                <i class="fas fa-unlock-alt me-1"></i>Verify Now
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
 
                         <div class="divider">
@@ -1031,6 +1116,15 @@
             } else {
                 clearUsernameBtn.classList.remove('show');
             }
+
+            if (typeof faceState !== 'undefined'
+                && faceState.autoLoginPending
+                && faceState.livenessAt
+                && faceState.lastDescriptor
+                && !faceState.verifying
+                && !faceState.verified) {
+                scheduleAutoFaceLogin(true);
+            }
         });
 
         passwordInput.addEventListener('input', function() {
@@ -1082,6 +1176,8 @@
         const faceOverlay = document.getElementById('faceVideoOverlay');
         const faceHudStats = document.getElementById('faceHudStats');
         const faceVideoPlaceholder = document.getElementById('faceVideoPlaceholder');
+        const openFaceScannerBtn = document.getElementById('openFaceScannerBtn');
+        const faceScannerModalEl = document.getElementById('faceScannerModal');
         const startFaceCameraBtn = document.getElementById('startFaceCameraBtn');
         const faceLoginBtn = document.getElementById('faceLoginBtn');
         const faceStatus = document.getElementById('faceStatus');
@@ -1089,6 +1185,9 @@
         const faceChipBlink = document.getElementById('faceChipBlink');
         const faceChipVerify = document.getElementById('faceChipVerify');
         const faceOverlayCtx = faceOverlay ? faceOverlay.getContext('2d') : null;
+        const faceScannerModal = (window.bootstrap && faceScannerModalEl)
+            ? bootstrap.Modal.getOrCreateInstance(faceScannerModalEl)
+            : null;
 
         const faceState = {
             stream: null,
@@ -1119,7 +1218,10 @@
             calibFrames: 0,
             scanPhase: 0,
             verifying: false,
-            verified: false
+            verified: false,
+            autoLoginAttempted: false,
+            autoLoginPending: false,
+            autoLoginTimer: null
         };
 
         function setFaceStatus(text, isError = false) {
@@ -1227,6 +1329,12 @@
             faceState.scanPhase = 0;
             faceState.verifying = false;
             faceState.verified = false;
+            faceState.autoLoginAttempted = false;
+            faceState.autoLoginPending = false;
+            if (faceState.autoLoginTimer) {
+                clearTimeout(faceState.autoLoginTimer);
+                faceState.autoLoginTimer = null;
+            }
         }
 
         function resizeOverlay() {
@@ -1326,6 +1434,60 @@
             }
         }
 
+        function stopFaceStream() {
+            if (faceState.stream) {
+                faceState.stream.getTracks().forEach(track => track.stop());
+                faceState.stream = null;
+            }
+            if (faceVideo) {
+                faceVideo.srcObject = null;
+            }
+        }
+
+        function resetFaceScannerUi(preserveStatus = false) {
+            clearOverlay();
+            faceVideoPlaceholder.style.display = 'flex';
+            faceLoginBtn.disabled = true;
+            setFaceHud('Scanner idle. Open camera to begin.');
+            if (!preserveStatus) {
+                setFaceStatus('Liveness check not started.');
+            }
+            updateFaceChips();
+        }
+
+        function scheduleAutoFaceLogin(fromUsernameInput = false) {
+            if (faceState.verifying || faceState.verified || faceState.autoLoginAttempted) {
+                return;
+            }
+
+            const username = (usernameInput.value || '').trim();
+            if (!username) {
+                faceState.autoLoginPending = true;
+                setFaceStatus('Blink verified. Enter username to auto-login.');
+                return;
+            }
+
+            faceState.autoLoginPending = false;
+            faceState.autoLoginAttempted = true;
+            setFaceStatus('Blink verified. Auto login in progress...');
+            updateFaceChips();
+
+            if (faceState.autoLoginTimer) {
+                clearTimeout(faceState.autoLoginTimer);
+            }
+            faceState.autoLoginTimer = setTimeout(() => {
+                faceState.autoLoginTimer = null;
+                faceLogin(true);
+            }, fromUsernameInput ? 220 : 420);
+        }
+
+        function cleanupFaceScannerSession(preserveStatus = false) {
+            stopFaceLoop();
+            stopFaceStream();
+            resetFaceState();
+            resetFaceScannerUi(preserveStatus);
+        }
+
         async function startFaceLoop() {
             stopFaceLoop();
 
@@ -1370,6 +1532,12 @@
                                 faceState.rollMax = 0;
                                 faceState.rollDrop = 0;
                                 faceState.lastSignal = 0;
+                                faceState.autoLoginAttempted = false;
+                                faceState.autoLoginPending = false;
+                                if (faceState.autoLoginTimer) {
+                                    clearTimeout(faceState.autoLoginTimer);
+                                    faceState.autoLoginTimer = null;
+                                }
                                 faceLoginBtn.disabled = true;
                                 clearOverlay();
                                 setFaceHud('Waiting for face...');
@@ -1476,8 +1644,16 @@
                             ]);
 
                             if (faceState.livenessAt) {
-                                faceLoginBtn.disabled = false;
-                                setFaceStatus('Blink verified. Face login is ready.');
+                                faceLoginBtn.disabled = faceState.verifying;
+                                if (!faceState.autoLoginAttempted && !faceState.verifying && !faceState.verified) {
+                                    scheduleAutoFaceLogin();
+                                } else if (!faceState.verifying) {
+                                    if (faceState.autoLoginPending) {
+                                        setFaceStatus('Blink verified. Enter username to auto-login.');
+                                    } else {
+                                        setFaceStatus('Blink verified. Auto login armed.');
+                                    }
+                                }
                             } else {
                                 faceLoginBtn.disabled = true;
                                 setFaceStatus('Face detected. Blink once (close and open eyes).');
@@ -1524,6 +1700,12 @@
                     audio: false
                 });
 
+                if (faceScannerModalEl && !faceScannerModalEl.classList.contains('show')) {
+                    stopFaceStream();
+                    setFaceStatus('Scanner closed.');
+                    return;
+                }
+
                 faceVideo.srcObject = faceState.stream;
                 try {
                     await faceVideo.play();
@@ -1537,6 +1719,10 @@
                 faceLoginBtn.disabled = true;
                 updateFaceChips();
 
+                if (faceScannerModalEl && !faceScannerModalEl.classList.contains('show')) {
+                    stopFaceStream();
+                    return;
+                }
                 await startFaceLoop();
                 setFaceStatus('Camera ready. Blink once to pass anti-spoof check.');
             } catch (err) {
@@ -1549,29 +1735,42 @@
             }
         }
 
-        async function faceLogin() {
+        async function faceLogin(autoTriggered = false) {
             const username = (document.getElementById('username').value || '').trim();
             if (!username) {
-                showAlert('Enter your username before using face login.');
+                if (autoTriggered) {
+                    faceState.autoLoginAttempted = false;
+                    faceState.autoLoginPending = true;
+                    setFaceStatus('Enter username to continue auto-login.');
+                } else {
+                    showAlert('Enter your username before using face login.');
+                }
                 return;
             }
 
             if (!faceState.lastDescriptor) {
-                showAlert('Face not detected. Keep your face centered and retry.');
+                if (!autoTriggered) {
+                    showAlert('Face not detected. Keep your face centered and retry.');
+                }
                 return;
             }
 
             if (!faceState.livenessAt || faceState.blinkCount < 1) {
-                showAlert('Blink verification is required before face login.');
+                if (!autoTriggered) {
+                    showAlert('Blink verification is required before face login.');
+                }
                 return;
             }
 
+            faceState.autoLoginPending = false;
             faceState.verifying = true;
             faceState.verified = false;
             updateFaceChips();
             faceLoginBtn.disabled = true;
             const originalBtn = faceLoginBtn.innerHTML;
-            faceLoginBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Verifying Face...';
+            faceLoginBtn.innerHTML = autoTriggered
+                ? '<i class="fas fa-robot fa-spin me-1"></i>Auto Login...'
+                : '<i class="fas fa-spinner fa-spin me-1"></i>Verifying Face...';
             setFaceStatus('Verifying your facial signature...');
 
             try {
@@ -1589,7 +1788,9 @@
 
                 const data = await response.json();
                 if (!data.success) {
-                    showAlert(data.message || 'Face login failed.');
+                    if (!autoTriggered) {
+                        showAlert(data.message || 'Face login failed.');
+                    }
                     setFaceStatus(data.message || 'Face login failed.', true);
                     return;
                 }
@@ -1599,31 +1800,59 @@
                 showAlert('<strong>Face verified.</strong> Redirecting to dashboard...', 'success');
                 faceLoginBtn.innerHTML = '<i class="fas fa-check-circle me-1"></i>Face Verified';
                 setFaceStatus('Verification complete. Redirecting...');
+                if (faceScannerModal) {
+                    faceScannerModal.hide();
+                }
                 setTimeout(() => {
                     window.location.href = 'dashboard.php';
                 }, 900);
             } catch (err) {
                 devLog('Face login request error:', err);
-                showAlert('Failed to verify face. Please try again.');
+                if (!autoTriggered) {
+                    showAlert('Failed to verify face. Please try again.');
+                }
                 setFaceStatus('Network error during face verification.', true);
             } finally {
                 faceState.verifying = false;
                 if (!faceState.verified) {
                     faceLoginBtn.disabled = false;
                     faceLoginBtn.innerHTML = originalBtn;
+                    if (autoTriggered) {
+                        setFaceStatus('Auto login failed. You can tap Verify Now or retry scan.', true);
+                    }
                     updateFaceChips();
                 }
             }
         }
 
-        startFaceCameraBtn.addEventListener('click', startFaceCamera);
-        faceLoginBtn.addEventListener('click', faceLogin);
-        window.addEventListener('beforeunload', () => {
-            stopFaceLoop();
-            if (faceState.stream) {
-                faceState.stream.getTracks().forEach(track => track.stop());
-                faceState.stream = null;
+        openFaceScannerBtn.addEventListener('click', () => {
+            if (faceScannerModal) {
+                faceScannerModal.show();
+                setTimeout(() => {
+                    if (!faceState.stream) {
+                        startFaceCamera();
+                    }
+                }, 140);
+            } else {
+                startFaceCamera();
             }
+        });
+
+        if (faceScannerModalEl) {
+            faceScannerModalEl.addEventListener('hide.bs.modal', () => {
+                if (document.activeElement && faceScannerModalEl.contains(document.activeElement)) {
+                    document.activeElement.blur();
+                }
+            });
+            faceScannerModalEl.addEventListener('hidden.bs.modal', () => {
+                cleanupFaceScannerSession();
+            });
+        }
+
+        startFaceCameraBtn.addEventListener('click', startFaceCamera);
+        faceLoginBtn.addEventListener('click', () => faceLogin(false));
+        window.addEventListener('beforeunload', () => {
+            cleanupFaceScannerSession(true);
         });
         updateFaceChips();
 
