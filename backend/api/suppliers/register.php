@@ -46,7 +46,7 @@ error_log('Data validation passed');
 $required_fields = ['name', 'email', 'username', 'password'];
 $missing_fields = [];
 foreach ($required_fields as $field) {
-    if (empty($data[$field])) {
+    if (!isset($data[$field]) || trim((string)$data[$field]) === '') {
         $missing_fields[] = ucfirst(str_replace('_', ' ', $field));
     }
 }
@@ -58,6 +58,14 @@ if (!empty($missing_fields)) {
 }
 
 error_log('All required fields present');
+
+$data['name'] = trim((string)$data['name']);
+$data['email'] = trim((string)$data['email']);
+$data['username'] = trim((string)$data['username']);
+
+if (isset($data['supplier_email']) && $data['supplier_email'] !== null) {
+    $data['supplier_email'] = trim((string)$data['supplier_email']);
+}
 
 // Supplier-specific fields (optional, stored in suppliers table)
 $supplierData = [
@@ -171,6 +179,21 @@ try {
         // Rollback transaction on error
         $db->rollBack();
         error_log('Supplier registration transaction error: ' . $e->getMessage());
+
+        if ($e instanceof PDOException && $e->getCode() === '23000') {
+            if (stripos($e->getMessage(), 'email') !== false) {
+                Response::error('An account with this email address already exists. Please use a different email or try logging in.', 400, [
+                    'email' => ['Email already exists']
+                ]);
+            }
+
+            if (stripos($e->getMessage(), 'username') !== false) {
+                Response::error('This username is already taken. Please choose a different username.', 400, [
+                    'username' => ['Username already exists']
+                ]);
+            }
+        }
+
         Response::error('A system error occurred while processing your registration. Please try again later or contact support.', 500);
     }
 } catch (PDOException $e) {
@@ -178,6 +201,21 @@ try {
         $db->rollBack();
     }
     error_log('Supplier registration database error: ' . $e->getMessage());
+
+    if ($e->getCode() === '23000') {
+        if (stripos($e->getMessage(), 'email') !== false) {
+            Response::error('An account with this email address already exists. Please use a different email or try logging in.', 400, [
+                'email' => ['Email already exists']
+            ]);
+        }
+
+        if (stripos($e->getMessage(), 'username') !== false) {
+            Response::error('This username is already taken. Please choose a different username.', 400, [
+                'username' => ['Username already exists']
+            ]);
+        }
+    }
+
     Response::error('A system error occurred while processing your registration. Please try again later or contact support.', 500);
 }
 

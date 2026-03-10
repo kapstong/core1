@@ -212,12 +212,40 @@
             }, 5000);
         }
 
+        function isEmailAlreadyExistsMessage(message = '') {
+            const normalized = String(message || '').toLowerCase();
+            return normalized.includes('email') && (
+                normalized.includes('already exists') ||
+                normalized.includes('already taken') ||
+                normalized.includes('already registered') ||
+                normalized.includes('already in use')
+            );
+        }
+
+        function showDuplicateEmailError(emailInput) {
+            const duplicateEmailMessage = 'This email is already registered. Please use a different email address.';
+            if (emailInput) {
+                emailInput.setCustomValidity(duplicateEmailMessage);
+                emailInput.style.borderColor = 'var(--danger)';
+                emailInput.style.boxShadow = '0 0 0 3px rgba(255, 51, 102, 0.1)';
+                emailInput.focus();
+                emailInput.reportValidity();
+            }
+
+            showToast(duplicateEmailMessage, 'error');
+        }
+
         // Form validation and submission
         document.getElementById('signup-form').addEventListener('submit', async function(e) {
             e.preventDefault();
 
             const submitBtn = document.getElementById('submit-btn');
             const originalText = submitBtn.innerHTML;
+            const emailInput = this.querySelector('input[name="email"]');
+
+            if (emailInput) {
+                emailInput.setCustomValidity('');
+            }
 
             // Disable button and show loading
             submitBtn.disabled = true;
@@ -254,7 +282,11 @@
                         window.location.href = 'simple-login.php';
                     }, 3000);
                 } else {
-                    showToast(data.message || 'Registration failed. Please try again.', 'error');
+                    if (isEmailAlreadyExistsMessage(data.message)) {
+                        showDuplicateEmailError(emailInput);
+                    } else {
+                        showToast(data.message || 'Registration failed. Please try again.', 'error');
+                    }
                 }
             } catch (error) {
                 console.error('Registration error:', error);
@@ -278,6 +310,10 @@
             });
 
             field.addEventListener('input', function() {
+                if (this.type === 'email') {
+                    this.setCustomValidity('');
+                }
+
                 if (this.checkValidity()) {
                     this.style.borderColor = 'var(--success)';
                     this.style.boxShadow = '0 0 0 3px rgba(0, 255, 136, 0.1)';

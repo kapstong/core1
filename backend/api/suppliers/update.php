@@ -33,6 +33,9 @@ $user = Auth::user();
 
 try {
     $input = json_decode(file_get_contents('php://input'), true);
+    if (!is_array($input)) {
+        $input = [];
+    }
 
     // Accept ID from either query parameter or request body
     $supplierId = isset($_GET['id']) ? intval($_GET['id']) : (isset($input['id']) ? intval($input['id']) : null);
@@ -58,6 +61,31 @@ try {
 
     if (!$supplier) {
         Response::error('Supplier not found', 404);
+    }
+
+    // Normalize and validate email before any write so duplicate errors are clear.
+    if (array_key_exists('email', $input) && $input['email'] !== null) {
+        $input['email'] = trim((string)$input['email']);
+
+        if ($input['email'] === '') {
+            Response::error('Email is required', 400);
+        }
+
+        if (!filter_var($input['email'], FILTER_VALIDATE_EMAIL)) {
+            Response::error('Please enter a valid email address', 400);
+        }
+
+        $emailCheckStmt = $conn->prepare("SELECT id FROM users WHERE email = :email AND id != :id LIMIT 1");
+        $emailCheckStmt->execute([
+            ':email' => $input['email'],
+            ':id' => $supplierId
+        ]);
+
+        if ($emailCheckStmt->fetch(PDO::FETCH_ASSOC)) {
+            Response::error('Email already exists. Please use a different email address.', 400, [
+                'email' => ['Email already exists']
+            ]);
+        }
     }
 
     // Start transaction
@@ -176,10 +204,22 @@ try {
         'supplier_status' => $supplierStatus
     ], 'Supplier updated successfully');
 
+} catch (PDOException $e) {
+    if (isset($conn) && $conn->inTransaction()) {
+        $conn->rollBack();
+    }
+
+    if ($e->getCode() === '23000' && stripos($e->getMessage(), 'email') !== false) {
+        Response::error('Email already exists. Please use a different email address.', 400, [
+            'email' => ['Email already exists']
+        ]);
+    }
+
+    Response::serverError('Failed to update supplier. Please try again later.');
 } catch (Exception $e) {
     if (isset($conn) && $conn->inTransaction()) {
         $conn->rollBack();
     }
-    Response::serverError('Failed to update supplier: ' . $e->getMessage());
+    Response::serverError('Failed to update supplier. Please try again later.');
 }
 
