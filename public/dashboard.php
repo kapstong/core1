@@ -610,25 +610,37 @@
                     </div>
                 `;
 
-                document.body.appendChild(overlay);
+                const openModals = Array.from(document.querySelectorAll('.modal.show'));
+                const overlayHost = openModals.length ? openModals[openModals.length - 1] : document.body;
+                overlayHost.appendChild(overlay);
+
+                let settled = false;
+
+                const cleanup = () => {
+                    document.removeEventListener('keydown', handleEsc);
+                    overlay.remove();
+                };
+
+                const finish = (value) => {
+                    if (settled) return;
+                    settled = true;
+                    cleanup();
+                    resolve(value);
+                };
 
                 overlay.addEventListener('click', (e) => {
                     if (e.target.dataset.action === 'confirm') {
-                        overlay.remove();
-                        resolve(true);
+                        finish(true);
                     } else if (e.target.dataset.action === 'cancel' || (e.target.classList.contains('confirm-overlay') && cancelText)) {
-                        overlay.remove();
-                        resolve(false);
+                        finish(false);
                     }
                 });
 
-                overlay.querySelector('[data-action="confirm"]').focus();
+                setTimeout(() => overlay.querySelector('[data-action="confirm"]')?.focus(), 0);
 
                 const handleEsc = (e) => {
                     if (e.key === 'Escape' && cancelText) {
-                        overlay.remove();
-                        resolve(false);
-                        document.removeEventListener('keydown', handleEsc);
+                        finish(false);
                     }
                 };
                 document.addEventListener('keydown', handleEsc);
@@ -640,7 +652,7 @@
     <script src="assets/js/inactivity-monitor.js?v=3.4"></script>
 
     <!-- Include all page loaders -->
-    <script src="assets/js/dashboard-pages.js?v=5.8"></script>
+    <script src="assets/js/dashboard-pages.js?v=5.9"></script>
     <script src="assets/js/admin-ai-copilot.js?v=1.5"></script>
 
     <!-- NEW: Complete GRN Management System -->

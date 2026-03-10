@@ -3536,10 +3536,25 @@ function showPrompt(message, options = {}) {
             </div>
         `;
 
-        document.body.appendChild(overlay);
+        const openModals = Array.from(document.querySelectorAll('.modal.show'));
+        const overlayHost = openModals.length ? openModals[openModals.length - 1] : document.body;
+        overlayHost.appendChild(overlay);
 
         const input = overlay.querySelector('#prompt-input');
         const confirmBtn = overlay.querySelector('[data-action="confirm"]');
+        let settled = false;
+
+        const cleanup = () => {
+            document.removeEventListener('keydown', handleEsc);
+            overlay.remove();
+        };
+
+        const finish = (value) => {
+            if (settled) return;
+            settled = true;
+            cleanup();
+            resolve(value);
+        };
 
         if (required) {
             input.addEventListener('input', () => {
@@ -3551,22 +3566,18 @@ function showPrompt(message, options = {}) {
             if (e.target.dataset.action === 'confirm') {
                 const value = input.value.trim();
                 if (!required || value) {
-                    overlay.remove();
-                    resolve(value);
+                    finish(value);
                 }
             } else if (e.target.dataset.action === 'cancel' || e.target.classList.contains('confirm-overlay')) {
-                overlay.remove();
-                resolve(null);
+                finish(null);
             }
         });
 
-        input.focus();
+        setTimeout(() => input.focus(), 0);
 
         const handleEsc = (e) => {
             if (e.key === 'Escape') {
-                overlay.remove();
-                resolve(null);
-                document.removeEventListener('keydown', handleEsc);
+                finish(null);
             }
         };
         document.addEventListener('keydown', handleEsc);
