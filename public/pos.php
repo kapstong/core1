@@ -801,6 +801,162 @@ if (!in_array($user['role'], $allowedRoles)) {
             }
         }
 
+        function showPopupConfirm(message, options = {}) {
+            const {
+                title = 'Confirm Action',
+                confirmText = 'Confirm',
+                cancelText = 'Cancel',
+                confirmClass = 'btn-danger'
+            } = options;
+
+            return new Promise((resolve) => {
+                const modalEl = document.createElement('div');
+                modalEl.className = 'modal fade';
+                modalEl.tabIndex = -1;
+                modalEl.setAttribute('aria-hidden', 'true');
+                modalEl.innerHTML = `
+                    <div class="modal-dialog modal-dialog-centered">
+                        <div class="modal-content" style="background: var(--bg-card); border: 1px solid var(--border-color); color: var(--text-primary);">
+                            <div class="modal-header" style="border-bottom: 1px solid var(--border-color);">
+                                <h5 class="modal-title"></h5>
+                                <button type="button" class="btn-close btn-close-white" data-role="cancel" aria-label="Close"></button>
+                            </div>
+                            <div class="modal-body">
+                                <p class="mb-0 popup-confirm-message"></p>
+                            </div>
+                            <div class="modal-footer" style="border-top: 1px solid var(--border-color);">
+                                <button type="button" class="btn btn-outline-light" data-role="cancel"></button>
+                                <button type="button" class="btn ${confirmClass}" data-role="confirm"></button>
+                            </div>
+                        </div>
+                    </div>
+                `;
+
+                modalEl.querySelector('.modal-title').textContent = title;
+                modalEl.querySelector('.popup-confirm-message').textContent = message;
+                modalEl.querySelector('[data-role="confirm"]').textContent = confirmText;
+                modalEl.querySelectorAll('[data-role="cancel"]').forEach((btn) => {
+                    if (!btn.classList.contains('btn-close')) {
+                        btn.textContent = cancelText;
+                    }
+                });
+
+                document.body.appendChild(modalEl);
+                const modal = new bootstrap.Modal(modalEl);
+                let settled = false;
+
+                const finish = (value) => {
+                    if (settled) return;
+                    settled = true;
+                    resolve(value);
+                    modal.hide();
+                };
+
+                modalEl.querySelector('[data-role="confirm"]').addEventListener('click', () => finish(true));
+                modalEl.querySelectorAll('[data-role="cancel"]').forEach((btn) => {
+                    btn.addEventListener('click', () => finish(false));
+                });
+
+                modalEl.addEventListener('hidden.bs.modal', () => {
+                    if (!settled) {
+                        settled = true;
+                        resolve(false);
+                    }
+                    modalEl.remove();
+                });
+
+                modal.show();
+            });
+        }
+
+        function showPopupPrompt(message, options = {}) {
+            const {
+                title = 'Enter Details',
+                placeholder = '',
+                confirmText = 'Submit',
+                cancelText = 'Cancel',
+                defaultValue = ''
+            } = options;
+
+            return new Promise((resolve) => {
+                const modalEl = document.createElement('div');
+                modalEl.className = 'modal fade';
+                modalEl.tabIndex = -1;
+                modalEl.setAttribute('aria-hidden', 'true');
+                modalEl.innerHTML = `
+                    <div class="modal-dialog modal-dialog-centered">
+                        <div class="modal-content" style="background: var(--bg-card); border: 1px solid var(--border-color); color: var(--text-primary);">
+                            <div class="modal-header" style="border-bottom: 1px solid var(--border-color);">
+                                <h5 class="modal-title"></h5>
+                                <button type="button" class="btn-close btn-close-white" data-role="cancel" aria-label="Close"></button>
+                            </div>
+                            <div class="modal-body">
+                                <p class="mb-2 popup-prompt-message"></p>
+                                <textarea class="form-control popup-prompt-input" rows="3" style="background: var(--bg-tertiary); color: var(--text-primary); border: 1px solid var(--border-color);"></textarea>
+                            </div>
+                            <div class="modal-footer" style="border-top: 1px solid var(--border-color);">
+                                <button type="button" class="btn btn-outline-light" data-role="cancel"></button>
+                                <button type="button" class="btn btn-danger" data-role="confirm"></button>
+                            </div>
+                        </div>
+                    </div>
+                `;
+
+                modalEl.querySelector('.modal-title').textContent = title;
+                modalEl.querySelector('.popup-prompt-message').textContent = message;
+                const input = modalEl.querySelector('.popup-prompt-input');
+                input.placeholder = placeholder;
+                input.value = defaultValue;
+                modalEl.querySelector('[data-role="confirm"]').textContent = confirmText;
+                modalEl.querySelectorAll('[data-role="cancel"]').forEach((btn) => {
+                    if (!btn.classList.contains('btn-close')) {
+                        btn.textContent = cancelText;
+                    }
+                });
+
+                document.body.appendChild(modalEl);
+                const modal = new bootstrap.Modal(modalEl);
+                let settled = false;
+
+                const finish = (value) => {
+                    if (settled) return;
+                    settled = true;
+                    resolve(value);
+                    modal.hide();
+                };
+
+                modalEl.querySelector('[data-role="confirm"]').addEventListener('click', () => {
+                    const value = input.value.trim();
+                    if (!value) {
+                        input.focus();
+                        return;
+                    }
+                    finish(value);
+                });
+                modalEl.querySelectorAll('[data-role="cancel"]').forEach((btn) => {
+                    btn.addEventListener('click', () => finish(null));
+                });
+
+                input.addEventListener('keydown', (event) => {
+                    if (event.key === 'Enter' && !event.shiftKey) {
+                        event.preventDefault();
+                        modalEl.querySelector('[data-role="confirm"]').click();
+                    }
+                });
+
+                modalEl.addEventListener('shown.bs.modal', () => input.focus());
+                modalEl.addEventListener('hidden.bs.modal', () => {
+                    if (!settled) {
+                        settled = true;
+                        resolve(null);
+                    }
+                    modalEl.remove();
+                });
+
+                modal.show();
+            });
+        }
+
         async function completeSale() {
             if (cart.length === 0) {
                 showToast('Cart is empty', 'warning');
@@ -817,7 +973,13 @@ if (!in_array($user['role'], $allowedRoles)) {
                 }
             }
 
-            if (!confirm('Complete this sale?')) return;
+            const saleConfirmed = await showPopupConfirm('Complete this sale?', {
+                title: 'Complete Sale',
+                confirmText: 'Complete',
+                cancelText: 'Review Cart',
+                confirmClass: 'btn-success'
+            });
+            if (!saleConfirmed) return;
 
             const subtotal = cart.reduce((s, i) => s + (i.price * i.qty), 0);
             const tax = subtotal * 0.12;
@@ -868,9 +1030,15 @@ if (!in_array($user['role'], $allowedRoles)) {
             }
         }
 
-        function clearCart() {
+        async function clearCart() {
             if (cart.length === 0) return;
-            if (!confirm('Clear cart?')) return;
+            const clearConfirmed = await showPopupConfirm('Clear cart?', {
+                title: 'Clear Cart',
+                confirmText: 'Clear',
+                cancelText: 'Keep Items',
+                confirmClass: 'btn-danger'
+            });
+            if (!clearConfirmed) return;
             cart = [];
             updateCart();
         }
@@ -1046,7 +1214,13 @@ if (!in_array($user['role'], $allowedRoles)) {
         async function approveOrder() {
             if (!currentOrderId) return;
 
-            if (!confirm('Approve this order?')) return;
+            const approved = await showPopupConfirm('Approve this order?', {
+                title: 'Approve Order',
+                confirmText: 'Approve',
+                cancelText: 'Cancel',
+                confirmClass: 'btn-success'
+            });
+            if (!approved) return;
 
             const overlay = document.getElementById('loading-overlay');
             overlay.classList.remove('d-none');
@@ -1078,7 +1252,12 @@ if (!in_array($user['role'], $allowedRoles)) {
         async function rejectOrder() {
             if (!currentOrderId) return;
 
-            const reason = prompt('Rejection reason:');
+            const reason = await showPopupPrompt('Please provide a reason for rejection:', {
+                title: 'Reject Order',
+                confirmText: 'Reject Order',
+                cancelText: 'Cancel',
+                placeholder: 'Enter rejection reason...'
+            });
             if (!reason) return;
 
             const overlay = document.getElementById('loading-overlay');

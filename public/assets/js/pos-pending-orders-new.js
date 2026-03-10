@@ -4,6 +4,226 @@
  * Note: currentOrderId is declared in pos.php
  */
 
+async function showPopupCardConfirm(message, options = {}) {
+    if (typeof showConfirm === 'function') {
+        return showConfirm(message, options);
+    }
+
+    if (typeof bootstrap === 'undefined') {
+        if (typeof showToast !== 'undefined') {
+            showToast(message, 'warning');
+        }
+        return false;
+    }
+
+    const {
+        title = 'Confirm Action',
+        confirmText = 'Confirm',
+        cancelText = 'Cancel',
+        confirmClass = 'btn-danger'
+    } = options;
+
+    return new Promise((resolve) => {
+        const modalEl = document.createElement('div');
+        modalEl.className = 'modal fade';
+        modalEl.tabIndex = -1;
+        modalEl.setAttribute('aria-hidden', 'true');
+        modalEl.innerHTML = `
+            <div class="modal-dialog modal-dialog-centered">
+                <div class="modal-content" style="background: var(--bg-card, #1e293b); border: 1px solid var(--border-color, rgba(148,163,184,0.2)); color: var(--text-primary, #e2e8f0);">
+                    <div class="modal-header" style="border-bottom: 1px solid var(--border-color, rgba(148,163,184,0.2));">
+                        <h5 class="modal-title"></h5>
+                        <button type="button" class="btn-close btn-close-white" data-role="cancel" aria-label="Close"></button>
+                    </div>
+                    <div class="modal-body">
+                        <p class="mb-0 popup-confirm-message"></p>
+                    </div>
+                    <div class="modal-footer" style="border-top: 1px solid var(--border-color, rgba(148,163,184,0.2));">
+                        <button type="button" class="btn btn-outline-light" data-role="cancel"></button>
+                        <button type="button" class="btn ${confirmClass}" data-role="confirm"></button>
+                    </div>
+                </div>
+            </div>
+        `;
+
+        modalEl.querySelector('.modal-title').textContent = title;
+        modalEl.querySelector('.popup-confirm-message').textContent = message;
+        modalEl.querySelector('[data-role="confirm"]').textContent = confirmText;
+        modalEl.querySelectorAll('[data-role="cancel"]').forEach((btn) => {
+            if (!btn.classList.contains('btn-close')) {
+                btn.textContent = cancelText;
+            }
+        });
+
+        document.body.appendChild(modalEl);
+        const modal = new bootstrap.Modal(modalEl);
+        let settled = false;
+
+        const finish = (value) => {
+            if (settled) return;
+            settled = true;
+            resolve(value);
+            modal.hide();
+        };
+
+        modalEl.querySelector('[data-role="confirm"]').addEventListener('click', () => finish(true));
+        modalEl.querySelectorAll('[data-role="cancel"]').forEach((btn) => {
+            btn.addEventListener('click', () => finish(false));
+        });
+
+        modalEl.addEventListener('hidden.bs.modal', () => {
+            if (!settled) {
+                settled = true;
+                resolve(false);
+            }
+            modalEl.remove();
+        });
+
+        modal.show();
+    });
+}
+
+async function showPopupCardPrompt(message, options = {}) {
+    if (typeof showPrompt === 'function') {
+        return showPrompt(message, options);
+    }
+
+    if (typeof bootstrap === 'undefined') {
+        if (typeof showToast !== 'undefined') {
+            showToast(message, 'warning');
+        }
+        return null;
+    }
+
+    const {
+        title = 'Enter Details',
+        placeholder = '',
+        confirmText = 'Submit',
+        cancelText = 'Cancel',
+        defaultValue = ''
+    } = options;
+
+    return new Promise((resolve) => {
+        const modalEl = document.createElement('div');
+        modalEl.className = 'modal fade';
+        modalEl.tabIndex = -1;
+        modalEl.setAttribute('aria-hidden', 'true');
+        modalEl.innerHTML = `
+            <div class="modal-dialog modal-dialog-centered">
+                <div class="modal-content" style="background: var(--bg-card, #1e293b); border: 1px solid var(--border-color, rgba(148,163,184,0.2)); color: var(--text-primary, #e2e8f0);">
+                    <div class="modal-header" style="border-bottom: 1px solid var(--border-color, rgba(148,163,184,0.2));">
+                        <h5 class="modal-title"></h5>
+                        <button type="button" class="btn-close btn-close-white" data-role="cancel" aria-label="Close"></button>
+                    </div>
+                    <div class="modal-body">
+                        <p class="mb-2 popup-prompt-message"></p>
+                        <textarea class="form-control popup-prompt-input" rows="3" style="background: var(--bg-secondary, #1a1f3a); color: var(--text-primary, #e2e8f0); border: 1px solid var(--border-color, rgba(148,163,184,0.2));"></textarea>
+                    </div>
+                    <div class="modal-footer" style="border-top: 1px solid var(--border-color, rgba(148,163,184,0.2));">
+                        <button type="button" class="btn btn-outline-light" data-role="cancel"></button>
+                        <button type="button" class="btn btn-danger" data-role="confirm"></button>
+                    </div>
+                </div>
+            </div>
+        `;
+
+        modalEl.querySelector('.modal-title').textContent = title;
+        modalEl.querySelector('.popup-prompt-message').textContent = message;
+        const input = modalEl.querySelector('.popup-prompt-input');
+        input.placeholder = placeholder;
+        input.value = defaultValue;
+        modalEl.querySelector('[data-role="confirm"]').textContent = confirmText;
+        modalEl.querySelectorAll('[data-role="cancel"]').forEach((btn) => {
+            if (!btn.classList.contains('btn-close')) {
+                btn.textContent = cancelText;
+            }
+        });
+
+        document.body.appendChild(modalEl);
+        const modal = new bootstrap.Modal(modalEl);
+        let settled = false;
+
+        const finish = (value) => {
+            if (settled) return;
+            settled = true;
+            resolve(value);
+            modal.hide();
+        };
+
+        modalEl.querySelector('[data-role="confirm"]').addEventListener('click', () => {
+            const value = input.value.trim();
+            if (!value) {
+                input.focus();
+                return;
+            }
+            finish(value);
+        });
+        modalEl.querySelectorAll('[data-role="cancel"]').forEach((btn) => {
+            btn.addEventListener('click', () => finish(null));
+        });
+
+        input.addEventListener('keydown', (event) => {
+            if (event.key === 'Enter' && !event.shiftKey) {
+                event.preventDefault();
+                modalEl.querySelector('[data-role="confirm"]').click();
+            }
+        });
+
+        modalEl.addEventListener('shown.bs.modal', () => input.focus());
+        modalEl.addEventListener('hidden.bs.modal', () => {
+            if (!settled) {
+                settled = true;
+                resolve(null);
+            }
+            modalEl.remove();
+        });
+
+        modal.show();
+    });
+}
+
+function showPopupCardMessage(message, options = {}) {
+    const { type = 'error', title = 'Notice' } = options;
+
+    if (typeof showToast !== 'undefined') {
+        showToast(message, type);
+        return;
+    }
+
+    if (typeof bootstrap === 'undefined') {
+        return;
+    }
+
+    const modalEl = document.createElement('div');
+    modalEl.className = 'modal fade';
+    modalEl.tabIndex = -1;
+    modalEl.setAttribute('aria-hidden', 'true');
+    modalEl.innerHTML = `
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content" style="background: var(--bg-card, #1e293b); border: 1px solid var(--border-color, rgba(148,163,184,0.2)); color: var(--text-primary, #e2e8f0);">
+                <div class="modal-header" style="border-bottom: 1px solid var(--border-color, rgba(148,163,184,0.2));">
+                    <h5 class="modal-title"></h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <p class="mb-0 popup-message-body"></p>
+                </div>
+                <div class="modal-footer" style="border-top: 1px solid var(--border-color, rgba(148,163,184,0.2));">
+                    <button type="button" class="btn btn-primary" data-bs-dismiss="modal">OK</button>
+                </div>
+            </div>
+        </div>
+    `;
+
+    modalEl.querySelector('.modal-title').textContent = title;
+    modalEl.querySelector('.popup-message-body').textContent = message;
+
+    document.body.appendChild(modalEl);
+    const modal = new bootstrap.Modal(modalEl);
+    modalEl.addEventListener('hidden.bs.modal', () => modalEl.remove());
+    modal.show();
+}
+
 /**
  * Load and display pending orders
  */
@@ -268,7 +488,13 @@ async function viewOrderDetails(orderId) {
  * Approve an order
  */
 async function approveOrder(orderId) {
-    if (!confirm('Are you sure you want to approve this order?')) {
+    const confirmed = await showPopupCardConfirm('Are you sure you want to approve this order?', {
+        title: 'Approve Order',
+        confirmText: 'Approve',
+        cancelText: 'Cancel',
+        confirmClass: 'btn-success'
+    });
+    if (!confirmed) {
         return;
     }
 
@@ -304,11 +530,7 @@ async function approveOrder(orderId) {
 
     } catch (error) {
         console.error('Error approving order:', error);
-        if (typeof showToast !== 'undefined') {
-            showToast('Error: ' + error.message, 'error');
-        } else {
-            alert('Error: ' + error.message);
-        }
+        showPopupCardMessage('Error: ' + error.message, { type: 'error', title: 'Approve Order Failed' });
     }
 }
 
@@ -316,7 +538,12 @@ async function approveOrder(orderId) {
  * Reject an order
  */
 async function rejectOrder(orderId) {
-    const reason = prompt('Please provide a reason for rejection:');
+    const reason = await showPopupCardPrompt('Please provide a reason for rejection:', {
+        title: 'Reject Order',
+        confirmText: 'Reject Order',
+        cancelText: 'Cancel',
+        placeholder: 'Enter rejection reason...'
+    });
     if (!reason) return;
 
     try {
@@ -352,11 +579,7 @@ async function rejectOrder(orderId) {
 
     } catch (error) {
         console.error('Error rejecting order:', error);
-        if (typeof showToast !== 'undefined') {
-            showToast('Error: ' + error.message, 'error');
-        } else {
-            alert('Error: ' + error.message);
-        }
+        showPopupCardMessage('Error: ' + error.message, { type: 'error', title: 'Reject Order Failed' });
     }
 }
 

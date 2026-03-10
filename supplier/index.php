@@ -1039,6 +1039,94 @@
             }, type === 'success' ? 8000 : 6000);
         }
 
+        function showPopupPrompt(message, options = {}) {
+            const {
+                title = 'Enter Details',
+                placeholder = '',
+                confirmText = 'Submit',
+                cancelText = 'Cancel',
+                defaultValue = ''
+            } = options;
+
+            return new Promise((resolve) => {
+                const modalEl = document.createElement('div');
+                modalEl.className = 'modal fade';
+                modalEl.tabIndex = -1;
+                modalEl.setAttribute('aria-hidden', 'true');
+                modalEl.innerHTML = `
+                    <div class="modal-dialog modal-dialog-centered">
+                        <div class="modal-content" style="background: rgba(15, 23, 42, 0.96); border: 1px solid rgba(0, 245, 255, 0.2); color: var(--text-primary);">
+                            <div class="modal-header" style="border-bottom: 1px solid rgba(0, 245, 255, 0.2);">
+                                <h5 class="modal-title"></h5>
+                                <button type="button" class="btn-close btn-close-white" data-role="cancel" aria-label="Close"></button>
+                            </div>
+                            <div class="modal-body">
+                                <p class="mb-2 popup-prompt-message"></p>
+                                <input type="email" class="form-control popup-prompt-input" style="background: rgba(15, 23, 42, 0.8); color: var(--text-primary); border: 1px solid rgba(0, 245, 255, 0.2);">
+                            </div>
+                            <div class="modal-footer" style="border-top: 1px solid rgba(0, 245, 255, 0.2);">
+                                <button type="button" class="btn btn-outline-light" data-role="cancel"></button>
+                                <button type="button" class="btn btn-primary" data-role="confirm"></button>
+                            </div>
+                        </div>
+                    </div>
+                `;
+
+                modalEl.querySelector('.modal-title').textContent = title;
+                modalEl.querySelector('.popup-prompt-message').textContent = message;
+                const input = modalEl.querySelector('.popup-prompt-input');
+                input.placeholder = placeholder;
+                input.value = defaultValue;
+                modalEl.querySelector('[data-role="confirm"]').textContent = confirmText;
+                modalEl.querySelectorAll('[data-role="cancel"]').forEach((btn) => {
+                    if (!btn.classList.contains('btn-close')) {
+                        btn.textContent = cancelText;
+                    }
+                });
+
+                document.body.appendChild(modalEl);
+                const modal = new bootstrap.Modal(modalEl);
+                let settled = false;
+
+                const finish = (value) => {
+                    if (settled) return;
+                    settled = true;
+                    resolve(value);
+                    modal.hide();
+                };
+
+                modalEl.querySelector('[data-role="confirm"]').addEventListener('click', () => {
+                    const value = input.value.trim();
+                    if (!value) {
+                        input.focus();
+                        return;
+                    }
+                    finish(value);
+                });
+                modalEl.querySelectorAll('[data-role="cancel"]').forEach((btn) => {
+                    btn.addEventListener('click', () => finish(null));
+                });
+
+                input.addEventListener('keydown', (event) => {
+                    if (event.key === 'Enter') {
+                        event.preventDefault();
+                        modalEl.querySelector('[data-role="confirm"]').click();
+                    }
+                });
+
+                modalEl.addEventListener('shown.bs.modal', () => input.focus());
+                modalEl.addEventListener('hidden.bs.modal', () => {
+                    if (!settled) {
+                        settled = true;
+                        resolve(null);
+                    }
+                    modalEl.remove();
+                });
+
+                modal.show();
+            });
+        }
+
         document.getElementById('login-form').addEventListener('submit', async function(e) {
             e.preventDefault();
 
@@ -1136,9 +1224,14 @@
         });
 
         // Forgot password functionality
-        document.getElementById('forgot-link').addEventListener('click', function(e) {
+        document.getElementById('forgot-link').addEventListener('click', async function(e) {
             e.preventDefault();
-            const email = prompt('Enter your email address:');
+            const email = await showPopupPrompt('Enter your email address:', {
+                title: 'Forgot Password',
+                placeholder: 'you@example.com',
+                confirmText: 'Send Reset Link',
+                cancelText: 'Cancel'
+            });
             if (email && email.trim()) {
                 handleForgotPassword(email.trim());
             }

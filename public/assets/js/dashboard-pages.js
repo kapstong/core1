@@ -1092,7 +1092,10 @@ async function initProfileFaceEnrollmentSection() {
             await requestVerificationCode('enroll');
             showInfo('A 6-digit verification code was sent to your email.');
 
-            const verificationCode = (window.prompt('Enter the 6-digit code sent to your email to complete face enrollment:') || '').trim();
+            const verificationCode = (await showPrompt('Enter the 6-digit code sent to your email to complete face enrollment:', {
+                title: 'Verification Required',
+                required: true
+            }) || '').trim();
             if (!/^\d{6}$/.test(verificationCode)) {
                 throw new Error('Enrollment cancelled. A valid 6-digit code is required.');
             }
@@ -1610,7 +1613,10 @@ async function initProfileFaceEnrollmentSection() {
             await requestVerificationCode('delete');
             showInfo('A 6-digit verification code was sent to your email.');
 
-            const verificationCode = (window.prompt('Enter the 6-digit code sent to your email to remove face enrollment:') || '').trim();
+            const verificationCode = (await showPrompt('Enter the 6-digit code sent to your email to remove face enrollment:', {
+                title: 'Verification Required',
+                required: true
+            }) || '').trim();
             if (!/^\d{6}$/.test(verificationCode)) {
                 throw new Error('Removal cancelled. A valid 6-digit code is required.');
             }
@@ -3437,6 +3443,78 @@ function showPrompt(message, options = {}) {
     });
 }
 
+function showPopupCardConfirm(message, options = {}) {
+    const {
+        title = 'Confirm Action',
+        confirmText = 'Confirm',
+        cancelText = 'Cancel',
+        confirmClass = 'btn-danger'
+    } = options;
+
+    if (typeof bootstrap === 'undefined') {
+        return Promise.resolve(false);
+    }
+
+    return new Promise((resolve) => {
+        const modalEl = document.createElement('div');
+        modalEl.className = 'modal fade';
+        modalEl.tabIndex = -1;
+        modalEl.setAttribute('aria-hidden', 'true');
+        modalEl.innerHTML = `
+            <div class="modal-dialog modal-dialog-centered">
+                <div class="modal-content" style="background: var(--bg-card, #1e293b); border: 1px solid var(--border-color, rgba(148,163,184,0.2)); color: var(--text-primary, #e2e8f0);">
+                    <div class="modal-header" style="border-bottom: 1px solid var(--border-color, rgba(148,163,184,0.2));">
+                        <h5 class="modal-title"></h5>
+                        <button type="button" class="btn-close btn-close-white" data-role="cancel" aria-label="Close"></button>
+                    </div>
+                    <div class="modal-body">
+                        <p class="mb-0 popup-confirm-message"></p>
+                    </div>
+                    <div class="modal-footer" style="border-top: 1px solid var(--border-color, rgba(148,163,184,0.2));">
+                        <button type="button" class="btn btn-outline-light" data-role="cancel"></button>
+                        <button type="button" class="btn ${confirmClass}" data-role="confirm"></button>
+                    </div>
+                </div>
+            </div>
+        `;
+
+        modalEl.querySelector('.modal-title').textContent = title;
+        modalEl.querySelector('.popup-confirm-message').textContent = message;
+        modalEl.querySelector('[data-role="confirm"]').textContent = confirmText;
+        modalEl.querySelectorAll('[data-role="cancel"]').forEach((btn) => {
+            if (!btn.classList.contains('btn-close')) {
+                btn.textContent = cancelText;
+            }
+        });
+
+        document.body.appendChild(modalEl);
+        const modal = new bootstrap.Modal(modalEl);
+        let settled = false;
+
+        const finish = (value) => {
+            if (settled) return;
+            settled = true;
+            resolve(value);
+            modal.hide();
+        };
+
+        modalEl.querySelector('[data-role="confirm"]').addEventListener('click', () => finish(true));
+        modalEl.querySelectorAll('[data-role="cancel"]').forEach((btn) => {
+            btn.addEventListener('click', () => finish(false));
+        });
+
+        modalEl.addEventListener('hidden.bs.modal', () => {
+            if (!settled) {
+                settled = true;
+                resolve(false);
+            }
+            modalEl.remove();
+        });
+
+        modal.show();
+    });
+}
+
 // Admin page loading functions (stubs for now)
 async function loadAnalyticsPage() {
     const content = document.getElementById('page-content');
@@ -4044,7 +4122,12 @@ async function quickAdjustProductStock(productId, adjustmentType, quantity = 1) 
             type: normalizedType === 'add' ? 'success' : 'warning'
         });
     } else {
-        confirmed = window.confirm(confirmMessage);
+        confirmed = await showPopupCardConfirm(confirmMessage, {
+            title: 'Confirm Direct Adjustment',
+            confirmText: normalizedType === 'add' ? 'Add Stock' : 'Remove Stock',
+            cancelText: 'Cancel',
+            confirmClass: normalizedType === 'add' ? 'btn-success' : 'btn-warning'
+        });
     }
 
     if (!confirmed) {

@@ -543,6 +543,74 @@ if (MaintenanceMode::handle()) {
             setTimeout(() => alertDiv.remove(), 5000);
         }
 
+        function showPopupConfirm(message, options = {}) {
+            const {
+                title = 'Confirm Action',
+                confirmText = 'Confirm',
+                cancelText = 'Cancel',
+                confirmClass = 'btn-danger'
+            } = options;
+
+            return new Promise((resolve) => {
+                const modalEl = document.createElement('div');
+                modalEl.className = 'modal fade';
+                modalEl.tabIndex = -1;
+                modalEl.setAttribute('aria-hidden', 'true');
+                modalEl.innerHTML = `
+                    <div class="modal-dialog modal-dialog-centered">
+                        <div class="modal-content" style="background: var(--bg-glass); backdrop-filter: blur(20px); border: 1px solid var(--border-color); color: var(--text-primary);">
+                            <div class="modal-header" style="border-bottom: 1px solid var(--border-color);">
+                                <h5 class="modal-title"></h5>
+                                <button type="button" class="btn-close btn-close-white" data-role="cancel" aria-label="Close"></button>
+                            </div>
+                            <div class="modal-body">
+                                <p class="mb-0 popup-confirm-message"></p>
+                            </div>
+                            <div class="modal-footer" style="border-top: 1px solid var(--border-color);">
+                                <button type="button" class="btn btn-secondary" data-role="cancel"></button>
+                                <button type="button" class="btn ${confirmClass}" data-role="confirm"></button>
+                            </div>
+                        </div>
+                    </div>
+                `;
+
+                modalEl.querySelector('.modal-title').textContent = title;
+                modalEl.querySelector('.popup-confirm-message').textContent = message;
+                modalEl.querySelector('[data-role="confirm"]').textContent = confirmText;
+                modalEl.querySelectorAll('[data-role="cancel"]').forEach((btn) => {
+                    if (btn.tagName === 'BUTTON' && !btn.classList.contains('btn-close')) {
+                        btn.textContent = cancelText;
+                    }
+                });
+
+                document.body.appendChild(modalEl);
+                const modal = new bootstrap.Modal(modalEl);
+                let settled = false;
+
+                const finish = (value) => {
+                    if (settled) return;
+                    settled = true;
+                    resolve(value);
+                    modal.hide();
+                };
+
+                modalEl.querySelector('[data-role="confirm"]').addEventListener('click', () => finish(true));
+                modalEl.querySelectorAll('[data-role="cancel"]').forEach((btn) => {
+                    btn.addEventListener('click', () => finish(false));
+                });
+
+                modalEl.addEventListener('hidden.bs.modal', () => {
+                    if (!settled) {
+                        settled = true;
+                        resolve(false);
+                    }
+                    modalEl.remove();
+                });
+
+                modal.show();
+            });
+        }
+
         // Load cart function
         async function loadCart() {
             const loading = document.getElementById('loading');
@@ -748,7 +816,13 @@ if (MaintenanceMode::handle()) {
 
         // Clear cart
         async function clearCart() {
-            if (!confirm('Are you sure you want to clear your entire cart?')) return;
+            const confirmed = await showPopupConfirm('Are you sure you want to clear your entire cart?', {
+                title: 'Clear Entire Cart',
+                confirmText: 'Clear Cart',
+                cancelText: 'Keep Items',
+                confirmClass: 'btn-danger'
+            });
+            if (!confirmed) return;
 
             try {
                 const response = await fetch(`${API_BASE}/shop/cart.php?clear=true`, {
