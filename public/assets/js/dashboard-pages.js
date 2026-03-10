@@ -404,6 +404,7 @@ const profileFaceEnrollmentState = {
     closePhaseDropPeak: 0,
     rollingEarMax: 0,
     rollingDrop: 0,
+    lastEyeSignal: 0,
     descriptorSamples: [],
     calibrationFrames: 0,
     autoEnrollTriggered: false,
@@ -572,6 +573,7 @@ function cleanupProfileFaceEnrollment() {
     profileFaceEnrollmentState.closePhaseDropPeak = 0;
     profileFaceEnrollmentState.rollingEarMax = 0;
     profileFaceEnrollmentState.rollingDrop = 0;
+    profileFaceEnrollmentState.lastEyeSignal = 0;
     profileFaceEnrollmentState.descriptorSamples = [];
     profileFaceEnrollmentState.calibrationFrames = 0;
     profileFaceEnrollmentState.autoEnrollTriggered = false;
@@ -936,6 +938,7 @@ async function initProfileFaceEnrollmentSection() {
                 profileFaceEnrollmentState.closePhaseDropPeak = 0;
                 profileFaceEnrollmentState.rollingEarMax = 0;
                 profileFaceEnrollmentState.rollingDrop = 0;
+                profileFaceEnrollmentState.lastEyeSignal = 0;
                 profileFaceEnrollmentState.descriptorSamples = [];
                 profileFaceEnrollmentState.lastFaceSeenAt = 0;
                 profileFaceEnrollmentState.missedDetectionFrames = 0;
@@ -1113,7 +1116,7 @@ async function initProfileFaceEnrollmentSection() {
         const detect = async () => {
             try {
                 const now = Date.now();
-                if (now - profileFaceEnrollmentState.lastDetectionAt >= 120) {
+                if (now - profileFaceEnrollmentState.lastDetectionAt >= 75) {
                     profileFaceEnrollmentState.lastDetectionAt = now;
 
                     const detection = await faceapi
@@ -1155,6 +1158,7 @@ async function initProfileFaceEnrollmentSection() {
                             profileFaceEnrollmentState.closePhaseDropPeak = 0;
                             profileFaceEnrollmentState.rollingEarMax = 0;
                             profileFaceEnrollmentState.rollingDrop = 0;
+                            profileFaceEnrollmentState.lastEyeSignal = 0;
                             clearOverlay();
                             setStatus('No face detected. Keep your face in view.');
                         }
@@ -1222,11 +1226,16 @@ async function initProfileFaceEnrollmentSection() {
                             ? Math.max(0, (baselineForDrop - earForDecision) / baselineForDrop)
                             : 0;
                         profileFaceEnrollmentState.rollingDrop = (profileFaceEnrollmentState.rollingDrop * 0.7) + (relativeDrop * 0.3);
+                        const previousEyeSignal = profileFaceEnrollmentState.lastEyeSignal || earForDecision;
+                        const eyeSignalDelta = earForDecision - previousEyeSignal;
+                        profileFaceEnrollmentState.lastEyeSignal = earForDecision;
                         const shouldClose = (earForDecision <= blinkCloseThreshold) || (profileFaceEnrollmentState.rollingDrop >= 0.11);
                         const shouldOpen = (earForDecision >= blinkOpenThreshold) || (profileFaceEnrollmentState.rollingDrop <= 0.055);
+                        const rapidClose = eyeSignalDelta <= -0.016 && profileFaceEnrollmentState.rollingDrop >= 0.055;
+                        const rapidOpen = eyeSignalDelta >= 0.013 && profileFaceEnrollmentState.rollingDrop <= 0.095;
 
                         if (profileFaceEnrollmentState.blinkPhase === 'waiting_close') {
-                            if (shouldClose) {
+                            if (shouldClose || rapidClose) {
                                 profileFaceEnrollmentState.closedFrameStreak++;
                                 if (profileFaceEnrollmentState.closedFrameStreak >= minClosedFrames) {
                                     profileFaceEnrollmentState.blinkPhase = 'waiting_open';
@@ -1242,7 +1251,7 @@ async function initProfileFaceEnrollmentSection() {
                                 profileFaceEnrollmentState.closePhaseDropPeak,
                                 profileFaceEnrollmentState.rollingDrop
                             );
-                            if (shouldOpen) {
+                            if (shouldOpen || rapidOpen) {
                                 profileFaceEnrollmentState.openFrameStreak++;
                                 if (profileFaceEnrollmentState.openFrameStreak >= minOpenFrames) {
                                     const closeWasMeaningful = profileFaceEnrollmentState.closePhaseDropPeak >= 0.08
@@ -1362,6 +1371,7 @@ async function initProfileFaceEnrollmentSection() {
             profileFaceEnrollmentState.closePhaseDropPeak = 0;
             profileFaceEnrollmentState.rollingEarMax = 0;
             profileFaceEnrollmentState.rollingDrop = 0;
+            profileFaceEnrollmentState.lastEyeSignal = 0;
             profileFaceEnrollmentState.descriptorSamples = [];
             profileFaceEnrollmentState.calibrationFrames = 0;
             profileFaceEnrollmentState.autoEnrollTriggered = false;
@@ -1446,6 +1456,7 @@ async function initProfileFaceEnrollmentSection() {
             profileFaceEnrollmentState.closePhaseDropPeak = 0;
             profileFaceEnrollmentState.rollingEarMax = 0;
             profileFaceEnrollmentState.rollingDrop = 0;
+            profileFaceEnrollmentState.lastEyeSignal = 0;
             profileFaceEnrollmentState.descriptorSamples = [];
             profileFaceEnrollmentState.calibrationFrames = 0;
             profileFaceEnrollmentState.autoEnrollTriggered = false;
