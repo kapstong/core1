@@ -389,6 +389,10 @@ const profileFaceEnrollmentState = {
     lastDetectionAt: 0,
     earHistory: [],
     dynamicBlinkThreshold: 0.19,
+    dynamicOpenThreshold: 0.24,
+    earPeak: 0,
+    blinkCooldownUntil: 0,
+    scanLinePhase: 0,
     autoEnrollTriggered: false,
     enrollmentInProgress: false
 };
@@ -510,6 +514,10 @@ function cleanupProfileFaceEnrollment() {
     profileFaceEnrollmentState.livenessVerifiedAt = null;
     profileFaceEnrollmentState.earHistory = [];
     profileFaceEnrollmentState.dynamicBlinkThreshold = 0.19;
+    profileFaceEnrollmentState.dynamicOpenThreshold = 0.24;
+    profileFaceEnrollmentState.earPeak = 0;
+    profileFaceEnrollmentState.blinkCooldownUntil = 0;
+    profileFaceEnrollmentState.scanLinePhase = 0;
     profileFaceEnrollmentState.autoEnrollTriggered = false;
     profileFaceEnrollmentState.enrollmentInProgress = false;
 }
@@ -640,6 +648,7 @@ async function loadProfilePage() {
                             <div class="modal-body">
                                 <div style="position: relative; width: 100%; height: min(70vh, 560px); border-radius: 12px; overflow: hidden; border: 1px solid var(--border-color); background: rgba(0,0,0,0.3);">
                                     <video id="profile-face-video-modal" autoplay muted playsinline style="width: 100%; height: 100%; object-fit: cover;"></video>
+                                    <canvas id="profile-face-overlay-modal" style="position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none;"></canvas>
                                     <div id="profile-face-video-placeholder-modal" style="position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; color: var(--text-muted); font-size: 1rem; text-align: center; padding: 1rem;">
                                         Camera preview will appear here. Keep your face centered and blink once.
                                     </div>
@@ -739,14 +748,16 @@ async function initProfileFaceEnrollmentSection() {
     const placeholderEl = document.getElementById('profile-face-video-placeholder');
     const modalEl = document.getElementById('faceEnrollmentModal');
     const modalVideoEl = document.getElementById('profile-face-video-modal');
+    const modalOverlayEl = document.getElementById('profile-face-overlay-modal');
     const modalPlaceholderEl = document.getElementById('profile-face-video-placeholder-modal');
     const modalStatusEl = document.getElementById('profile-face-status-modal');
 
-    if (!badgeEl || !statusEl || !startBtn || !modalEnrollBtn || !removeBtn || !videoEl || !placeholderEl || !modalEl || !modalVideoEl || !modalPlaceholderEl || !modalStatusEl) {
+    if (!badgeEl || !statusEl || !startBtn || !modalEnrollBtn || !removeBtn || !videoEl || !placeholderEl || !modalEl || !modalVideoEl || !modalOverlayEl || !modalPlaceholderEl || !modalStatusEl) {
         return;
     }
 
     const modalInstance = window.bootstrap ? bootstrap.Modal.getOrCreateInstance(modalEl) : null;
+    const overlayCtx = modalOverlayEl.getContext('2d');
 
     const setStatus = (text, error = false) => {
         statusEl.style.color = error ? 'var(--danger)' : 'var(--text-muted)';
@@ -874,13 +885,76 @@ async function initProfileFaceEnrollmentSection() {
         }
     };
 
+    const resizeOverlay = () => {
+        const width = modalVideoEl.clientWidth || 0;
+        const height = modalVideoEl.clientHeight || 0;
+        if (!width || !height) return;
+        if (modalOverlayEl.width !== width) modalOverlayEl.width = width;
+        if (modalOverlayEl.height !== height) modalOverlayEl.height = height;
+    };
+
+    const clearOverlay = () => {
+        if (!overlayCtx) return;
+        resizeOverlay();
+        overlayCtx.clearRect(0, 0, modalOverlayEl.width, modalOverlayEl.height);
+    };
+
+    const drawPolyline = (points, color, width = 2, closed = false) => {
+        if (!overlayCtx || !points || points.length < 2) return;
+        overlayCtx.beginPath();
+        overlayCtx.strokeStyle = color;
+        overlayCtx.lineWidth = width;
+        overlayCtx.moveTo(points[0].x, points[0].y);
+        for (let i = 1; i < points.length; i++) {
+            overlayCtx.lineTo(points[i].x, points[i].y);
+        }
+        if (closed) overlayCtx.closePath();
+        overlayCtx.stroke();
+    };
+
+    const drawLandmarkOverlay = (detection) => {
+        if (!overlayCtx || !detection) return;
+        resizeOverlay();
+        const width = modalOverlayEl.width;
+        const height = modalOverlayEl.height;
+        if (!width || !height) return;
+
+        overlayCtx.clearRect(0, 0, width, height);
+
+        const displaySize = { width, height };
+        const resized = faceapi.resizeResults(detection, displaySize);
+        const lm = resized.landmarks;
+        const box = resized.detection.box;
+
+        drawPolyline(lm.getLeftEye(), '#00d1ff', 2, true);
+        drawPolyline(lm.getRightEye(), '#00d1ff', 2, true);
+        drawPolyline(lm.getNose(), '#49ff9f', 2, false);
+        drawPolyline(lm.getMouth(), '#ffc857', 2, true);
+        drawPolyline(lm.getJawOutline(), 'rgba(255,255,255,0.35)', 1.5, false);
+        drawPolyline([lm.getLeftEyeBrow()[0], ...lm.getLeftEyeBrow()], 'rgba(0,209,255,0.8)', 1.5, false);
+        drawPolyline([lm.getRightEyeBrow()[0], ...lm.getRightEyeBrow()], 'rgba(0,209,255,0.8)', 1.5, false);
+
+        overlayCtx.strokeStyle = 'rgba(73,255,159,0.95)';
+        overlayCtx.lineWidth = 2;
+        overlayCtx.strokeRect(box.x, box.y, box.width, box.height);
+
+        profileFaceEnrollmentState.scanLinePhase += 0.18;
+        const scanY = box.y + ((Math.sin(profileFaceEnrollmentState.scanLinePhase) + 1) * 0.5 * box.height);
+        overlayCtx.beginPath();
+        overlayCtx.strokeStyle = 'rgba(73,255,159,0.85)';
+        overlayCtx.lineWidth = 2;
+        overlayCtx.moveTo(box.x, scanY);
+        overlayCtx.lineTo(box.x + box.width, scanY);
+        overlayCtx.stroke();
+    };
+
     const runDetectionLoop = async () => {
         stopDetectionLoop();
 
         const detect = async () => {
             try {
                 const now = Date.now();
-                if (now - profileFaceEnrollmentState.lastDetectionAt >= 220) {
+                if (now - profileFaceEnrollmentState.lastDetectionAt >= 120) {
                     profileFaceEnrollmentState.lastDetectionAt = now;
 
                     const detection = await faceapi
@@ -892,15 +966,17 @@ async function initProfileFaceEnrollmentSection() {
                         profileFaceEnrollmentState.lastDescriptor = null;
                         modalEnrollBtn.disabled = true;
                         profileFaceEnrollmentState.autoEnrollTriggered = false;
+                        clearOverlay();
                         setStatus('No face detected. Keep your face centered.');
                     } else {
+                        drawLandmarkOverlay(detection);
                         profileFaceEnrollmentState.lastDescriptor = Array.from(detection.descriptor);
 
                         const leftEAR = profileEyeAspectRatio(detection.landmarks.getLeftEye());
                         const rightEAR = profileEyeAspectRatio(detection.landmarks.getRightEye());
                         const avgEAR = (leftEAR + rightEAR) / 2;
                         const minClosedFrames = 1;
-                        const maxHistory = 18;
+                        const maxHistory = 28;
 
                         // Build adaptive baseline from valid-eye frames.
                         if (avgEAR > 0.08 && avgEAR < 0.5) {
@@ -908,26 +984,32 @@ async function initProfileFaceEnrollmentSection() {
                             if (profileFaceEnrollmentState.earHistory.length > maxHistory) {
                                 profileFaceEnrollmentState.earHistory.shift();
                             }
+                            profileFaceEnrollmentState.earPeak = Math.max(avgEAR, profileFaceEnrollmentState.earPeak * 0.995);
                         }
 
-                        if (profileFaceEnrollmentState.earHistory.length >= 6) {
+                        if (profileFaceEnrollmentState.earHistory.length >= 8) {
                             const sorted = [...profileFaceEnrollmentState.earHistory].sort((a, b) => a - b);
-                            const median = sorted[Math.floor(sorted.length / 2)];
-                            const adaptive = median * 0.78;
-                            profileFaceEnrollmentState.dynamicBlinkThreshold = Math.max(0.10, Math.min(0.26, adaptive));
+                            const p80 = sorted[Math.floor(sorted.length * 0.8)];
+                            const openBase = Math.max(p80 || 0.2, profileFaceEnrollmentState.earPeak || 0.2);
+                            const closeAdaptive = openBase * 0.68;
+                            const openAdaptive = openBase * 0.82;
+                            profileFaceEnrollmentState.dynamicBlinkThreshold = Math.max(0.09, Math.min(0.24, closeAdaptive));
+                            profileFaceEnrollmentState.dynamicOpenThreshold = Math.max(profileFaceEnrollmentState.dynamicBlinkThreshold + 0.025, Math.min(0.36, openAdaptive));
                         } else {
-                            profileFaceEnrollmentState.dynamicBlinkThreshold = 0.17;
+                            profileFaceEnrollmentState.dynamicBlinkThreshold = 0.14;
+                            profileFaceEnrollmentState.dynamicOpenThreshold = 0.19;
                         }
 
                         const blinkCloseThreshold = profileFaceEnrollmentState.dynamicBlinkThreshold;
-                        const blinkOpenThreshold = Math.min(0.35, blinkCloseThreshold + 0.035);
+                        const blinkOpenThreshold = profileFaceEnrollmentState.dynamicOpenThreshold;
 
                         if (avgEAR < blinkCloseThreshold) {
                             profileFaceEnrollmentState.eyeClosedFrameCount++;
                             profileFaceEnrollmentState.blinkInProgress = true;
                         } else if (profileFaceEnrollmentState.blinkInProgress && avgEAR > blinkOpenThreshold) {
-                            if (profileFaceEnrollmentState.eyeClosedFrameCount >= minClosedFrames) {
+                            if (profileFaceEnrollmentState.eyeClosedFrameCount >= minClosedFrames && now > profileFaceEnrollmentState.blinkCooldownUntil) {
                                 profileFaceEnrollmentState.blinkCount++;
+                                profileFaceEnrollmentState.blinkCooldownUntil = now + 900;
                                 if (profileFaceEnrollmentState.blinkCount >= 1 && !profileFaceEnrollmentState.livenessVerifiedAt) {
                                     profileFaceEnrollmentState.livenessVerifiedAt = new Date().toISOString();
                                 }
@@ -996,6 +1078,10 @@ async function initProfileFaceEnrollmentSection() {
             profileFaceEnrollmentState.livenessVerifiedAt = null;
             profileFaceEnrollmentState.earHistory = [];
             profileFaceEnrollmentState.dynamicBlinkThreshold = 0.19;
+            profileFaceEnrollmentState.dynamicOpenThreshold = 0.24;
+            profileFaceEnrollmentState.earPeak = 0;
+            profileFaceEnrollmentState.blinkCooldownUntil = 0;
+            profileFaceEnrollmentState.scanLinePhase = 0;
             profileFaceEnrollmentState.autoEnrollTriggered = false;
             profileFaceEnrollmentState.enrollmentInProgress = false;
             modalEnrollBtn.disabled = true;
@@ -1062,6 +1148,10 @@ async function initProfileFaceEnrollmentSection() {
             profileFaceEnrollmentState.blinkInProgress = false;
             profileFaceEnrollmentState.earHistory = [];
             profileFaceEnrollmentState.dynamicBlinkThreshold = 0.19;
+            profileFaceEnrollmentState.dynamicOpenThreshold = 0.24;
+            profileFaceEnrollmentState.earPeak = 0;
+            profileFaceEnrollmentState.blinkCooldownUntil = 0;
+            profileFaceEnrollmentState.scanLinePhase = 0;
             profileFaceEnrollmentState.autoEnrollTriggered = false;
             profileFaceEnrollmentState.enrollmentInProgress = false;
             modalEnrollBtn.disabled = true;
@@ -1081,6 +1171,7 @@ async function initProfileFaceEnrollmentSection() {
 
     modalEl.addEventListener('hidden.bs.modal', () => {
         cleanupProfileFaceEnrollment();
+        clearOverlay();
         placeholderEl.style.display = 'flex';
         modalPlaceholderEl.style.display = 'flex';
         setStatus('Liveness check not started.');
