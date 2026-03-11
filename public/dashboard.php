@@ -16,7 +16,7 @@
     <link rel="stylesheet" href="assets/css/icon-optimizations.css">
     <!-- CUSTOM CHECKBOX SYSTEM - Modern redesign for entire application -->
     <link rel="stylesheet" href="assets/css/checkboxes.css?v=1.0">
-    <link rel="stylesheet" href="assets/css/admin-ai-copilot.css?v=1.3">
+    <link rel="stylesheet" href="assets/css/admin-ai-copilot.css?v=<?= urlencode((string)@filemtime(__DIR__ . '/assets/css/admin-ai-copilot.css')) ?>">
     <!-- User Manual System -->
     <link rel="stylesheet" href="assets/css/user-manual.css">
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>

@@ -27,7 +27,8 @@
     right: 24px;
     bottom: 84px;
     width: min(500px, calc(100vw - 32px));
-    max-height: min(78vh, 780px);
+    height: clamp(520px, 70vh, 760px);
+    max-height: calc(100vh - 108px);
     z-index: 1091;
     border: 1px solid rgba(113, 146, 255, 0.28);
     background:
@@ -508,7 +509,8 @@
         right: 16px;
         bottom: 72px;
         width: calc(100vw - 24px);
-        max-height: 72vh;
+        height: clamp(440px, 72vh, 700px);
+        max-height: calc(100vh - 88px);
     }
 
     .admin-ai-panel.maximized {
