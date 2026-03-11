@@ -652,7 +652,7 @@
     <script src="assets/js/inactivity-monitor.js?v=3.4"></script>
 
     <!-- Include all page loaders -->
-    <script src="assets/js/dashboard-pages.js?v=6.0"></script>
+    <script src="assets/js/dashboard-pages.js?v=6.1"></script>
     <script src="assets/js/admin-ai-copilot.js?v=<?= urlencode((string)@filemtime(__DIR__ . '/assets/js/admin-ai-copilot.js')) ?>"></script>
 
     <!-- NEW: Complete GRN Management System -->
@@ -1260,6 +1260,9 @@
             if (typeof window.cleanupProfileFaceEnrollment === 'function' && pageName !== 'profile') {
                 window.cleanupProfileFaceEnrollment();
             }
+            if (typeof window.stopLivePageAutoRefresh === 'function') {
+                window.stopLivePageAutoRefresh();
+            }
             if (pageName !== 'suppliers' && typeof window.stopSuppliersAutoRefresh === 'function') {
                 window.stopSuppliersAutoRefresh();
             }
@@ -1371,6 +1374,10 @@
                     setTimeout(() => {
                         moneyMasking.maskAllMoneyElements();
                     }, 300);
+                }
+
+                if (typeof window.startLivePageAutoRefresh === 'function') {
+                    window.startLivePageAutoRefresh(pageName);
                 }
             } catch (error) {
                 content.innerHTML = `

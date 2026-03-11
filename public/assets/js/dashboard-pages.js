@@ -6075,6 +6075,10 @@ function debounce(func, wait) {
 const SUPPLIERS_AUTO_REFRESH_INTERVAL_MS = 15000;
 let suppliersAutoRefreshIntervalId = null;
 let suppliersAutoRefreshInFlight = false;
+const LIVE_PAGE_REFRESH_INTERVAL_MS = 15000;
+let livePageRefreshIntervalId = null;
+let livePageRefreshInFlight = false;
+let livePageRefreshTargetPage = null;
 
 function stopSuppliersAutoRefresh() {
     if (suppliersAutoRefreshIntervalId !== null) {
@@ -6116,6 +6120,134 @@ function startSuppliersAutoRefresh() {
 }
 
 window.stopSuppliersAutoRefresh = stopSuppliersAutoRefresh;
+
+function stopLivePageAutoRefresh() {
+    if (livePageRefreshIntervalId !== null) {
+        clearInterval(livePageRefreshIntervalId);
+        livePageRefreshIntervalId = null;
+    }
+    livePageRefreshInFlight = false;
+    livePageRefreshTargetPage = null;
+}
+
+function getCurrentAdjustmentsPage() {
+    const activePaginationLink = document.querySelector('#adjustments-pagination .page-item.active .page-link');
+    if (!activePaginationLink) return 1;
+    const parsed = parseInt(activePaginationLink.textContent, 10);
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : 1;
+}
+
+async function refreshPageData(pageName) {
+    switch (pageName) {
+        case 'home':
+            await loadHomePage();
+            return;
+        case 'products':
+            if (document.getElementById('products-table-body')) {
+                await loadProducts();
+            }
+            return;
+        case 'categories':
+            if (document.getElementById('categories-table-body')) {
+                await loadCategories();
+            }
+            return;
+        case 'adjustments':
+            if (document.getElementById('adjustments-table-body')) {
+                await loadStockAdjustments(getCurrentAdjustmentsPage());
+            }
+            return;
+        case 'purchase-orders':
+            if (currentUser && currentUser.role === 'supplier') {
+                if (document.getElementById('pending-orders-tbody')) {
+                    await loadPendingOrders();
+                }
+            } else if (document.getElementById('po-table-body')) {
+                await Promise.all([
+                    loadPurchaseOrders(),
+                    loadSuppliersForPOFilter()
+                ]);
+            }
+            return;
+        case 'po-history':
+            if (currentUser && currentUser.role === 'supplier' && document.getElementById('order-history-tbody')) {
+                const statusFilter = document.getElementById('status-filter')?.value || 'all';
+                await loadOrderHistory(statusFilter);
+            }
+            return;
+        case 'grn':
+            if (document.getElementById('grn-table-body')) {
+                await Promise.all([
+                    loadGRNs(),
+                    loadPOsForGRNFilter()
+                ]);
+            }
+            return;
+        case 'sales':
+            if (document.getElementById('sales-table-body')) {
+                await loadSalesHistory();
+            }
+            return;
+        case 'users':
+            if (document.getElementById('users-table-body')) {
+                await loadUsers();
+            }
+            return;
+        case 'analytics':
+            if (document.getElementById('salesChart') || document.getElementById('categoryChart')) {
+                await loadAnalyticsData();
+            }
+            return;
+        default:
+            return;
+    }
+}
+
+function startLivePageAutoRefresh(pageName) {
+    stopLivePageAutoRefresh();
+
+    // Suppliers page has its own dedicated refresh loop.
+    if (pageName === 'suppliers') {
+        return;
+    }
+
+    const refreshablePages = new Set([
+        'home',
+        'products',
+        'categories',
+        'adjustments',
+        'purchase-orders',
+        'po-history',
+        'grn',
+        'sales',
+        'users',
+        'analytics'
+    ]);
+
+    if (!refreshablePages.has(pageName)) {
+        return;
+    }
+
+    livePageRefreshTargetPage = pageName;
+    livePageRefreshIntervalId = setInterval(async () => {
+        // Do not refresh while hidden, while a modal is open, or when a cycle is still running.
+        if (document.hidden || document.querySelector('.modal.show') || livePageRefreshInFlight) {
+            return;
+        }
+
+        livePageRefreshInFlight = true;
+        try {
+            await refreshPageData(livePageRefreshTargetPage);
+        } catch (error) {
+            devLog('Live page refresh error:', error);
+        } finally {
+            livePageRefreshInFlight = false;
+        }
+    }, LIVE_PAGE_REFRESH_INTERVAL_MS);
+}
+
+window.startLivePageAutoRefresh = startLivePageAutoRefresh;
+window.stopLivePageAutoRefresh = stopLivePageAutoRefresh;
 
 async function loadSuppliersPage() {
     const content = document.getElementById('page-content');
