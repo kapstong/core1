@@ -273,7 +273,7 @@
                 const data = await response.json();
 
                 if (data.success) {
-                    showToast(data.message || 'Registration submitted successfully! Please check your email for confirmation.', 'success');
+                    showToast('Registered successfully.', 'success');
                     this.reset();
                     document.getElementById('terms-check').checked = false;
 
