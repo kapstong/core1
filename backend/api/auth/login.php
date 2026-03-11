@@ -40,6 +40,13 @@ try {
         Response::error('Invalid JSON input');
     }
 
+    $username = trim((string)($input['username'] ?? ''));
+    $password = (string)($input['password'] ?? '');
+
+    if ($username === '' || $password === '') {
+        Response::error('Username and password required', 400);
+    }
+
     // Test if database is available, if not use test authentication
     $useTestAuth = false;
     try {
@@ -58,13 +65,6 @@ try {
 
     if ($useTestAuth) {
         // Test authentication (schema not deployed yet)
-        $username = trim($input['username'] ?? '');
-        $password = $input['password'] ?? '';
-
-        if (empty($username) || empty($password)) {
-            Response::error('Username and password required', 400);
-        }
-
         // Check if we have admin user in database
         try {
             $database = Database::getInstance()->getConnection();
@@ -154,8 +154,19 @@ try {
     } else {
         // Full authentication with database
         $userModel = new User();
-        $username = $input['username'] ?? '';
-        $user = $userModel->authenticate($username, $input['password'] ?? '');
+        $knownUser = $userModel->findByUsername($username);
+
+        // Differentiate inactive/pending accounts from invalid credentials
+        if ($knownUser && isset($knownUser['password_hash']) && password_verify($password, $knownUser['password_hash'])) {
+            if (!(bool)$knownUser['is_active']) {
+                if (($knownUser['role'] ?? '') === 'supplier') {
+                    Response::error('Your supplier account is pending approval. Please wait for an administrator to activate your account.', 403);
+                }
+                Response::error('Your account is inactive. Please contact the administrator.', 403);
+            }
+        }
+
+        $user = $userModel->authenticate($username, $password);
 
         // Check if supplier is inactive
         if ($user && $user['role'] === 'supplier' && !$user['is_active']) {
