@@ -256,11 +256,6 @@
                 const payload = {};
                 form.forEach((v, k) => payload[k] = v);
 
-                // Log payload for debugging
-                console.log('Signup payload:', payload);
-                console.log('Payload JSON:', JSON.stringify(payload));
-                console.log('Payload keys:', Object.keys(payload));
-
                 // Validate password strength
                 if (!payload.password || payload.password.length < 8) {
                     showToast('Password must be at least 8 characters long', 'error');
@@ -269,7 +264,6 @@
                     return;
                 }
 
-                console.log('Sending to:', `${API_BASE}/suppliers/register.php`);
                 const response = await fetch(`${API_BASE}/suppliers/register.php`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -288,22 +282,6 @@
                         window.location.href = 'index.php';
                     }, 3000);
                 } else {
-                    console.error('Registration failed - Response status:', response.status);
-                    console.error('Registration failed - Full response:', data);
-                    console.error('Registration failed - Message:', data.message);
-                    console.error('Registration failed - Errors:', data.errors || null);
-                    if (data?.errors?.reference) {
-                        console.error('Registration failed - Reference:', data.errors.reference);
-                    }
-                    if (data?.errors?.sqlstate) {
-                        console.error('Registration failed - SQLSTATE:', data.errors.sqlstate);
-                    }
-                    if (data?.errors?.db_code) {
-                        console.error('Registration failed - DB Code:', data.errors.db_code);
-                    }
-                    if (data?.errors?.debug) {
-                        console.error('Registration failed - Debug:', data.errors.debug);
-                    }
                     if (isEmailAlreadyExistsMessage(data.message)) {
                         showDuplicateEmailError(emailInput);
                     } else {
@@ -312,7 +290,6 @@
                     }
                 }
             } catch (error) {
-                console.error('Registration error:', error);
                 showToast('Connection error. Please check your internet connection and try again.', 'error');
             } finally {
                 submitBtn.disabled = false;

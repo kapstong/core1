@@ -41,6 +41,70 @@ function buildErrorReference() {
     }
 }
 
+function validateTableName($table) {
+    $allowed = ['users', 'suppliers'];
+    if (!in_array($table, $allowed, true)) {
+        throw new InvalidArgumentException('Invalid table name for ID fallback.');
+    }
+}
+
+function tableRequiresExplicitId(PDO $conn, $table) {
+    validateTableName($table);
+
+    static $cache = [];
+    if (isset($cache[$table])) {
+        return $cache[$table];
+    }
+
+    try {
+        $schemaStmt = $conn->query('SELECT DATABASE() AS db_name');
+        $schemaRow = $schemaStmt->fetch(PDO::FETCH_ASSOC);
+        $schemaName = $schemaRow['db_name'] ?? null;
+        if (!$schemaName) {
+            $cache[$table] = false;
+            return false;
+        }
+
+        $stmt = $conn->prepare("
+            SELECT IS_NULLABLE, COLUMN_DEFAULT, EXTRA
+            FROM INFORMATION_SCHEMA.COLUMNS
+            WHERE TABLE_SCHEMA = :schema
+              AND TABLE_NAME = :table
+              AND COLUMN_NAME = 'id'
+            LIMIT 1
+        ");
+        $stmt->execute([
+            ':schema' => $schemaName,
+            ':table' => $table
+        ]);
+        $row = $stmt->fetch(PDO::FETCH_ASSOC);
+
+        if (!$row) {
+            $cache[$table] = false;
+            return false;
+        }
+
+        $extra = strtolower((string)($row['EXTRA'] ?? ''));
+        $isNullable = strtoupper((string)($row['IS_NULLABLE'] ?? 'YES')) === 'YES';
+        $hasDefault = array_key_exists('COLUMN_DEFAULT', $row) && $row['COLUMN_DEFAULT'] !== null;
+
+        $cache[$table] = (strpos($extra, 'auto_increment') === false) && !$isNullable && !$hasDefault;
+        return $cache[$table];
+    } catch (Throwable $e) {
+        // If introspection is unavailable, proceed normally and rely on runtime fallback.
+        $cache[$table] = false;
+        return false;
+    }
+}
+
+function getNextManualId(PDO $conn, $table) {
+    validateTableName($table);
+    $stmt = $conn->query("SELECT COALESCE(MAX(id), 0) + 1 AS next_id FROM {$table}");
+    $row = $stmt->fetch(PDO::FETCH_ASSOC);
+    $nextId = isset($row['next_id']) ? (int)$row['next_id'] : 1;
+    return $nextId > 0 ? $nextId : 1;
+}
+
 $requestMethod = $_SERVER['REQUEST_METHOD'] ?? '';
 error_log('CORS handled, REQUEST_METHOD: ' . ($requestMethod !== '' ? $requestMethod : 'NOT SET'));
 
@@ -164,6 +228,14 @@ try {
         ':is_active' => 0
     ];
 
+    $manualUserId = null;
+    if (tableRequiresExplicitId($conn, 'users')) {
+        $manualUserId = getNextManualId($conn, 'users');
+        $userColumns[] = 'id';
+        $userValues[] = ':id';
+        $userParams[':id'] = $manualUserId;
+    }
+
     if ($db->columnExists('users', 'phone')) {
         $userColumns[] = 'phone';
         $userValues[] = ':phone';
@@ -178,9 +250,37 @@ try {
 
     $userQuery = "INSERT INTO users (" . implode(', ', $userColumns) . ") VALUES (" . implode(', ', $userValues) . ")";
     $stmt = $conn->prepare($userQuery);
-    $stmt->execute($userParams);
+    try {
+        $stmt->execute($userParams);
+    } catch (PDOException $e) {
+        $dbCode = isset($e->errorInfo[1]) ? (int)$e->errorInfo[1] : null;
+        $errorMessage = strtolower($e->getMessage());
+        if (!isset($userParams[':id']) && $dbCode === 1364 && strpos($errorMessage, "field 'id' doesn't have a default value") !== false) {
+            $manualUserId = getNextManualId($conn, 'users');
+            $userColumns[] = 'id';
+            $userValues[] = ':id';
+            $userParams[':id'] = $manualUserId;
+            $userQuery = "INSERT INTO users (" . implode(', ', $userColumns) . ") VALUES (" . implode(', ', $userValues) . ")";
+            $stmt = $conn->prepare($userQuery);
+            $stmt->execute($userParams);
+        } else {
+            throw $e;
+        }
+    }
 
-    $userId = (int)$conn->lastInsertId();
+    $userId = $manualUserId !== null ? (int)$manualUserId : (int)$conn->lastInsertId();
+    if ($userId <= 0) {
+        $lookup = $conn->prepare("SELECT id FROM users WHERE username = :username AND email = :email LIMIT 1");
+        $lookup->execute([
+            ':username' => $data['username'],
+            ':email' => $data['email']
+        ]);
+        $userRow = $lookup->fetch(PDO::FETCH_ASSOC);
+        $userId = isset($userRow['id']) ? (int)$userRow['id'] : 0;
+    }
+    if ($userId <= 0) {
+        throw new RuntimeException('Unable to determine new supplier user ID after insert.');
+    }
     $supplierCode = buildSupplierCode($userId);
 
     // Insert supplier information into suppliers table when compatible columns exist.
@@ -196,6 +296,12 @@ try {
             ':supplier_name' => $supplierData['company_name'] ?? $data['name'],
             ':supplier_code' => $supplierCode
         ];
+
+        if (tableRequiresExplicitId($conn, 'suppliers')) {
+            $supplierColumns[] = 'id';
+            $supplierValues[] = ':id';
+            $supplierParams[':id'] = getNextManualId($conn, 'suppliers');
+        }
 
         $supplierFieldMap = [
             'contact_person' => 'contact_person',
@@ -234,7 +340,22 @@ try {
 
         $supplierQuery = "INSERT INTO suppliers (" . implode(', ', $supplierColumns) . ") VALUES (" . implode(', ', $supplierValues) . ")";
         $stmt = $conn->prepare($supplierQuery);
-        $stmt->execute($supplierParams);
+        try {
+            $stmt->execute($supplierParams);
+        } catch (PDOException $e) {
+            $dbCode = isset($e->errorInfo[1]) ? (int)$e->errorInfo[1] : null;
+            $errorMessage = strtolower($e->getMessage());
+            if (!isset($supplierParams[':id']) && $dbCode === 1364 && strpos($errorMessage, "field 'id' doesn't have a default value") !== false) {
+                $supplierColumns[] = 'id';
+                $supplierValues[] = ':id';
+                $supplierParams[':id'] = getNextManualId($conn, 'suppliers');
+                $supplierQuery = "INSERT INTO suppliers (" . implode(', ', $supplierColumns) . ") VALUES (" . implode(', ', $supplierValues) . ")";
+                $stmt = $conn->prepare($supplierQuery);
+                $stmt->execute($supplierParams);
+            } else {
+                throw $e;
+            }
+        }
     } else {
         error_log('Supplier registration warning: suppliers insert skipped due to incompatible schema');
     }
@@ -260,20 +381,13 @@ try {
     error_log('Supplier registration error [' . $errorReference . ']: ' . $e->getMessage());
     error_log('Supplier registration trace [' . $errorReference . ']: ' . $e->getTraceAsString());
 
-    $debugEnabled = class_exists('Env') ? (bool)Env::get('APP_DEBUG', false) : false;
     $errorContext = ['reference' => $errorReference];
-    if ($debugEnabled) {
-        $errorContext['debug'] = $e->getMessage();
-    }
 
     if ($e instanceof PDOException) {
         $errorCode = (string)$e->getCode();
         $errorMessage = strtolower($e->getMessage());
         $dbCode = isset($e->errorInfo[1]) ? (int)$e->errorInfo[1] : null;
-        $errorContext['sqlstate'] = $errorCode !== '' ? $errorCode : null;
-        if ($dbCode !== null) {
-            $errorContext['db_code'] = $dbCode;
-        }
+        error_log('Supplier registration PDO meta [' . $errorReference . ']: SQLSTATE=' . $errorCode . ', DB_CODE=' . ($dbCode !== null ? (string)$dbCode : 'n/a'));
 
         if ($errorCode === '23000') {
             if (strpos($errorMessage, 'phone') !== false) {
