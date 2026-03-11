@@ -269,6 +269,11 @@ try {
     if ($e instanceof PDOException) {
         $errorCode = (string)$e->getCode();
         $errorMessage = strtolower($e->getMessage());
+        $dbCode = isset($e->errorInfo[1]) ? (int)$e->errorInfo[1] : null;
+        $errorContext['sqlstate'] = $errorCode !== '' ? $errorCode : null;
+        if ($dbCode !== null) {
+            $errorContext['db_code'] = $dbCode;
+        }
 
         if ($errorCode === '23000') {
             if (strpos($errorMessage, 'phone') !== false) {
@@ -303,6 +308,22 @@ try {
                     'conflict_key' => $conflictKey
                 ]);
             }
+        }
+
+        if ($dbCode === 1265 && strpos($errorMessage, 'role') !== false) {
+            Response::error('Registration setup issue: users.role does not allow \"supplier\". Please run the latest database migration.', 500, $errorContext);
+        }
+
+        if ($dbCode === 1364) {
+            Response::error('Registration setup issue: required database fields are missing defaults. Please run the latest database migration.', 500, $errorContext);
+        }
+
+        if ($dbCode === 1048) {
+            Response::error('Registration failed because a required field was stored as null. Please verify all fields and try again.', 400, $errorContext);
+        }
+
+        if ($dbCode === 1406) {
+            Response::error('One or more registration fields are too long for the current database schema.', 400, $errorContext);
         }
 
         if (in_array($errorCode, ['42S22', '42S02'], true)) {

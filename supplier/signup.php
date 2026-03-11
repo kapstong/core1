@@ -291,10 +291,24 @@
                     console.error('Registration failed - Response status:', response.status);
                     console.error('Registration failed - Full response:', data);
                     console.error('Registration failed - Message:', data.message);
+                    console.error('Registration failed - Errors:', data.errors || null);
+                    if (data?.errors?.reference) {
+                        console.error('Registration failed - Reference:', data.errors.reference);
+                    }
+                    if (data?.errors?.sqlstate) {
+                        console.error('Registration failed - SQLSTATE:', data.errors.sqlstate);
+                    }
+                    if (data?.errors?.db_code) {
+                        console.error('Registration failed - DB Code:', data.errors.db_code);
+                    }
+                    if (data?.errors?.debug) {
+                        console.error('Registration failed - Debug:', data.errors.debug);
+                    }
                     if (isEmailAlreadyExistsMessage(data.message)) {
                         showDuplicateEmailError(emailInput);
                     } else {
-                        showToast(data.message || `Registration failed (Status ${response.status}). Please try again.`, 'error');
+                        const referenceSuffix = data?.errors?.reference ? ` (Ref: ${data.errors.reference})` : '';
+                        showToast((data.message || `Registration failed (Status ${response.status}). Please try again.`) + referenceSuffix, 'error');
                     }
                 }
             } catch (error) {
