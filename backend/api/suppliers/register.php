@@ -33,6 +33,14 @@ function buildSupplierCode($userId) {
     return 'SUP-' . str_pad((string)$userId, 5, '0', STR_PAD_LEFT);
 }
 
+function buildErrorReference() {
+    try {
+        return 'supreg-' . gmdate('YmdHis') . '-' . substr(bin2hex(random_bytes(4)), 0, 8);
+    } catch (Throwable $e) {
+        return 'supreg-' . gmdate('YmdHis') . '-' . mt_rand(10000000, 99999999);
+    }
+}
+
 $requestMethod = $_SERVER['REQUEST_METHOD'] ?? '';
 error_log('CORS handled, REQUEST_METHOD: ' . ($requestMethod !== '' ? $requestMethod : 'NOT SET'));
 
@@ -116,6 +124,7 @@ if (strlen($data['password']) < 8) {
 
 $db = null;
 $conn = null;
+$transactionStarted = false;
 
 try {
     $db = Database::getInstance();
@@ -138,7 +147,10 @@ try {
     $password_hash = password_hash($data['password'], PASSWORD_BCRYPT);
 
     // Start transaction for atomic operation
-    $conn->beginTransaction();
+    $transactionStarted = $conn->beginTransaction();
+    if (!$transactionStarted) {
+        error_log('Supplier registration warning: failed to start transaction; proceeding without explicit transaction');
+    }
 
     // Insert into users with role = supplier, is_active = 0 (pending approval)
     $userColumns = ['username', 'email', 'password_hash', 'role', 'full_name', 'is_active'];
@@ -228,7 +240,9 @@ try {
     }
 
     // Commit transaction
-    $conn->commit();
+    if ($transactionStarted && $conn->inTransaction()) {
+        $conn->commit();
+    }
 
     Response::success(
         [
@@ -239,17 +253,30 @@ try {
         201
     );
 } catch (Throwable $e) {
-    if ($conn instanceof PDO && $conn->inTransaction()) {
+    if ($transactionStarted && $conn instanceof PDO && $conn->inTransaction()) {
         $conn->rollBack();
     }
-    error_log('Supplier registration error: ' . $e->getMessage());
-    error_log('Supplier registration trace: ' . $e->getTraceAsString());
+    $errorReference = buildErrorReference();
+    error_log('Supplier registration error [' . $errorReference . ']: ' . $e->getMessage());
+    error_log('Supplier registration trace [' . $errorReference . ']: ' . $e->getTraceAsString());
+
+    $debugEnabled = class_exists('Env') ? (bool)Env::get('APP_DEBUG', false) : false;
+    $errorContext = ['reference' => $errorReference];
+    if ($debugEnabled) {
+        $errorContext['debug'] = $e->getMessage();
+    }
 
     if ($e instanceof PDOException) {
         $errorCode = (string)$e->getCode();
         $errorMessage = strtolower($e->getMessage());
 
         if ($errorCode === '23000') {
+            if (strpos($errorMessage, 'phone') !== false) {
+                Response::error('This phone number is already associated with an existing account.', 400, [
+                    'phone' => ['Phone number already exists']
+                ]);
+            }
+
             if (strpos($errorMessage, 'email') !== false) {
                 Response::error('An account with this email address already exists. Please use a different email or try logging in.', 400, [
                     'email' => ['Email already exists']
@@ -269,13 +296,24 @@ try {
             if (strpos($errorMessage, 'user_id') !== false) {
                 Response::error('A supplier account already exists for this user.', 409);
             }
+
+            if (preg_match("/for key '([^']+)'/i", $e->getMessage(), $matches)) {
+                $conflictKey = $matches[1] ?? 'unique_constraint';
+                Response::error('Some account details already exist in the system. Please review your entries and try again.', 409, [
+                    'conflict_key' => $conflictKey
+                ]);
+            }
         }
 
-        if ($errorCode === '42S22') {
-            Response::error('Registration setup issue detected. Please contact support and mention "supplier schema mismatch".', 500);
+        if (in_array($errorCode, ['42S22', '42S02'], true)) {
+            Response::error('Registration setup issue detected. Please contact support and mention "supplier schema mismatch".', 500, $errorContext);
         }
     }
 
-    Response::error('A system error occurred while processing your registration. Please try again later or contact support.', 500);
+    if (stripos($e->getMessage(), 'database connection failed') !== false) {
+        Response::error('Database connection issue detected. Please try again in a few minutes.', 503, $errorContext);
+    }
+
+    Response::error('A system error occurred while processing your registration. Please try again later or contact support.', 500, $errorContext);
 }
 
