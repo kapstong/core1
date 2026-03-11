@@ -6442,7 +6442,10 @@ async function approveSupplier(id) {
         const result = await response.json();
         if (result.success) {
             showSuccess('Supplier approved successfully');
-            await loadSuppliers();
+            await Promise.all([
+                loadSuppliers(),
+                loadPendingSuppliers()
+            ]);
         } else {
             showError(result.message || 'Failed to approve supplier');
         }
@@ -10601,7 +10604,10 @@ async function approveSupplierFromUsers(id) {
         const result = await response.json();
         if (result.success) {
             showSuccess('Supplier approved successfully');
-            await loadPendingSuppliers();
+            await Promise.all([
+                loadPendingSuppliers(),
+                loadSuppliers()
+            ]);
         } else {
             showError(result.message || 'Failed to approve supplier');
         }
