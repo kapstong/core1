@@ -48,29 +48,50 @@ function handleGetRequest(): void {
     switch ($mode) {
         case 'status':
             $llmConfig = getAdminAiLlmConfig();
+            $isAdmin = strtolower(trim((string)(Auth::userRole() ?? ''))) === 'admin';
+            $evaluateEnabled = $isAdmin && parseBooleanEnvFlag(Env::get('ADMIN_AI_ENABLE_EVALUATE', false), false);
+            $endpoints = [
+                'status' => 'GET ?mode=status',
+                'summary' => 'GET ?mode=summary',
+                'history' => 'GET ?mode=history&days=90',
+                'forecast' => 'GET ?mode=forecast&days=14',
+                'reorder' => 'GET ?mode=reorder',
+                'anomalies' => 'GET ?mode=anomalies',
+                'insights' => 'GET ?mode=insights',
+                'memory' => 'GET ?mode=memory',
+                'ask' => 'POST body: { message, context }',
+                'feedback' => 'POST body: { action:\"feedback\", response_id, rating, comment? }',
+                'approve' => 'POST body: { action:\"approve\", response_id, decision:\"approved|rejected\", response_source?, intent?, note? }'
+            ];
+            if ($evaluateEnabled) {
+                $endpoints['evaluate'] = 'GET ?mode=evaluate';
+            }
+            $capabilities = [
+                'daily_summary',
+                'historical_analytics',
+                'trend_forecasting',
+                'reorder_suggestions',
+                'anomaly_detection',
+                'bilingual_qa',
+                'hybrid_routing',
+                'session_memory',
+                'context_retrieval',
+                'feedback_loop',
+                'approval_workflow',
+                'ai_traceability',
+                'clarifying_questions',
+                'role_personalization',
+                'reasoned_recommendations',
+                'proactive_improvements'
+            ];
+            if ($evaluateEnabled) {
+                $capabilities[] = 'evaluation_suite';
+            }
             Response::success([
                 'name' => 'Admin AI Copilot',
                 'version' => '2.0',
                 'read_only' => true,
-                'capabilities' => [
-                    'daily_summary',
-                    'historical_analytics',
-                    'trend_forecasting',
-                    'reorder_suggestions',
-                    'anomaly_detection',
-                    'bilingual_qa',
-                    'hybrid_routing',
-                    'session_memory',
-                    'context_retrieval',
-                    'feedback_loop',
-                    'approval_workflow',
-                    'ai_traceability',
-                    'evaluation_suite',
-                    'clarifying_questions',
-                    'role_personalization',
-                    'reasoned_recommendations',
-                    'proactive_improvements'
-                ],
+                'capabilities' => $capabilities,
                 'languages' => [
                     'en',
                     'fil'
@@ -81,20 +102,7 @@ function handleGetRequest(): void {
                     'purchasing_officer',
                     'staff'
                 ],
-                'endpoints' => [
-                    'status' => 'GET ?mode=status',
-                    'summary' => 'GET ?mode=summary',
-                    'history' => 'GET ?mode=history&days=90',
-                    'forecast' => 'GET ?mode=forecast&days=14',
-                    'reorder' => 'GET ?mode=reorder',
-                    'anomalies' => 'GET ?mode=anomalies',
-                    'insights' => 'GET ?mode=insights',
-                    'memory' => 'GET ?mode=memory',
-                    'evaluate' => 'GET ?mode=evaluate',
-                    'ask' => 'POST body: { message, context }',
-                    'feedback' => 'POST body: { action:\"feedback\", response_id, rating, comment? }',
-                    'approve' => 'POST body: { action:\"approve\", response_id, decision:\"approved|rejected\", response_source?, intent?, note? }'
-                ],
+                'endpoints' => $endpoints,
                 'llm' => [
                     'enabled' => $llmConfig['enabled'],
                     'configured' => $llmConfig['configured'],
@@ -201,6 +209,7 @@ function handleGetRequest(): void {
             return;
 
         case 'evaluate':
+            enforceAdminAiEvaluateAccess();
             $report = runAdminAiEvaluationSuite($db);
             logAiActivity('evaluate', [
                 'total_cases' => $report['summary']['total'] ?? 0,
@@ -245,9 +254,18 @@ function handlePostRequest(): void {
     }
 
     $context = sanitizeAdminAiContext(isset($input['context']) && is_array($input['context']) ? $input['context'] : []);
+    $responseDetail = strtolower(trim((string)($input['response_detail'] ?? 'compact')));
+    $includePayloads = $responseDetail === 'full';
+    if (array_key_exists('include_payloads', $input)) {
+        $includePayloads = parseBooleanEnvFlag($input['include_payloads'], $includePayloads);
+    }
+    $replyOptions = [
+        'include_payloads' => $includePayloads,
+        'response_detail' => $includePayloads ? 'full' : 'compact'
+    ];
     $db = Database::getInstance();
 
-    $reply = buildAdminCopilotReply($db, $message, $context);
+    $reply = buildAdminCopilotReply($db, $message, $context, $replyOptions);
     logAiActivity('ask', [
         'intent' => $reply['intent'] ?? 'general',
         'response_source' => $reply['response_source'] ?? 'rules'
@@ -256,14 +274,32 @@ function handlePostRequest(): void {
     Response::success($reply, 'AI response generated');
 }
 
-function enforceAdminAiRateLimit(int $windowSeconds = 60, int $maxRequests = 24): void {
-    if (session_status() !== PHP_SESSION_ACTIVE) {
-        return;
+function enforceAdminAiEvaluateAccess(): void {
+    $role = strtolower(trim((string)(Auth::userRole() ?? '')));
+    if ($role !== 'admin') {
+        Response::error('Evaluation mode is restricted to admin users.', 403);
     }
 
-    $bucket = $_SESSION['admin_ai_rate_limit'] ?? [];
-    if (!is_array($bucket)) {
-        $bucket = [];
+    $enabled = parseBooleanEnvFlag(Env::get('ADMIN_AI_ENABLE_EVALUATE', false), false);
+    if (!$enabled) {
+        Response::error('Evaluation mode is disabled in this environment.', 404);
+    }
+}
+
+function enforceAdminAiRateLimit(int $windowSeconds = 60, int $maxRequests = 24): void {
+    $bucket = [];
+    if (session_status() === PHP_SESSION_ACTIVE) {
+        $sessionBucket = $_SESSION['admin_ai_rate_limit'] ?? [];
+        if (is_array($sessionBucket)) {
+            $bucket = $sessionBucket;
+        }
+    }
+
+    $persistedBucket = readAdminAiRuntimeStore('rate_limit', getAdminAiRateLimitStoreKey());
+    if (isset($persistedBucket['timestamps']) && is_array($persistedBucket['timestamps'])) {
+        $bucket = array_merge($bucket, $persistedBucket['timestamps']);
+    } elseif (is_array($persistedBucket)) {
+        $bucket = array_merge($bucket, $persistedBucket);
     }
 
     $now = time();
@@ -283,7 +319,14 @@ function enforceAdminAiRateLimit(int $windowSeconds = 60, int $maxRequests = 24)
     }
 
     $fresh[] = $now;
-    $_SESSION['admin_ai_rate_limit'] = array_slice($fresh, -$maxRequests);
+    $fresh = array_slice($fresh, -$maxRequests);
+    if (session_status() === PHP_SESSION_ACTIVE) {
+        $_SESSION['admin_ai_rate_limit'] = $fresh;
+    }
+    writeAdminAiRuntimeStore('rate_limit', getAdminAiRateLimitStoreKey(), [
+        'timestamps' => $fresh,
+        'updated_at' => gmdate('c')
+    ]);
 }
 
 function sanitizeAdminAiContext(array $context): array {
@@ -317,42 +360,148 @@ function sanitizeAdminAiContext(array $context): array {
     return $sanitized;
 }
 
+function getDefaultAdminAiMemory(): array {
+    return [
+        'recent_messages' => [],
+        'last_intent' => null,
+        'last_language' => null,
+        'last_entities' => [],
+        'feedback' => [],
+        'approvals' => [],
+        'pending_clarification' => null,
+        'user_profile' => [],
+        'updated_at' => null
+    ];
+}
+
+function normalizeAdminAiMemory(array $memory): array {
+    $default = getDefaultAdminAiMemory();
+    $memory = array_merge($default, $memory);
+
+    if (!is_array($memory['recent_messages'])) {
+        $memory['recent_messages'] = [];
+    }
+    if (!is_array($memory['feedback'])) {
+        $memory['feedback'] = [];
+    }
+    if (!is_array($memory['approvals'])) {
+        $memory['approvals'] = [];
+    }
+    if (!is_array($memory['last_entities'])) {
+        $memory['last_entities'] = [];
+    }
+    if ($memory['pending_clarification'] !== null && !is_array($memory['pending_clarification'])) {
+        $memory['pending_clarification'] = null;
+    }
+    if (!is_array($memory['user_profile'])) {
+        $memory['user_profile'] = [];
+    }
+
+    return $memory;
+}
+
+function buildAdminAiRuntimeStorePath(string $scope, string $key): ?string {
+    $safeScope = preg_replace('/[^a-z0-9_\-]/i', '_', $scope) ?? 'runtime';
+    $safeKey = preg_replace('/[^a-z0-9_\-]/i', '_', $key) ?? '';
+    if ($safeKey === '') {
+        return null;
+    }
+
+    $baseDir = realpath(__DIR__ . '/../../data');
+    if ($baseDir === false) {
+        $baseDir = __DIR__ . '/../../data';
+    }
+
+    $runtimeDir = rtrim($baseDir, DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR . 'admin_ai_runtime' . DIRECTORY_SEPARATOR . $safeScope;
+    if (!is_dir($runtimeDir)) {
+        @mkdir($runtimeDir, 0775, true);
+    }
+    if (!is_dir($runtimeDir)) {
+        return null;
+    }
+
+    return $runtimeDir . DIRECTORY_SEPARATOR . $safeKey . '.json';
+}
+
+function readAdminAiRuntimeStore(string $scope, string $key): array {
+    $path = buildAdminAiRuntimeStorePath($scope, $key);
+    if ($path === null || !is_file($path)) {
+        return [];
+    }
+
+    $raw = @file_get_contents($path);
+    if (!is_string($raw) || trim($raw) === '') {
+        return [];
+    }
+
+    $decoded = json_decode($raw, true);
+    return is_array($decoded) ? $decoded : [];
+}
+
+function writeAdminAiRuntimeStore(string $scope, string $key, array $data): void {
+    $path = buildAdminAiRuntimeStorePath($scope, $key);
+    if ($path === null) {
+        return;
+    }
+
+    $json = json_encode($data, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_INVALID_UTF8_SUBSTITUTE);
+    if (!is_string($json)) {
+        return;
+    }
+
+    @file_put_contents($path, $json, LOCK_EX);
+}
+
+function getAdminAiMemoryStoreKey(): string {
+    $userId = (int)(Auth::userId() ?? 0);
+    if ($userId > 0) {
+        return 'user_' . $userId;
+    }
+
+    if (session_status() === PHP_SESSION_ACTIVE) {
+        $sid = trim((string)session_id());
+        if ($sid !== '') {
+            return 'session_' . $sid;
+        }
+    }
+
+    $ip = trim((string)($_SERVER['REMOTE_ADDR'] ?? 'unknown'));
+    return 'anon_' . substr(sha1($ip), 0, 24);
+}
+
+function persistAdminAiMemory(array $memory): void {
+    writeAdminAiRuntimeStore('memory', getAdminAiMemoryStoreKey(), normalizeAdminAiMemory($memory));
+}
+
+function getAdminAiRateLimitStoreKey(): string {
+    $userId = (int)(Auth::userId() ?? 0);
+    $ip = trim((string)($_SERVER['REMOTE_ADDR'] ?? 'unknown'));
+    return 'u' . $userId . '_' . substr(sha1($ip), 0, 24);
+}
+
 function getAdminAiSessionMemory(): array {
     if (session_status() !== PHP_SESSION_ACTIVE) {
-        return [
-            'recent_messages' => [],
-            'last_intent' => null,
-            'last_language' => null,
-            'last_entities' => [],
-            'feedback' => [],
-            'approvals' => [],
-            'pending_clarification' => null,
-            'user_profile' => []
-        ];
+        return getDefaultAdminAiMemory();
     }
 
     $memory = $_SESSION['admin_ai_memory'] ?? [];
     if (!is_array($memory)) {
         $memory = [];
     }
+    $memory = normalizeAdminAiMemory($memory);
 
-    if (!isset($memory['recent_messages']) || !is_array($memory['recent_messages'])) {
-        $memory['recent_messages'] = [];
-    }
-    if (!isset($memory['feedback']) || !is_array($memory['feedback'])) {
-        $memory['feedback'] = [];
-    }
-    if (!isset($memory['approvals']) || !is_array($memory['approvals'])) {
-        $memory['approvals'] = [];
-    }
-    if (!isset($memory['last_entities']) || !is_array($memory['last_entities'])) {
-        $memory['last_entities'] = [];
-    }
-    if (!array_key_exists('pending_clarification', $memory) || ($memory['pending_clarification'] !== null && !is_array($memory['pending_clarification']))) {
-        $memory['pending_clarification'] = null;
-    }
-    if (!isset($memory['user_profile']) || !is_array($memory['user_profile'])) {
-        $memory['user_profile'] = [];
+    $hasSessionData = !empty($memory['recent_messages']) ||
+        !empty($memory['feedback']) ||
+        !empty($memory['approvals']) ||
+        !empty($memory['last_intent']) ||
+        !empty($memory['pending_clarification']);
+
+    if (!$hasSessionData) {
+        $persisted = readAdminAiRuntimeStore('memory', getAdminAiMemoryStoreKey());
+        if (!empty($persisted)) {
+            $memory = normalizeAdminAiMemory($persisted);
+            $_SESSION['admin_ai_memory'] = $memory;
+        }
     }
 
     return $memory;
@@ -389,6 +538,7 @@ function updateAdminAiSessionMemory(array $entry): void {
     $memory['updated_at'] = gmdate('c');
 
     $_SESSION['admin_ai_memory'] = $memory;
+    persistAdminAiMemory($memory);
 }
 
 function getAdminAiMemorySnapshot(): array {
@@ -447,6 +597,7 @@ function setAdminAiPendingClarification(?array $pending): void {
     $memory['pending_clarification'] = $pending;
     $memory['updated_at'] = gmdate('c');
     $_SESSION['admin_ai_memory'] = $memory;
+    persistAdminAiMemory($memory);
 }
 
 function extractAdminEntities(string $message, string $normalized, array $memory = []): array {
@@ -630,6 +781,32 @@ function retrieveAdminContextForQuery(
         }
     }
 
+    appendAdminEntityLookupsToContext($db, $entities, $context);
+
+    $historySeries = isset($history['series']) && is_array($history['series']) ? $history['series'] : [];
+    $context['history_recent'] = array_slice($historySeries, -14);
+
+    return $context;
+}
+
+function retrieveAdminLookupContext(Database $db, string $intent, array $entities): array {
+    $context = [
+        'intent' => $intent,
+        'scope' => $entities['scope'] ?? 'operations',
+        'metrics' => [],
+        'top_reorder' => [],
+        'top_anomalies' => [],
+        'time_window' => [
+            'history_days' => $entities['history_days'] ?? 90,
+            'forecast_days' => $entities['forecast_days'] ?? 14
+        ]
+    ];
+
+    appendAdminEntityLookupsToContext($db, $entities, $context);
+    return $context;
+}
+
+function appendAdminEntityLookupsToContext(Database $db, array $entities, array &$context): void {
     $productHint = trim((string)($entities['product_hint'] ?? ''));
     if ($productHint !== '') {
         $context['product_lookup'] = safeFetchAll($db, "
@@ -655,7 +832,7 @@ function retrieveAdminContextForQuery(
                 po.po_number,
                 po.status,
                 po.expected_delivery_date,
-                DATEDIFF(CURDATE(), po.expected_delivery_date) AS overdue_days,
+                DATEDIFF(UTC_DATE(), po.expected_delivery_date) AS overdue_days,
                 COALESCE(u.full_name, u.username, 'Supplier') AS supplier_name
             FROM purchase_orders po
             LEFT JOIN users u ON u.id = po.supplier_id
@@ -664,11 +841,6 @@ function retrieveAdminContextForQuery(
             LIMIT 8
         ", [':term' => '%' . $supplierHint . '%']);
     }
-
-    $historySeries = isset($history['series']) && is_array($history['series']) ? $history['series'] : [];
-    $context['history_recent'] = array_slice($historySeries, -14);
-
-    return $context;
 }
 
 function buildAdminRoutingDecision(string $normalized, string $intent, array $entities, array $retrievedContext): array {
@@ -698,19 +870,34 @@ function buildAdminRoutingDecision(string $normalized, string $intent, array $en
         ];
     }
 
-    if ($intent !== 'general') {
-        return [
-            'strategy' => 'rules',
-            'confidence' => 0.94,
-            'reason' => 'deterministic_intent'
-        ];
-    }
-
     if (!$llmEnabled) {
+        if ($intent !== 'general') {
+            return [
+                'strategy' => 'rules',
+                'confidence' => 0.94,
+                'reason' => 'deterministic_intent'
+            ];
+        }
         return [
             'strategy' => 'rules',
             'confidence' => 0.84,
             'reason' => 'llm_disabled'
+        ];
+    }
+
+    if ($intent !== 'general') {
+        if ($isAnalyticalQuestion || ($hasFollowUp && $wordCount <= 8)) {
+            return [
+                'strategy' => 'hybrid',
+                'confidence' => 0.83,
+                'reason' => 'deterministic_with_explanation'
+            ];
+        }
+
+        return [
+            'strategy' => 'rules',
+            'confidence' => 0.9,
+            'reason' => 'deterministic_intent'
         ];
     }
 
@@ -774,6 +961,24 @@ function humanizeAdminRuleReply(string $reply, string $language = 'en'): string 
     return "Here is the most relevant answer based on current system data:\n" . $reply;
 }
 
+function mergeAdminBaseAndLlmReply(string $baseReply, string $llmReply, string $language = 'en'): string {
+    $baseReply = trim($baseReply);
+    $llmReply = trim($llmReply);
+
+    if ($baseReply === '') {
+        return $llmReply;
+    }
+    if ($llmReply === '') {
+        return $baseReply;
+    }
+
+    if ($language === 'fil') {
+        return "Grounded snapshot:\n{$baseReply}\n\nMas malalim na analysis:\n{$llmReply}";
+    }
+
+    return "Grounded snapshot:\n{$baseReply}\n\nExpanded analysis:\n{$llmReply}";
+}
+
 function generateAdminAiResponseId(): string {
     try {
         return 'ai_' . bin2hex(random_bytes(8));
@@ -815,6 +1020,7 @@ function handleAdminAiFeedback(array $input): void {
         ];
         $memory['feedback'] = array_slice($memory['feedback'], -100);
         $_SESSION['admin_ai_memory'] = $memory;
+        persistAdminAiMemory($memory);
     }
 
     logAiActivity('feedback', [
@@ -881,6 +1087,7 @@ function handleAdminAiApproval(array $input): void {
         ];
         $memory['approvals'] = array_slice($memory['approvals'], -100);
         $_SESSION['admin_ai_memory'] = $memory;
+        persistAdminAiMemory($memory);
     }
 
     logAiActivity('approval', [
@@ -1444,7 +1651,9 @@ function mergeAdminFollowUpActions(array $primary, array $secondary): array {
     return $merged;
 }
 
-function buildAdminCopilotReply(Database $db, string $message, array $context): array {
+function buildAdminCopilotReply(Database $db, string $message, array $context, array $options = []): array {
+    $includePayloads = !empty($options['include_payloads']);
+    $responseDetail = $includePayloads ? 'full' : 'compact';
     $rawMessage = trim($message);
     $normalized = normalizeAdminAiMessage($rawMessage);
     $memory = getAdminAiSessionMemory();
@@ -1544,6 +1753,8 @@ function buildAdminCopilotReply(Database $db, string $message, array $context): 
             'needs_clarification' => true,
             'clarification' => $clarification,
             'generated_at' => gmdate('c'),
+            'response_detail' => $responseDetail,
+            'payload_included' => $includePayloads,
             'context' => [
                 'page' => $context['page'] ?? null,
                 'title' => $context['title'] ?? null,
@@ -1563,42 +1774,90 @@ function buildAdminCopilotReply(Database $db, string $message, array $context): 
     $reorderLimit = (int)($entities['reorder_limit'] ?? 8);
     $anomalyLimit = (int)($entities['anomaly_limit'] ?? 10);
 
-    $summary = buildDailySummaryPayload($db);
-    $history = buildHistoricalAnalyticsPayload($db, $historyWindowDays);
-    $forecast = buildTrendForecastPayload($history, $forecastHorizonDays);
-    $reorder = buildReorderSuggestions($db, $reorderLimit);
-    $anomalies = detectOperationalAnomalies($db, $anomalyLimit);
-    $retrievedContext = retrieveAdminContextForQuery($db, $intent, $entities, $summary, $history, $forecast, $reorder, $anomalies);
+    $summary = [];
+    $history = [];
+    $forecast = [];
+    $reorder = [];
+    $anomalies = [];
+    $summaryHasDeepSignals = false;
+
+    $loadSummary = function (bool $includeDeepSignals = false) use ($db, &$summary, &$summaryHasDeepSignals): array {
+        if (empty($summary) || ($includeDeepSignals && !$summaryHasDeepSignals)) {
+            $summary = buildDailySummaryPayload($db, $includeDeepSignals);
+            $summaryHasDeepSignals = $includeDeepSignals;
+        }
+        return $summary;
+    };
+
+    $loadHistory = function () use ($db, $historyWindowDays, &$history): array {
+        if (empty($history)) {
+            $history = buildHistoricalAnalyticsPayload($db, $historyWindowDays);
+        }
+        return $history;
+    };
+
+    $loadForecast = function () use ($forecastHorizonDays, &$forecast, $loadHistory): array {
+        if (empty($forecast)) {
+            $historyForForecast = $loadHistory();
+            $forecast = buildTrendForecastPayload($historyForForecast, $forecastHorizonDays);
+        }
+        return $forecast;
+    };
+
+    $loadReorder = function () use ($db, $reorderLimit, &$reorder): array {
+        if (empty($reorder)) {
+            $reorder = buildReorderSuggestions($db, $reorderLimit);
+        }
+        return $reorder;
+    };
+
+    $loadAnomalies = function () use ($db, $anomalyLimit, &$anomalies): array {
+        if (empty($anomalies)) {
+            $anomalies = detectOperationalAnomalies($db, $anomalyLimit);
+        }
+        return $anomalies;
+    };
+
+    $retrievedContext = retrieveAdminLookupContext($db, $intent, $entities);
     $routing = buildAdminRoutingDecision($normalized, $intent, $entities, $retrievedContext);
 
     $replyText = '';
     $followUp = [];
     $responseSource = 'rules';
+    $baseReplyText = '';
 
     if ($intent === 'summary') {
-        $replyText = buildSummaryIntentReply($summary, $forecast, $language);
+        $summary = $loadSummary(false);
+        $forecast = $loadForecast();
+        $baseReplyText = buildSummaryIntentReply($summary, $forecast, $language);
+        $replyText = $baseReplyText;
         $followUp = [
             'Show reorder suggestions',
             'Show anomalies',
             'Show trend forecast'
         ];
     } elseif ($intent === 'history') {
-        $replyText = buildHistoryIntentReply($history, $language);
+        $history = $loadHistory();
+        $baseReplyText = buildHistoryIntentReply($history, $language);
+        $replyText = $baseReplyText;
         $followUp = [
             'Show trend forecast',
             'Show anomalies',
             'Show reorder suggestions'
         ];
     } elseif ($intent === 'forecast') {
-        $replyText = buildForecastIntentReply($forecast, $language);
+        $forecast = $loadForecast();
+        $baseReplyText = buildForecastIntentReply($forecast, $language);
+        $replyText = $baseReplyText;
         $followUp = [
             'Show reorder suggestions',
             'Show anomalies',
             'Daily summary'
         ];
     } elseif ($intent === 'reorder') {
+        $reorder = $loadReorder();
         if (empty($reorder)) {
-            $replyText = $language === 'fil'
+            $baseReplyText = $language === 'fil'
                 ? 'Walang urgent na reorder suggestion mula sa kasalukuyang inventory at demand history.'
                 : 'No urgent reorder suggestions were found from current inventory and demand history.';
         } else {
@@ -1617,16 +1876,18 @@ function buildAdminCopilotReply(Database $db, string $message, array $context): 
                         $item['suggested_order_qty'] . ' units by ' . $dateLabel . ', cover ' . $cover . '.';
                 }
             }
-            $replyText = ($language === 'fil' ? "Top na reorder priorities:\n- " : "Top reorder priorities:\n- ") . implode("\n- ", $lines);
+            $baseReplyText = ($language === 'fil' ? "Top na reorder priorities:\n- " : "Top reorder priorities:\n- ") . implode("\n- ", $lines);
         }
+        $replyText = $baseReplyText;
         $followUp = [
             'Show trend forecast',
             'Show anomalies',
             'What is the reorder logic?'
         ];
     } elseif ($intent === 'anomalies') {
+        $anomalies = $loadAnomalies();
         if (empty($anomalies['items'])) {
-            $replyText = $language === 'fil'
+            $baseReplyText = $language === 'fil'
                 ? 'Walang major anomalies na na-detect sa kasalukuyang mga rule.'
                 : 'No major anomalies were detected with the current rules.';
         } else {
@@ -1635,18 +1896,26 @@ function buildAdminCopilotReply(Database $db, string $message, array $context): 
             foreach ($top as $item) {
                 $lines[] = '[' . strtoupper((string)$item['severity']) . '] ' . (string)($item['title'] ?? 'Anomaly');
             }
-            $replyText = ($language === 'fil' ? "Mga kasalukuyang anomaly na na-detect:\n- " : "Current anomalies detected:\n- ") . implode("\n- ", $lines);
+            $baseReplyText = ($language === 'fil' ? "Mga kasalukuyang anomaly na na-detect:\n- " : "Current anomalies detected:\n- ") . implode("\n- ", $lines);
         }
+        $replyText = $baseReplyText;
         $followUp = [
             'Show critical anomalies only',
             'Show reorder suggestions',
             'Show trend forecast'
         ];
     } else {
+        $summary = $loadSummary(false);
+        $reorder = $loadReorder();
+        $anomalies = $loadAnomalies();
+        $forecast = $loadForecast();
         $rulesReply = buildRulesBasedGeneralReply($rawMessage, $summary, $reorder, $anomalies, $forecast, $language);
         $llmReply = '';
+        $strategy = (string)($routing['strategy'] ?? 'rules');
 
-        if (($routing['strategy'] ?? 'rules') !== 'rules') {
+        if ($strategy !== 'rules') {
+            $history = $loadHistory();
+            $retrievedContext = retrieveAdminContextForQuery($db, $intent, $entities, $summary, $history, $forecast, $reorder, $anomalies);
             $llmReply = maybeGenerateAdminLlmReply(
                 $rawMessage,
                 $context,
@@ -1663,12 +1932,17 @@ function buildAdminCopilotReply(Database $db, string $message, array $context): 
         }
 
         if ($llmReply !== '') {
-            $replyText = $llmReply;
-            $responseSource = 'llm';
-        } elseif (($routing['strategy'] ?? 'rules') === 'hybrid') {
+            if ($strategy === 'hybrid') {
+                $replyText = mergeAdminBaseAndLlmReply($rulesReply, $llmReply, $language);
+                $responseSource = 'hybrid';
+            } else {
+                $replyText = $llmReply;
+                $responseSource = 'llm';
+            }
+        } elseif ($strategy === 'hybrid') {
             $replyText = humanizeAdminRuleReply($rulesReply, $language);
             $responseSource = 'hybrid';
-        } elseif (($routing['strategy'] ?? 'rules') === 'llm') {
+        } elseif ($strategy === 'llm') {
             $replyText = $rulesReply;
             $responseSource = 'rules_fallback';
         } else {
@@ -1683,7 +1957,72 @@ function buildAdminCopilotReply(Database $db, string $message, array $context): 
         ];
     }
 
-    $advisory = buildRoleAwareAdvisory($intent, $summary, $forecast, $reorder, $anomalies, $roleProfile, $language);
+    if ($intent !== 'general' && ((string)($routing['strategy'] ?? 'rules') !== 'rules')) {
+        $summary = empty($summary) ? $loadSummary(false) : $summary;
+        $history = empty($history) ? $loadHistory() : $history;
+        $forecast = empty($forecast) ? $loadForecast() : $forecast;
+        $reorder = empty($reorder) ? $loadReorder() : $reorder;
+        $anomalies = empty($anomalies) ? $loadAnomalies() : $anomalies;
+        $retrievedContext = retrieveAdminContextForQuery($db, $intent, $entities, $summary, $history, $forecast, $reorder, $anomalies);
+
+        $llmReply = maybeGenerateAdminLlmReply(
+            $rawMessage,
+            $context,
+            $summary,
+            $reorder,
+            $anomalies,
+            $history,
+            $forecast,
+            $language,
+            $retrievedContext,
+            $memory,
+            $roleProfile
+        );
+
+        if ($llmReply !== '') {
+            if ((string)($routing['strategy'] ?? 'rules') === 'hybrid') {
+                $replyText = mergeAdminBaseAndLlmReply($baseReplyText, $llmReply, $language);
+                $responseSource = 'hybrid';
+            } else {
+                $replyText = $llmReply;
+                $responseSource = 'llm';
+            }
+        } elseif ((string)($routing['strategy'] ?? 'rules') !== 'rules') {
+            $responseSource = 'rules_fallback';
+        }
+    }
+
+    if ($includePayloads) {
+        $summary = empty($summary) ? $loadSummary(false) : $summary;
+        $history = empty($history) ? $loadHistory() : $history;
+        $forecast = empty($forecast) ? $loadForecast() : $forecast;
+        $reorder = empty($reorder) ? $loadReorder() : $reorder;
+        $anomalies = empty($anomalies) ? $loadAnomalies() : $anomalies;
+        $retrievedContext = retrieveAdminContextForQuery($db, $intent, $entities, $summary, $history, $forecast, $reorder, $anomalies);
+    }
+
+    $advisorySummary = $summary;
+    if (empty($advisorySummary) && $intent === 'reorder') {
+        $advisorySummary = $loadSummary(false);
+        $summary = $advisorySummary;
+    }
+    $advisoryForecast = $forecast;
+    if (empty($advisoryForecast) && in_array($intent, ['forecast', 'history'], true)) {
+        $advisoryForecast = $loadForecast();
+        $forecast = $advisoryForecast;
+    }
+    $advisoryReorder = $reorder;
+    if (empty($advisoryReorder) && $intent === 'reorder') {
+        $advisoryReorder = $loadReorder();
+        $reorder = $advisoryReorder;
+    }
+    $advisoryAnomalies = $anomalies;
+    if (empty($advisoryAnomalies) && $intent === 'anomalies') {
+        $advisoryAnomalies = $loadAnomalies();
+        $anomalies = $advisoryAnomalies;
+    }
+
+    $advisory = buildRoleAwareAdvisory($intent, $advisorySummary, $advisoryForecast, $advisoryReorder, $advisoryAnomalies, $roleProfile, $language);
     $reasoning = (string)($advisory['reasoning'] ?? '');
     $proactive = isset($advisory['proactive_suggestions']) && is_array($advisory['proactive_suggestions'])
         ? $advisory['proactive_suggestions']
@@ -1739,12 +2078,12 @@ function buildAdminCopilotReply(Database $db, string $message, array $context): 
         'router' => $routing,
         'entities' => $entities,
         'reply' => $replyText,
-        'summary' => $summary,
-        'history' => $history,
-        'forecast' => $forecast,
-        'reorder_suggestions' => $reorder,
-        'anomalies' => $anomalies,
-        'retrieved_context' => $retrievedContext,
+        'summary' => $includePayloads ? $summary : [],
+        'history' => $includePayloads ? $history : [],
+        'forecast' => $includePayloads ? $forecast : [],
+        'reorder_suggestions' => $includePayloads ? $reorder : [],
+        'anomalies' => $includePayloads ? $anomalies : [],
+        'retrieved_context' => $includePayloads ? $retrievedContext : [],
         'follow_up_actions' => $followUp,
         'proactive_suggestions' => $proactive,
         'reasoning' => $reasoning,
@@ -1752,6 +2091,8 @@ function buildAdminCopilotReply(Database $db, string $message, array $context): 
         'needs_clarification' => false,
         'clarification' => null,
         'generated_at' => gmdate('c'),
+        'response_detail' => $responseDetail,
+        'payload_included' => $includePayloads,
         'context' => [
             'page' => $context['page'] ?? null,
             'title' => $context['title'] ?? null,
@@ -1965,7 +2306,7 @@ function buildHistoricalAnalyticsPayload(Database $db, int $days = 90): array {
                 COUNT(*) AS order_count,
                 COALESCE(SUM(co.total_amount), 0) AS revenue_amount
             FROM customer_orders co
-            WHERE DATE(co.order_date) >= DATE_SUB(CURDATE(), INTERVAL {$intervalDays} DAY)
+            WHERE DATE(co.order_date) >= DATE_SUB(UTC_DATE(), INTERVAL {$intervalDays} DAY)
               AND co.status <> 'cancelled'
             GROUP BY DATE(co.order_date)
 
@@ -1976,7 +2317,7 @@ function buildHistoricalAnalyticsPayload(Database $db, int $days = 90): array {
                 COUNT(*) AS order_count,
                 COALESCE(SUM(s.total_amount), 0) AS revenue_amount
             FROM sales s
-            WHERE DATE(s.sale_date) >= DATE_SUB(CURDATE(), INTERVAL {$intervalDays} DAY)
+            WHERE DATE(s.sale_date) >= DATE_SUB(UTC_DATE(), INTERVAL {$intervalDays} DAY)
               AND s.payment_status <> 'failed'
             GROUP BY DATE(s.sale_date)
         ) x
@@ -1994,7 +2335,7 @@ function buildHistoricalAnalyticsPayload(Database $db, int $days = 90): array {
                 SUM(coi.quantity) AS units
             FROM customer_order_items coi
             INNER JOIN customer_orders co ON co.id = coi.order_id
-            WHERE DATE(co.order_date) >= DATE_SUB(CURDATE(), INTERVAL {$intervalDays} DAY)
+            WHERE DATE(co.order_date) >= DATE_SUB(UTC_DATE(), INTERVAL {$intervalDays} DAY)
               AND co.status <> 'cancelled'
             GROUP BY DATE(co.order_date)
 
@@ -2005,7 +2346,7 @@ function buildHistoricalAnalyticsPayload(Database $db, int $days = 90): array {
                 SUM(si.quantity) AS units
             FROM sale_items si
             INNER JOIN sales s ON s.id = si.sale_id
-            WHERE DATE(s.sale_date) >= DATE_SUB(CURDATE(), INTERVAL {$intervalDays} DAY)
+            WHERE DATE(s.sale_date) >= DATE_SUB(UTC_DATE(), INTERVAL {$intervalDays} DAY)
               AND s.payment_status <> 'failed'
             GROUP BY DATE(s.sale_date)
         ) x
@@ -2019,7 +2360,7 @@ function buildHistoricalAnalyticsPayload(Database $db, int $days = 90): array {
             SUM(COALESCE(gi.quantity_accepted, 0)) AS units_received
         FROM grn_items gi
         INNER JOIN goods_received_notes grn ON grn.id = gi.grn_id
-        WHERE DATE(grn.received_date) >= DATE_SUB(CURDATE(), INTERVAL {$intervalDays} DAY)
+        WHERE DATE(grn.received_date) >= DATE_SUB(UTC_DATE(), INTERVAL {$intervalDays} DAY)
         GROUP BY DATE(grn.received_date)
         ORDER BY activity_date ASC
     ");
@@ -2030,7 +2371,7 @@ function buildHistoricalAnalyticsPayload(Database $db, int $days = 90): array {
             SUM(sa.quantity_adjusted) AS net_adjustment,
             COUNT(*) AS adjustment_count
         FROM stock_adjustments sa
-        WHERE DATE(sa.adjustment_date) >= DATE_SUB(CURDATE(), INTERVAL {$intervalDays} DAY)
+        WHERE DATE(sa.adjustment_date) >= DATE_SUB(UTC_DATE(), INTERVAL {$intervalDays} DAY)
         GROUP BY DATE(sa.adjustment_date)
         ORDER BY activity_date ASC
     ");
@@ -2533,7 +2874,7 @@ function calculateAverage(array $values): float {
     return array_sum($clean) / count($clean);
 }
 
-function buildDailySummaryPayload(Database $db): array {
+function buildDailySummaryPayload(Database $db, bool $includeDeepSignals = true): array {
     $today = gmdate('Y-m-d');
     $yesterday = gmdate('Y-m-d', strtotime('-1 day'));
 
@@ -2607,7 +2948,7 @@ function buildDailySummaryPayload(Database $db): array {
         SELECT COUNT(*)
         FROM purchase_orders
         WHERE expected_delivery_date IS NOT NULL
-          AND expected_delivery_date < CURDATE()
+          AND expected_delivery_date < UTC_DATE()
           AND status NOT IN ('received', 'cancelled', 'rejected')
     ", [], 0);
 
@@ -2632,13 +2973,13 @@ function buildDailySummaryPayload(Database $db): array {
         FROM (
             SELECT DATE(order_date) AS day, COUNT(*) AS day_orders
             FROM customer_orders
-            WHERE DATE(order_date) >= DATE_SUB(CURDATE(), INTERVAL 7 DAY)
+            WHERE DATE(order_date) >= DATE_SUB(UTC_DATE(), INTERVAL 7 DAY)
               AND status <> 'cancelled'
             GROUP BY DATE(order_date)
             UNION ALL
             SELECT DATE(sale_date) AS day, COUNT(*) AS day_orders
             FROM sales
-            WHERE DATE(sale_date) >= DATE_SUB(CURDATE(), INTERVAL 7 DAY)
+            WHERE DATE(sale_date) >= DATE_SUB(UTC_DATE(), INTERVAL 7 DAY)
               AND payment_status <> 'failed'
             GROUP BY DATE(sale_date)
         ) x
@@ -2649,13 +2990,13 @@ function buildDailySummaryPayload(Database $db): array {
         FROM (
             SELECT DATE(order_date) AS day, SUM(total_amount) AS day_revenue
             FROM customer_orders
-            WHERE DATE(order_date) >= DATE_SUB(CURDATE(), INTERVAL 7 DAY)
+            WHERE DATE(order_date) >= DATE_SUB(UTC_DATE(), INTERVAL 7 DAY)
               AND status <> 'cancelled'
             GROUP BY DATE(order_date)
             UNION ALL
             SELECT DATE(sale_date) AS day, SUM(total_amount) AS day_revenue
             FROM sales
-            WHERE DATE(sale_date) >= DATE_SUB(CURDATE(), INTERVAL 7 DAY)
+            WHERE DATE(sale_date) >= DATE_SUB(UTC_DATE(), INTERVAL 7 DAY)
               AND payment_status <> 'failed'
             GROUP BY DATE(sale_date)
         ) x
@@ -2666,13 +3007,13 @@ function buildDailySummaryPayload(Database $db): array {
         FROM (
             SELECT DATE(order_date) AS day, COUNT(*) AS day_orders
             FROM customer_orders
-            WHERE DATE(order_date) >= DATE_SUB(CURDATE(), INTERVAL 30 DAY)
+            WHERE DATE(order_date) >= DATE_SUB(UTC_DATE(), INTERVAL 30 DAY)
               AND status <> 'cancelled'
             GROUP BY DATE(order_date)
             UNION ALL
             SELECT DATE(sale_date) AS day, COUNT(*) AS day_orders
             FROM sales
-            WHERE DATE(sale_date) >= DATE_SUB(CURDATE(), INTERVAL 30 DAY)
+            WHERE DATE(sale_date) >= DATE_SUB(UTC_DATE(), INTERVAL 30 DAY)
               AND payment_status <> 'failed'
             GROUP BY DATE(sale_date)
         ) x
@@ -2683,20 +3024,33 @@ function buildDailySummaryPayload(Database $db): array {
         FROM (
             SELECT DATE(order_date) AS day, SUM(total_amount) AS day_revenue
             FROM customer_orders
-            WHERE DATE(order_date) >= DATE_SUB(CURDATE(), INTERVAL 30 DAY)
+            WHERE DATE(order_date) >= DATE_SUB(UTC_DATE(), INTERVAL 30 DAY)
               AND status <> 'cancelled'
             GROUP BY DATE(order_date)
             UNION ALL
             SELECT DATE(sale_date) AS day, SUM(total_amount) AS day_revenue
             FROM sales
-            WHERE DATE(sale_date) >= DATE_SUB(CURDATE(), INTERVAL 30 DAY)
+            WHERE DATE(sale_date) >= DATE_SUB(UTC_DATE(), INTERVAL 30 DAY)
               AND payment_status <> 'failed'
             GROUP BY DATE(sale_date)
         ) x
     ", [], 0.0);
 
-    $reorderPreview = array_slice(buildReorderSuggestions($db, 5), 0, 3);
-    $anomalySnapshot = detectOperationalAnomalies($db, 10);
+    $reorderPreview = [];
+    $anomalySnapshot = [
+        'items' => [],
+        'counts' => [
+            'critical' => 0,
+            'high' => 0,
+            'medium' => 0,
+            'low' => 0
+        ],
+        'generated_at' => gmdate('c')
+    ];
+    if ($includeDeepSignals) {
+        $reorderPreview = array_slice(buildReorderSuggestions($db, 5), 0, 3);
+        $anomalySnapshot = detectOperationalAnomalies($db, 10);
+    }
     $criticalAnomalies = (int)($anomalySnapshot['counts']['critical'] ?? 0);
     $highAnomalies = (int)($anomalySnapshot['counts']['high'] ?? 0);
 
@@ -2764,10 +3118,10 @@ function buildReorderSuggestions(Database $db, int $limit = 20): array {
         LEFT JOIN (
             SELECT
                 product_id,
-                SUM(CASE WHEN activity_date >= DATE_SUB(CURDATE(), INTERVAL 30 DAY) THEN qty ELSE 0 END) AS total_30d,
-                SUM(CASE WHEN activity_date >= DATE_SUB(CURDATE(), INTERVAL 7 DAY) THEN qty ELSE 0 END) AS total_7d,
-                SUM(CASE WHEN activity_date >= DATE_SUB(CURDATE(), INTERVAL 30 DAY) THEN qty ELSE 0 END) / 30 AS avg_daily_demand,
-                SUM(CASE WHEN activity_date >= DATE_SUB(CURDATE(), INTERVAL 7 DAY) THEN qty ELSE 0 END) / 7 AS avg_daily_demand_7d
+                SUM(CASE WHEN activity_date >= DATE_SUB(UTC_DATE(), INTERVAL 30 DAY) THEN qty ELSE 0 END) AS total_30d,
+                SUM(CASE WHEN activity_date >= DATE_SUB(UTC_DATE(), INTERVAL 7 DAY) THEN qty ELSE 0 END) AS total_7d,
+                SUM(CASE WHEN activity_date >= DATE_SUB(UTC_DATE(), INTERVAL 30 DAY) THEN qty ELSE 0 END) / 30 AS avg_daily_demand,
+                SUM(CASE WHEN activity_date >= DATE_SUB(UTC_DATE(), INTERVAL 7 DAY) THEN qty ELSE 0 END) / 7 AS avg_daily_demand_7d
             FROM (
                 SELECT
                     coi.product_id AS product_id,
@@ -2775,7 +3129,7 @@ function buildReorderSuggestions(Database $db, int $limit = 20): array {
                     SUM(coi.quantity) AS qty
                 FROM customer_order_items coi
                 INNER JOIN customer_orders co ON co.id = coi.order_id
-                WHERE DATE(co.order_date) >= DATE_SUB(CURDATE(), INTERVAL 90 DAY)
+                WHERE DATE(co.order_date) >= DATE_SUB(UTC_DATE(), INTERVAL 90 DAY)
                   AND co.status <> 'cancelled'
                 GROUP BY coi.product_id, DATE(co.order_date)
 
@@ -2787,7 +3141,7 @@ function buildReorderSuggestions(Database $db, int $limit = 20): array {
                     SUM(si.quantity) AS qty
                 FROM sale_items si
                 INNER JOIN sales s ON s.id = si.sale_id
-                WHERE DATE(s.sale_date) >= DATE_SUB(CURDATE(), INTERVAL 90 DAY)
+                WHERE DATE(s.sale_date) >= DATE_SUB(UTC_DATE(), INTERVAL 90 DAY)
                   AND s.payment_status <> 'failed'
                 GROUP BY si.product_id, DATE(s.sale_date)
             ) q
@@ -2800,7 +3154,7 @@ function buildReorderSuggestions(Database $db, int $limit = 20): array {
             FROM purchase_order_items poi
             INNER JOIN purchase_orders po ON po.id = poi.po_id
             INNER JOIN goods_received_notes grn ON grn.po_id = po.id
-            WHERE po.order_date >= DATE_SUB(CURDATE(), INTERVAL 180 DAY)
+            WHERE po.order_date >= DATE_SUB(UTC_DATE(), INTERVAL 180 DAY)
             GROUP BY poi.product_id
         ) lead ON lead.product_id = p.id
         WHERE p.is_active = 1
@@ -2809,7 +3163,7 @@ function buildReorderSuggestions(Database $db, int $limit = 20): array {
     ");
 
     $suggestions = [];
-    $today = new DateTimeImmutable('today');
+    $today = new DateTimeImmutable('today', new DateTimeZone('UTC'));
     foreach ($rows as $row) {
         $quantityAvailable = (int)($row['quantity_available'] ?? 0);
         $reorderLevel = max(1, (int)($row['reorder_level'] ?? 1));
@@ -3093,7 +3447,7 @@ function detectOperationalAnomalies(Database $db, int $limit = 25): array {
             p.sku
         FROM stock_adjustments sa
         INNER JOIN products p ON p.id = sa.product_id
-        WHERE DATE(sa.adjustment_date) >= DATE_SUB(CURDATE(), INTERVAL 30 DAY)
+        WHERE DATE(sa.adjustment_date) >= DATE_SUB(UTC_DATE(), INTERVAL 30 DAY)
           AND (
               ABS(sa.quantity_adjusted) >= 20
               OR (sa.quantity_before > 0 AND ABS(sa.quantity_adjusted) >= (sa.quantity_before * 0.5))
@@ -3134,12 +3488,12 @@ function detectOperationalAnomalies(Database $db, int $limit = 25): array {
             po.id,
             po.po_number,
             po.expected_delivery_date,
-            DATEDIFF(CURDATE(), po.expected_delivery_date) AS overdue_days,
+            DATEDIFF(UTC_DATE(), po.expected_delivery_date) AS overdue_days,
             COALESCE(u.full_name, u.username, 'Supplier') AS supplier_name
         FROM purchase_orders po
         LEFT JOIN users u ON u.id = po.supplier_id
         WHERE po.expected_delivery_date IS NOT NULL
-          AND po.expected_delivery_date < CURDATE()
+          AND po.expected_delivery_date < UTC_DATE()
           AND po.status NOT IN ('received', 'cancelled', 'rejected')
         ORDER BY overdue_days DESC
         LIMIT 10

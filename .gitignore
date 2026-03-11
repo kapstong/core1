@@ -16,5 +16,6 @@ Thumbs.db
 NUL
 
 # Environment specific files
+.env
 .env.local
 .env.*.local

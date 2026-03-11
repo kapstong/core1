@@ -75,7 +75,14 @@
 
             <div class="admin-ai-disclosure">Every assistant response is marked with source and can be approved/rejected for audit logging.</div>
 
-            <div class="admin-ai-feed" id="admin-ai-feed"></div>
+            <div class="admin-ai-quick-actions" role="group" aria-label="Quick AI actions">
+                <button type="button" class="admin-ai-chip" data-ai-mode="summary">Daily summary</button>
+                <button type="button" class="admin-ai-chip" data-ai-mode="reorder">Reorder priorities</button>
+                <button type="button" class="admin-ai-chip" data-ai-mode="anomalies">Anomaly scan</button>
+                <button type="button" class="admin-ai-chip" data-ai-mode="forecast">Trend forecast</button>
+            </div>
+
+            <div class="admin-ai-feed" id="admin-ai-feed" role="log" aria-live="polite" aria-relevant="additions text"></div>
 
             <form class="admin-ai-form" id="admin-ai-form">
                 <input
@@ -84,9 +91,10 @@
                     class="admin-ai-input"
                     maxlength="700"
                     placeholder="Ask in English or Filipino about inventory, purchasing, risk, or trends..."
+                    aria-label="Ask Admin AI Copilot"
                     autocomplete="off"
                 />
-                <button type="submit" class="admin-ai-send" id="admin-ai-send">
+                <button type="submit" class="admin-ai-send" id="admin-ai-send" aria-label="Send message">
                     <i class="fas fa-paper-plane"></i>
                 </button>
             </form>
@@ -123,6 +131,12 @@
         });
 
         closeBtn.addEventListener('click', closePanel);
+
+        panel.addEventListener('keydown', (event) => {
+            if (event.key === 'Escape' && state.isOpen) {
+                closePanel();
+            }
+        });
 
         panel.querySelectorAll('[data-ai-mode]').forEach((button) => {
             button.addEventListener('click', async () => {
@@ -337,6 +351,7 @@
                 },
                 body: JSON.stringify({
                     message,
+                    response_detail: 'compact',
                     context: {
                         page: window.currentPage || 'home',
                         title: document.getElementById('page-title-top')?.textContent || '',
@@ -410,6 +425,9 @@
         }
         if (mode === 'reorder') {
             return renderReorder(data.suggestions || []);
+        }
+        if (mode === 'anomalies') {
+            return renderAnomalies(data.anomalies || {});
         }
         return `<div>${escapeHtml(JSON.stringify(data))}</div>`;
     }
@@ -486,6 +504,32 @@
                 <div class="admin-ai-kpi"><span>7d Revenue/Day</span><strong>${formatCurrency(averages.revenue_per_day_7d || 0)}</strong></div>
             </div>
             <p class="admin-ai-meta">Trend: ${escapeHtml(trend.direction || 'stable')} | Orders 7d change: ${Number(trend.orders_change_7d_pct || 0).toFixed(1)}% | Revenue 7d change: ${Number(trend.revenue_change_7d_pct || 0).toFixed(1)}%</p>
+        `;
+    }
+
+    function renderAnomalies(anomalies) {
+        const counts = anomalies.counts || {};
+        const items = Array.isArray(anomalies.items) ? anomalies.items.slice(0, 10) : [];
+
+        const list = items.length
+            ? `<ul class="admin-ai-anomaly-list">${items.map((item) => {
+                const severity = String(item.severity || 'low').toUpperCase();
+                const title = escapeHtml(item.title || 'Anomaly');
+                const detail = escapeHtml(item.detail || '');
+                const recommendation = escapeHtml(item.recommendation || '');
+                return `<li><strong>[${severity}] ${title}</strong><br>${detail}${recommendation ? `<br><em>${recommendation}</em>` : ''}</li>`;
+            }).join('')}</ul>`
+            : '<p>No anomalies detected.</p>';
+
+        return `
+            <div class="admin-ai-block-title">Operational Anomalies</div>
+            <div class="admin-ai-kpi-grid">
+                <div class="admin-ai-kpi"><span>Critical</span><strong>${Number(counts.critical || 0)}</strong></div>
+                <div class="admin-ai-kpi"><span>High</span><strong>${Number(counts.high || 0)}</strong></div>
+                <div class="admin-ai-kpi"><span>Medium</span><strong>${Number(counts.medium || 0)}</strong></div>
+                <div class="admin-ai-kpi"><span>Low</span><strong>${Number(counts.low || 0)}</strong></div>
+            </div>
+            ${list}
         `;
     }
 
