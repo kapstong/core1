@@ -509,7 +509,7 @@ function extractAdminEntities(string $message, string $normalized, array $memory
         $entities['supplier_hint'] = trim((string)$m[1]);
     }
 
-    $entities['follow_up'] = preg_match('/\b(what about|how about|and this|that one|it|those|same|naman|yung|yun|iyon|then)\b/iu', $normalized) === 1;
+    $entities['follow_up'] = preg_match('/\b(what about|how about|and this|that one|it|those|same|naman|yung|yun|iyon|then|alright|all right|ok|okay|sure|noted|copy|go ahead|continue|next|sige|gets)\b/iu', $normalized) === 1;
     if ($entities['follow_up'] && isset($memory['last_entities']) && is_array($memory['last_entities'])) {
         foreach (['product_hint', 'supplier_hint'] as $carryKey) {
             if (empty($entities[$carryKey]) && !empty($memory['last_entities'][$carryKey])) {
@@ -549,10 +549,39 @@ function refineIntentWithEntitiesAndMemory(string $intent, array $entities, arra
         }
     }
 
-    if (!empty($entities['follow_up']) && !empty($memory['last_intent']) && is_string($memory['last_intent'])) {
-        $last = trim($memory['last_intent']);
-        if ($last !== '') {
+    if (!empty($entities['follow_up'])) {
+        $carryableIntents = ['summary', 'history', 'forecast', 'reorder', 'anomalies'];
+        $last = trim((string)($memory['last_intent'] ?? ''));
+        if (in_array($last, $carryableIntents, true)) {
             return $last;
+        }
+
+        $lastMetricFocus = [];
+        if (
+            isset($memory['last_entities']) &&
+            is_array($memory['last_entities']) &&
+            isset($memory['last_entities']['metric_focus']) &&
+            is_array($memory['last_entities']['metric_focus'])
+        ) {
+            $lastMetricFocus = $memory['last_entities']['metric_focus'];
+        }
+
+        if (in_array('forecast', $lastMetricFocus, true)) {
+            return 'forecast';
+        }
+        if (in_array('anomalies', $lastMetricFocus, true)) {
+            return 'anomalies';
+        }
+        if (
+            in_array('reorder', $lastMetricFocus, true) ||
+            in_array('low_stock', $lastMetricFocus, true) ||
+            in_array('out_of_stock', $lastMetricFocus, true) ||
+            in_array('purchase_orders', $lastMetricFocus, true)
+        ) {
+            return 'reorder';
+        }
+        if (in_array('orders', $lastMetricFocus, true) || in_array('revenue', $lastMetricFocus, true)) {
+            return 'summary';
         }
     }
 
@@ -649,6 +678,7 @@ function buildAdminRoutingDecision(string $normalized, string $intent, array $en
     $hasMetricFocus = !empty($entities['metric_focus']) && is_array($entities['metric_focus']);
     $hasEntityHints = !empty($entities['product_hint']) || !empty($entities['supplier_hint']);
     $hasLookups = !empty($retrievedContext['product_lookup']) || !empty($retrievedContext['supplier_lookup']);
+    $hasFollowUp = !empty($entities['follow_up']);
     $isQuestion = strpos($normalized, '?') !== false || preg_match('/\b(what|which|when|where|why|how|can|should|ano|alin|kailan|saan|bakit|paano|pwede)\b/iu', $normalized) === 1;
     $isAnalyticalQuestion = preg_match('/\b(why|how|explain|compare|insight|recommend|strategy|root cause|risk|tradeoff|bakit|paano|ipaliwanag|anong dapat|ano dapat)\b/iu', $normalized) === 1;
 
@@ -681,6 +711,22 @@ function buildAdminRoutingDecision(string $normalized, string $intent, array $en
             'strategy' => 'rules',
             'confidence' => 0.84,
             'reason' => 'llm_disabled'
+        ];
+    }
+
+    if ($hasFollowUp && $wordCount <= 6) {
+        return [
+            'strategy' => 'hybrid',
+            'confidence' => 0.8,
+            'reason' => 'contextual_follow_up'
+        ];
+    }
+
+    if ($isAnalyticalQuestion && $wordCount >= 4) {
+        return [
+            'strategy' => 'llm',
+            'confidence' => 0.78,
+            'reason' => 'analytical_general_query'
         ];
     }
 
@@ -1200,8 +1246,8 @@ function buildAdminClarificationPrompt(
     $hasTimeWindow = preg_match('/\b\d{1,3}\s*(day|days|araw)\b/iu', $normalized) === 1;
     $hasProductKeyword = preg_match('/\b(product|item|sku|produkto)\b/iu', $normalized) === 1;
     $hasSupplierKeyword = preg_match('/\b(supplier|vendor)\b/iu', $normalized) === 1;
-    $isGenericShortPrompt = $wordCount <= 3 &&
-        preg_match('/^(help|status|update|report|analysis|analyze|insight|check|ano|kamusta|kumusta|pakicheck|patingin)$/iu', $normalized) === 1;
+    $isGenericShortPrompt = $wordCount <= 4 &&
+        preg_match('/^(help|status|update|report|analysis|analyze|insight|check|ano|kamusta|kumusta|pakicheck|patingin|alright|all right|ok|okay|sige|go ahead|continue|next|noted|copy)$/iu', $normalized) === 1;
 
     if (!empty($entities['follow_up']) && empty($memory['last_intent'])) {
         $result['needs_clarification'] = true;
@@ -3211,6 +3257,12 @@ function buildRulesBasedGeneralReply(string $message, array $summary, array $reo
             : "Ready to help with inventory and operations.\nTry: \"low stock\", \"reorder now\", \"anomalies\", \"forecast next 14 days\", or \"daily summary\".";
     }
 
+    if (preg_match('/\b(thanks|thank you|salamat)\b/iu', $normalized) === 1) {
+        return $language === 'fil'
+            ? "Walang anuman. Sabihin mo kung alin ang gusto mong sunod na i-run: daily summary, reorder priorities, anomaly scan, o trend forecast."
+            : "You're welcome. Tell me what you want to run next: daily summary, reorder priorities, anomaly scan, or trend forecast.";
+    }
+
     if (isOutOfScopeAdminQuestion($normalized)) {
         return $language === 'fil'
             ? "Nakafocus ako sa inventory management at system operations lang.\nPwede mong itanong ang sales trends, reorder timing, stock risks, purchase orders, at anomalies."
@@ -3350,26 +3402,82 @@ function buildRulesBasedGeneralReply(string $message, array $summary, array $reo
         return "Purchase operations snapshot:\n- Pending POs: {$pendingPo}\n- Overdue POs: {$overduePo}\n- Recommendation: follow up overdue POs immediately to reduce stockout risk.";
     }
 
+    $priorityLabel = '';
+    $priorityAction = '';
+    if ($critical > 0) {
+        $priorityLabel = $language === 'fil'
+            ? 'I-contain muna ang critical anomalies'
+            : 'Contain critical anomalies first';
+        $priorityAction = $language === 'fil'
+            ? 'I-run ang critical anomaly scan at mag-assign agad ng owner sa bawat top flag.'
+            : 'Run a critical anomaly scan and assign an owner to each top flag immediately.';
+    } elseif ($outOfStockItems > 0 || $lowStockItems > 0) {
+        $priorityLabel = $language === 'fil'
+            ? 'I-stabilize ang stock coverage'
+            : 'Stabilize stock coverage';
+        $priorityAction = $language === 'fil'
+            ? 'I-prioritize ang reorder lines na may pinakamalapit na order-by date.'
+            : 'Prioritize reorder lines with the nearest order-by date.';
+    } elseif ($overduePo > 0) {
+        $priorityLabel = $language === 'fil'
+            ? 'I-clear ang overdue purchase orders'
+            : 'Clear overdue purchase orders';
+        $priorityAction = $language === 'fil'
+            ? 'I-follow up ngayong araw ang overdue suppliers para bawas lead-time risk.'
+            : 'Follow up overdue suppliers today to reduce lead-time risk.';
+    } elseif ($trend === 'downward') {
+        $priorityLabel = $language === 'fil'
+            ? 'I-validate ang pababang demand trend'
+            : 'Validate the downward demand trend';
+        $priorityAction = $language === 'fil'
+            ? 'I-compare ang recent demand vs reorder assumptions bago ang susunod na PO cycle.'
+            : 'Compare recent demand versus reorder assumptions before the next PO cycle.';
+    } else {
+        $priorityLabel = $language === 'fil'
+            ? 'Panatilihin ang stable operations'
+            : 'Keep operations stable';
+        $priorityAction = $language === 'fil'
+            ? 'I-monitor ang weekly trend at i-review ang top risks kada shift.'
+            : 'Monitor the weekly trend and review top risks each shift.';
+    }
+
+    $reorderTop = formatTopReorderItems($reorder, 3, $language);
+    $anomalyTop = formatTopAnomalyItems($anomalies, 3);
+
     $lines = [];
     if ($language === 'fil') {
         $trendText = $trend === 'upward' ? 'tumataas' : ($trend === 'downward' ? 'bumababa' : 'stable');
-        $lines[] = 'Snapshot ng operations:';
-        $lines[] = '- Orders ngayon: ' . $ordersToday . '.';
-        $lines[] = '- Revenue ngayon: PHP ' . number_format($revenueToday, 2) . '.';
-        $lines[] = '- Reorder candidates: ' . $topReorder . '.';
-        $lines[] = '- Anomalies: ' . $critical . ' critical, ' . $high . ' high.';
+        $lines[] = 'Priority operations snapshot:';
+        $lines[] = '- Primary focus: ' . $priorityLabel . '.';
+        $lines[] = '- Orders ngayon: ' . $ordersToday . ', Revenue: PHP ' . number_format($revenueToday, 2) . '.';
+        $lines[] = '- Stock risk: ' . $lowStockItems . ' low-stock, ' . $outOfStockItems . ' out-of-stock, ' . $topReorder . ' reorder candidates.';
+        $lines[] = '- Anomaly risk: ' . $critical . ' critical, ' . $high . ' high.';
         $lines[] = '- Trend forecast (7 araw): ' . $trendText . ', ~' . number_format($forecastOrders7d, 0) . ' orders at PHP ' . number_format($forecastRevenue7d, 2) . '.';
+        if ($anomalyTop !== '') {
+            $lines[] = '- Top anomaly flags: ' . $anomalyTop . '.';
+        }
+        if ($reorderTop !== '') {
+            $lines[] = '- Top reorder lines: ' . $reorderTop . '.';
+        }
+        $lines[] = '- Recommended next step: ' . $priorityAction;
         $lines[] = '';
-        $lines[] = 'Subukan: "daily summary", "historical trends", "trend forecast", "reorder suggestions", o "anomaly scan".';
+        $lines[] = 'Sabihin mo: "show critical anomalies", "show reorder priorities", "daily summary", o "trend forecast".';
     } else {
-        $lines[] = 'Current operations snapshot:';
-        $lines[] = '- Orders today: ' . $ordersToday . '.';
-        $lines[] = '- Revenue today: PHP ' . number_format($revenueToday, 2) . '.';
-        $lines[] = '- Reorder candidates: ' . $topReorder . '.';
-        $lines[] = '- Anomalies: ' . $critical . ' critical, ' . $high . ' high.';
+        $lines[] = 'Priority operations snapshot:';
+        $lines[] = '- Primary focus: ' . $priorityLabel . '.';
+        $lines[] = '- Orders today: ' . $ordersToday . ', Revenue today: PHP ' . number_format($revenueToday, 2) . '.';
+        $lines[] = '- Stock risk: ' . $lowStockItems . ' low-stock, ' . $outOfStockItems . ' out-of-stock, ' . $topReorder . ' reorder candidates.';
+        $lines[] = '- Anomaly risk: ' . $critical . ' critical, ' . $high . ' high.';
         $lines[] = '- Trend forecast (next 7 days): ' . $trend . ', ~' . number_format($forecastOrders7d, 0) . ' orders and PHP ' . number_format($forecastRevenue7d, 2) . '.';
+        if ($anomalyTop !== '') {
+            $lines[] = '- Top anomaly flags: ' . $anomalyTop . '.';
+        }
+        if ($reorderTop !== '') {
+            $lines[] = '- Top reorder lines: ' . $reorderTop . '.';
+        }
+        $lines[] = '- Recommended next step: ' . $priorityAction;
         $lines[] = '';
-        $lines[] = 'Ask for "daily summary", "historical trends", "trend forecast", "reorder suggestions", or "anomaly scan" for a focused report.';
+        $lines[] = 'Reply with "show critical anomalies", "show reorder priorities", "daily summary", or "trend forecast".';
     }
 
     return implode("\n", $lines);
@@ -3625,11 +3733,57 @@ function buildAdminLlmMessages(
     ];
 }
 
+function isPlaceholderSecretValue(string $value): bool {
+    $normalized = strtolower(trim($value));
+    if ($normalized === '') {
+        return true;
+    }
+
+    $knownPlaceholders = [
+        'your_api_key',
+        'your_api_key_here',
+        'your_new_rotated_key',
+        'replace_me',
+        'replace-with-real-key',
+        'changeme',
+        'change_me',
+        'example',
+        'test',
+        'test_key',
+        'dummy',
+        'dummy_key'
+    ];
+    if (in_array($normalized, $knownPlaceholders, true)) {
+        return true;
+    }
+
+    if (
+        strpos($normalized, 'your_') === 0 ||
+        strpos($normalized, 'replace') !== false ||
+        strpos($normalized, 'placeholder') !== false ||
+        strpos($normalized, 'dummy') !== false
+    ) {
+        return true;
+    }
+
+    return false;
+}
+
 function getAdminAiLlmConfig(): array {
-    $apiKey = trim((string)(Env::get(
-        'ADMIN_AI_API_KEY',
-        Env::get('CHATBOT_LLM_API_KEY', Env::get('OPENAI_API_KEY', ''))
-    ) ?? ''));
+    $apiKey = '';
+    $apiKeyCandidates = [
+        'ADMIN_AI_API_KEY' => (string)(Env::get('ADMIN_AI_API_KEY', '') ?? ''),
+        'CHATBOT_LLM_API_KEY' => (string)(Env::get('CHATBOT_LLM_API_KEY', '') ?? ''),
+        'OPENAI_API_KEY' => (string)(Env::get('OPENAI_API_KEY', '') ?? '')
+    ];
+    foreach ($apiKeyCandidates as $candidate) {
+        $trimmed = trim($candidate);
+        if ($trimmed === '' || isPlaceholderSecretValue($trimmed)) {
+            continue;
+        }
+        $apiKey = $trimmed;
+        break;
+    }
 
     $enabledFlag = Env::get('ADMIN_AI_ENABLED', Env::get('CHATBOT_LLM_ENABLED', null));
     $configured = $apiKey !== '';
