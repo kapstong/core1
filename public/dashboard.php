@@ -652,7 +652,7 @@
     <script src="assets/js/inactivity-monitor.js?v=3.4"></script>
 
     <!-- Include all page loaders -->
-    <script src="assets/js/dashboard-pages.js?v=5.9"></script>
+    <script src="assets/js/dashboard-pages.js?v=6.0"></script>
     <script src="assets/js/admin-ai-copilot.js?v=<?= urlencode((string)@filemtime(__DIR__ . '/assets/js/admin-ai-copilot.js')) ?>"></script>
 
     <!-- NEW: Complete GRN Management System -->
@@ -1259,6 +1259,9 @@
         async function showPage(pageName, updateUrl = true, filter = null) {
             if (typeof window.cleanupProfileFaceEnrollment === 'function' && pageName !== 'profile') {
                 window.cleanupProfileFaceEnrollment();
+            }
+            if (pageName !== 'suppliers' && typeof window.stopSuppliersAutoRefresh === 'function') {
+                window.stopSuppliersAutoRefresh();
             }
 
             currentPage = pageName;

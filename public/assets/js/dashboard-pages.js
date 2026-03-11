@@ -6072,8 +6072,54 @@ function debounce(func, wait) {
     };
 }
 
+const SUPPLIERS_AUTO_REFRESH_INTERVAL_MS = 15000;
+let suppliersAutoRefreshIntervalId = null;
+let suppliersAutoRefreshInFlight = false;
+
+function stopSuppliersAutoRefresh() {
+    if (suppliersAutoRefreshIntervalId !== null) {
+        clearInterval(suppliersAutoRefreshIntervalId);
+        suppliersAutoRefreshIntervalId = null;
+    }
+    suppliersAutoRefreshInFlight = false;
+}
+
+function startSuppliersAutoRefresh() {
+    stopSuppliersAutoRefresh();
+
+    suppliersAutoRefreshIntervalId = setInterval(async () => {
+        const suppliersTable = document.getElementById('suppliers-table-body');
+        const pendingTable = document.getElementById('pending-suppliers-table-body');
+
+        // If user left Suppliers page, stop polling.
+        if (!suppliersTable || !pendingTable) {
+            stopSuppliersAutoRefresh();
+            return;
+        }
+
+        if (document.hidden || suppliersAutoRefreshInFlight) {
+            return;
+        }
+
+        suppliersAutoRefreshInFlight = true;
+        try {
+            await Promise.all([
+                loadSuppliers(),
+                loadPendingSuppliers()
+            ]);
+        } catch (error) {
+            devLog('Suppliers auto-refresh error:', error);
+        } finally {
+            suppliersAutoRefreshInFlight = false;
+        }
+    }, SUPPLIERS_AUTO_REFRESH_INTERVAL_MS);
+}
+
+window.stopSuppliersAutoRefresh = stopSuppliersAutoRefresh;
+
 async function loadSuppliersPage() {
     const content = document.getElementById('page-content');
+    stopSuppliersAutoRefresh();
     content.innerHTML = `
         <div class="page-header">
             <h1 class="page-title"><i class="fas fa-truck me-2"></i>Suppliers</h1>
@@ -6184,6 +6230,7 @@ async function loadSuppliersPage() {
     // Load suppliers and pending approvals
     await loadSuppliers();
     await loadPendingSuppliers();
+    startSuppliersAutoRefresh();
 
     // Add event listeners
     document.getElementById('supplier-search').addEventListener('input', debounce(() => loadSuppliers(), 500));
