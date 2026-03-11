@@ -650,6 +650,7 @@
 
     <!-- Inactivity Monitor -->
     <script src="assets/js/inactivity-monitor.js?v=3.4"></script>
+    <script src="assets/js/face-auth-core.js?v=1.0"></script>
 
     <!-- Include all page loaders -->
     <script src="assets/js/dashboard-pages.js?v=6.1"></script>
