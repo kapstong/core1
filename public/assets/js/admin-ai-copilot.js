@@ -9,6 +9,7 @@
         isOpen: false,
         isMaximized: false,
         isBusy: false,
+        cooldownUntil: 0,
         feedbackByResponseId: {},
         approvalsByResponseId: {},
         hasShownWelcome: false
@@ -319,12 +320,15 @@
             const html = renderModeResult(mode, payload.data || {});
             const responseId = String(payload?.data?.response_id || '');
             const responseSource = String(payload?.data?.response_source || 'rules');
+            const isGrounded = payload?.data?.grounding?.grounded ? 'yes' : 'no';
+            const snapshot = formatSnapshotTime(payload?.data?.grounding?.snapshot_at);
+            const snapshotMeta = snapshot ? ` | Snapshot: ${escapeHtml(snapshot)}` : '';
             appendAssistantMessage(html, {
                 responseId,
                 responseSource,
                 intent: mode,
                 aiGenerated: true,
-                metaHtml: `Source: ${escapeHtml(responseSource)} | Intent: ${escapeHtml(mode)} | AI-generated: yes | Human approval: required`
+                metaHtml: `Source: ${escapeHtml(responseSource)} | Intent: ${escapeHtml(mode)} | DB-grounded: ${isGrounded}${snapshotMeta} | AI-generated: yes | Human approval: required`
             });
         } catch (error) {
             appendSystemMessage(error.message || 'Failed to run AI action.');
@@ -335,6 +339,11 @@
 
     async function askCopilot(message) {
         if (state.isBusy) {
+            return;
+        }
+        const cooldownSeconds = getCooldownRemainingSeconds();
+        if (cooldownSeconds > 0) {
+            appendSystemMessage(`Rate limit active. Please retry in about ${cooldownSeconds}s.`);
             return;
         }
 
@@ -383,6 +392,11 @@
             const strategy = escapeHtml(data.router?.strategy || 'rules');
             const roleLens = escapeHtml(data.role_profile?.role_label || user?.role || '');
             const clarificationFlag = data.needs_clarification ? ' | Clarifying: yes' : '';
+            const isGrounded = data?.grounding?.grounded ? 'yes' : 'no';
+            const snapshotText = formatSnapshotTime(data?.grounding?.snapshot_at);
+            const sourceCount = Array.isArray(data?.grounding?.sources) ? data.grounding.sources.length : 0;
+            const snapshotMeta = snapshotText ? ` | Snapshot: ${escapeHtml(snapshotText)}` : '';
+            const sourceMeta = sourceCount > 0 ? ` | Sources: ${sourceCount}` : '';
 
             let followUpActions = [];
             if (data.needs_clarification && Array.isArray(data.clarification?.options)) {
@@ -404,10 +418,20 @@
                 intent: data.intent || 'general',
                 aiGenerated: true,
                 followUps: followUpActions,
-                metaHtml: `Source: ${source} | Intent: ${escapeHtml(data.intent || 'general')} | Lang: ${language} | Role: ${roleLens} | Router: ${strategy}${clarificationFlag} | AI-generated: yes`
+                metaHtml: `Source: ${source} | Intent: ${escapeHtml(data.intent || 'general')} | Lang: ${language} | Role: ${roleLens} | Router: ${strategy}${clarificationFlag} | DB-grounded: ${isGrounded}${snapshotMeta}${sourceMeta} | AI-generated: yes`
             });
         } catch (error) {
-            appendSystemMessage(error.message || 'Failed to get AI response.');
+            if (Number(error?.status || 0) === 429) {
+                const retryAfterSeconds = resolveRetryAfterSeconds(error);
+                if (retryAfterSeconds > 0) {
+                    state.cooldownUntil = Date.now() + (retryAfterSeconds * 1000);
+                    appendSystemMessage(`Too many AI requests. Please retry in about ${retryAfterSeconds}s.`);
+                } else {
+                    appendSystemMessage('Too many AI requests. Please wait a moment and try again.');
+                }
+            } else {
+                appendSystemMessage(error.message || 'Failed to get AI response.');
+            }
         } finally {
             setBusy(false);
         }
@@ -747,19 +771,64 @@
             payload = raw ? JSON.parse(raw) : {};
         } catch (error) {
             const message = response.ok ? 'Invalid API response' : `HTTP ${response.status}`;
-            throw new Error(message);
+            const err = new Error(message);
+            err.status = response.status;
+            err.payload = payload;
+            throw err;
         }
 
-        if (!response.ok && !payload.success) {
-            throw new Error(payload.message || `HTTP ${response.status}`);
+        if (!response.ok || payload.success === false) {
+            const err = new Error(payload.message || `HTTP ${response.status}`);
+            err.status = response.status;
+            err.payload = payload;
+            throw err;
         }
 
         return payload;
     }
 
+    function getCooldownRemainingSeconds() {
+        const remainingMs = Number(state.cooldownUntil || 0) - Date.now();
+        if (remainingMs <= 0) {
+            return 0;
+        }
+        return Math.max(1, Math.ceil(remainingMs / 1000));
+    }
+
+    function resolveRetryAfterSeconds(error) {
+        const payloadRetry = Number(error?.payload?.errors?.retry_after_seconds || 0);
+        if (Number.isFinite(payloadRetry) && payloadRetry > 0) {
+            return Math.ceil(payloadRetry);
+        }
+
+        const message = String(error?.message || '');
+        const match = message.match(/(\d+)\s*seconds?/i);
+        if (match) {
+            return Number(match[1] || 0);
+        }
+        return 0;
+    }
+
     function formatCurrency(value) {
         const amount = Number(value || 0);
         return `PHP ${amount.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    }
+
+    function formatSnapshotTime(raw) {
+        if (!raw) {
+            return '';
+        }
+        const date = new Date(raw);
+        if (Number.isNaN(date.getTime())) {
+            return '';
+        }
+        return date.toLocaleString('en-PH', {
+            year: 'numeric',
+            month: 'short',
+            day: '2-digit',
+            hour: '2-digit',
+            minute: '2-digit'
+        });
     }
 
     function formatAssistantReply(text) {

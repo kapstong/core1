@@ -79,6 +79,8 @@ function handleGetRequest(): void {
                 'feedback_loop',
                 'approval_workflow',
                 'ai_traceability',
+                'database_grounded_responses',
+                'entity_level_db_lookup',
                 'clarifying_questions',
                 'role_personalization',
                 'reasoned_recommendations',
@@ -119,6 +121,7 @@ function handleGetRequest(): void {
                 'mode' => 'summary',
                 'response_id' => generateAdminAiResponseId(),
                 'response_source' => 'rules',
+                'grounding' => buildAdminGroundingMeta('summary', $summary, [], [], [], [], []),
                 'summary' => $summary
             ], 'Daily summary generated');
             return;
@@ -131,6 +134,7 @@ function handleGetRequest(): void {
                 'mode' => 'history',
                 'response_id' => generateAdminAiResponseId(),
                 'response_source' => 'rules',
+                'grounding' => buildAdminGroundingMeta('history', [], $history, [], [], [], []),
                 'days' => $historyDays,
                 'history' => $history
             ], 'Historical analytics generated');
@@ -145,6 +149,7 @@ function handleGetRequest(): void {
                 'mode' => 'forecast',
                 'response_id' => generateAdminAiResponseId(),
                 'response_source' => 'rules',
+                'grounding' => buildAdminGroundingMeta('forecast', [], $history, $forecast, [], [], []),
                 'days' => $forecastDays,
                 'forecast' => $forecast
             ], 'Trend forecast generated');
@@ -157,6 +162,7 @@ function handleGetRequest(): void {
                 'mode' => 'reorder',
                 'response_id' => generateAdminAiResponseId(),
                 'response_source' => 'rules',
+                'grounding' => buildAdminGroundingMeta('reorder', [], [], [], $suggestions, [], []),
                 'suggestions' => $suggestions,
                 'count' => count($suggestions)
             ], 'Reorder suggestions generated');
@@ -172,6 +178,7 @@ function handleGetRequest(): void {
                 'mode' => 'anomalies',
                 'response_id' => generateAdminAiResponseId(),
                 'response_source' => 'rules',
+                'grounding' => buildAdminGroundingMeta('anomalies', [], [], [], [], $anomalies, []),
                 'anomalies' => $anomalies
             ], 'Anomaly scan complete');
             return;
@@ -193,6 +200,7 @@ function handleGetRequest(): void {
                 'mode' => 'insights',
                 'response_id' => generateAdminAiResponseId(),
                 'response_source' => 'rules',
+                'grounding' => buildAdminGroundingMeta('insights', $summary, $history, $forecast, $reorder, $anomalies, []),
                 'summary' => $summary,
                 'history' => $history,
                 'forecast' => $forecast,
@@ -228,8 +236,6 @@ function handleGetRequest(): void {
 }
 
 function handlePostRequest(): void {
-    enforceAdminAiRateLimit();
-
     $input = json_decode(file_get_contents('php://input'), true);
     if (!is_array($input)) {
         $input = $_POST;
@@ -237,13 +243,17 @@ function handlePostRequest(): void {
 
     $action = strtolower(trim((string)($input['action'] ?? 'ask')));
     if ($action === 'feedback') {
+        enforceAdminAiRateLimit('feedback');
         handleAdminAiFeedback($input);
         return;
     }
     if ($action === 'approve') {
+        enforceAdminAiRateLimit('approve');
         handleAdminAiApproval($input);
         return;
     }
+
+    enforceAdminAiRateLimit('ask');
 
     $message = trim((string)($input['message'] ?? ''));
     if ($message === '') {
@@ -286,16 +296,27 @@ function enforceAdminAiEvaluateAccess(): void {
     }
 }
 
-function enforceAdminAiRateLimit(int $windowSeconds = 60, int $maxRequests = 24): void {
+function enforceAdminAiRateLimit(string $action = 'ask', ?int $windowSeconds = null, ?int $maxRequests = null): void {
+    $windowSeconds = $windowSeconds ?? parsePositiveIntEnv('ADMIN_AI_RATE_LIMIT_WINDOW_SECONDS', 60, 10, 3600);
+    if ($maxRequests === null) {
+        if ($action === 'ask') {
+            $maxRequests = parsePositiveIntEnv('ADMIN_AI_RATE_LIMIT_MAX_REQUESTS', 48, 8, 600);
+        } else {
+            $maxRequests = parsePositiveIntEnv('ADMIN_AI_RATE_LIMIT_ACTION_MAX_REQUESTS', 180, 20, 1200);
+        }
+    }
+
     $bucket = [];
+    $safeAction = preg_replace('/[^a-z0-9_\-]/i', '_', strtolower(trim($action))) ?: 'ask';
+    $sessionBucketKey = 'admin_ai_rate_limit_' . $safeAction;
     if (session_status() === PHP_SESSION_ACTIVE) {
-        $sessionBucket = $_SESSION['admin_ai_rate_limit'] ?? [];
+        $sessionBucket = $_SESSION[$sessionBucketKey] ?? [];
         if (is_array($sessionBucket)) {
             $bucket = $sessionBucket;
         }
     }
 
-    $persistedBucket = readAdminAiRuntimeStore('rate_limit', getAdminAiRateLimitStoreKey());
+    $persistedBucket = readAdminAiRuntimeStore('rate_limit', getAdminAiRateLimitStoreKey($safeAction));
     if (isset($persistedBucket['timestamps']) && is_array($persistedBucket['timestamps'])) {
         $bucket = array_merge($bucket, $persistedBucket['timestamps']);
     } elseif (is_array($persistedBucket)) {
@@ -315,18 +336,46 @@ function enforceAdminAiRateLimit(int $windowSeconds = 60, int $maxRequests = 24)
     }
 
     if (count($fresh) >= $maxRequests) {
-        Response::error('Too many AI requests. Please wait a moment and try again.', 429);
+        sort($fresh, SORT_NUMERIC);
+        $oldestFresh = (int)($fresh[0] ?? $now);
+        $retryAfter = max(1, ($oldestFresh + $windowSeconds) - $now);
+        header('Retry-After: ' . $retryAfter);
+        Response::error(
+            'Too many AI requests. Please retry in about ' . $retryAfter . ' seconds.',
+            429,
+            [
+                'retry_after_seconds' => $retryAfter,
+                'window_seconds' => $windowSeconds,
+                'max_requests' => $maxRequests,
+                'action' => $action
+            ]
+        );
     }
 
     $fresh[] = $now;
     $fresh = array_slice($fresh, -$maxRequests);
     if (session_status() === PHP_SESSION_ACTIVE) {
-        $_SESSION['admin_ai_rate_limit'] = $fresh;
+        $_SESSION[$sessionBucketKey] = $fresh;
     }
-    writeAdminAiRuntimeStore('rate_limit', getAdminAiRateLimitStoreKey(), [
+    writeAdminAiRuntimeStore('rate_limit', getAdminAiRateLimitStoreKey($safeAction), [
         'timestamps' => $fresh,
         'updated_at' => gmdate('c')
     ]);
+}
+
+function parsePositiveIntEnv(string $name, int $default, int $min = 1, int $max = 100000): int {
+    $raw = Env::get($name, null);
+    if ($raw === null || $raw === '') {
+        return $default;
+    }
+    if (!is_numeric($raw)) {
+        return $default;
+    }
+    $value = (int)$raw;
+    if ($value < $min || $value > $max) {
+        return $default;
+    }
+    return $value;
 }
 
 function sanitizeAdminAiContext(array $context): array {
@@ -473,10 +522,11 @@ function persistAdminAiMemory(array $memory): void {
     writeAdminAiRuntimeStore('memory', getAdminAiMemoryStoreKey(), normalizeAdminAiMemory($memory));
 }
 
-function getAdminAiRateLimitStoreKey(): string {
+function getAdminAiRateLimitStoreKey(string $action = 'ask'): string {
     $userId = (int)(Auth::userId() ?? 0);
     $ip = trim((string)($_SERVER['REMOTE_ADDR'] ?? 'unknown'));
-    return 'u' . $userId . '_' . substr(sha1($ip), 0, 24);
+    $safeAction = preg_replace('/[^a-z0-9_\-]/i', '_', strtolower(trim($action))) ?: 'ask';
+    return 'u' . $userId . '_' . substr(sha1($ip), 0, 24) . '_' . $safeAction;
 }
 
 function getAdminAiSessionMemory(): array {
@@ -611,7 +661,8 @@ function extractAdminEntities(string $message, string $normalized, array $memory
         'product_hint' => null,
         'supplier_hint' => null,
         'follow_up' => false,
-        'scope' => 'operations'
+        'scope' => 'operations',
+        'entity_inferred' => false
     ];
 
     if (preg_match('/\b(last|past|previous)\s+(\d{1,3})\s+days\b/iu', $normalized, $m) === 1) {
@@ -652,12 +703,31 @@ function extractAdminEntities(string $message, string $normalized, array $memory
 
     if (preg_match('/"([^"]{2,80})"/u', $message, $m) === 1) {
         $entities['product_hint'] = trim((string)$m[1]);
-    } elseif (preg_match('/\b(product|sku)\s*[:\-]?\s*([a-z0-9\-\s]{2,80})$/iu', $normalized, $m) === 1) {
+    } elseif (preg_match('/\b(product|item|sku)\s*[:\-]?\s*([a-z0-9\-\s]{2,80})$/iu', $normalized, $m) === 1) {
         $entities['product_hint'] = trim((string)$m[2]);
+    } elseif (preg_match('/\b(stock|inventory|reorder|restock|status)\s+(for|of)\s+([a-z0-9\-\s]{2,80})$/iu', $normalized, $m) === 1) {
+        $entities['product_hint'] = trim((string)$m[3]);
+    } elseif (preg_match('/\b([A-Z0-9]{2,}(?:-[A-Z0-9]{2,}){1,})\b/u', $message, $m) === 1) {
+        $entities['product_hint'] = trim((string)$m[1]);
     }
 
     if (preg_match('/\bsupplier\s*[:\-]?\s*([a-z0-9\-\s]{2,80})$/iu', $normalized, $m) === 1) {
         $entities['supplier_hint'] = trim((string)$m[1]);
+    } elseif (preg_match('/\b(vendor|supplier)\s+(named|name|is)?\s*([a-z0-9\-\s]{2,80})$/iu', $normalized, $m) === 1) {
+        $entities['supplier_hint'] = trim((string)$m[3]);
+    }
+
+    $looksLikeEntityOnly = preg_match('/^[a-z0-9][a-z0-9\-\s]{3,100}$/iu', trim($normalized)) === 1 &&
+        countWords($normalized) >= 2 &&
+        countWords($normalized) <= 10 &&
+        preg_match('/\b(show|what|which|when|where|why|how|forecast|summary|history|anomal|trend|report|help|status|hi|hello|hey|kamusta|kumusta|thanks|thank you|salamat|ok|okay|sure|sige)\b/iu', $normalized) !== 1 &&
+        (
+            preg_match('/[\d\-]/u', $message) === 1 ||
+            preg_match('/\b(amd|intel|nvidia|corsair|asus|msi|samsung|ryzen|geforce|nvme|ssd|cpu|gpu|ram|ddr|pcie)\b/iu', $normalized) === 1
+        );
+    if ($looksLikeEntityOnly && $entities['product_hint'] === null && $entities['supplier_hint'] === null) {
+        $entities['product_hint'] = trim((string)preg_replace('/\s+/', ' ', trim($message)));
+        $entities['entity_inferred'] = true;
     }
 
     $entities['follow_up'] = preg_match('/\b(what about|how about|and this|that one|it|those|same|naman|yung|yun|iyon|then|alright|all right|ok|okay|sure|noted|copy|go ahead|continue|next|sige|gets)\b/iu', $normalized) === 1;
@@ -675,6 +745,92 @@ function extractAdminEntities(string $message, string $normalized, array $memory
         $entities['scope'] = 'inventory';
     } elseif (in_array('forecast', $entities['metric_focus'], true)) {
         $entities['scope'] = 'analytics';
+    } elseif (!empty($entities['product_hint'])) {
+        $entities['scope'] = 'inventory';
+    }
+
+    return $entities;
+}
+
+function inferAdminEntityHintsFromDatabase(Database $db, string $message, string $normalized, array $entities): array {
+    if (!empty($entities['product_hint']) || !empty($entities['supplier_hint'])) {
+        return $entities;
+    }
+
+    $wordCount = countWords($normalized);
+    if ($wordCount < 2 || $wordCount > 12) {
+        return $entities;
+    }
+
+    if (preg_match('/\b(summary|forecast|history|anomal|reorder|trend|help|status|daily|orders|revenue|compare|why|how|what|which|when|where)\b/iu', $normalized) === 1) {
+        return $entities;
+    }
+    if (isAdminGreetingMessage($normalized)) {
+        return $entities;
+    }
+
+    $candidate = trim((string)preg_replace('/[^\p{L}\p{N}\-\s]/u', ' ', $message));
+    $candidate = preg_replace('/\s+/', ' ', $candidate) ?? $candidate;
+    if ($candidate === '' || strlen($candidate) < 4 || strlen($candidate) > 110) {
+        return $entities;
+    }
+
+    $params = [
+        ':term' => '%' . $candidate . '%',
+        ':exact' => $candidate,
+        ':prefix' => $candidate . '%'
+    ];
+
+    $productMatches = safeFetchAll($db, "
+        SELECT p.id
+        FROM products p
+        WHERE p.is_active = 1
+          AND (p.name LIKE :term OR p.sku LIKE :term)
+        ORDER BY
+            CASE
+                WHEN LOWER(p.sku) = LOWER(:exact) THEN 0
+                WHEN LOWER(p.name) = LOWER(:exact) THEN 1
+                WHEN LOWER(p.name) LIKE LOWER(:prefix) THEN 2
+                ELSE 3
+            END,
+            LENGTH(p.name) ASC
+        LIMIT 1
+    ", $params);
+    if (!empty($productMatches)) {
+        $entities['product_hint'] = $candidate;
+        $entities['scope'] = 'inventory';
+        $entities['metric_focus'][] = 'reorder';
+        $entities['metric_focus'] = array_values(array_unique($entities['metric_focus']));
+        $entities['entity_inferred'] = true;
+        return $entities;
+    }
+
+    $supplierMatches = safeFetchAll($db, "
+        SELECT u.id
+        FROM users u
+        LEFT JOIN suppliers s ON s.user_id = u.id
+        WHERE u.role = 'supplier'
+          AND (
+            u.full_name LIKE :term
+            OR u.username LIKE :term
+            OR COALESCE(s.company_name, '') LIKE :term
+            OR COALESCE(s.supplier_code, '') LIKE :term
+          )
+        ORDER BY
+            CASE
+                WHEN LOWER(u.full_name) = LOWER(:exact) THEN 0
+                WHEN LOWER(COALESCE(s.company_name, '')) = LOWER(:exact) THEN 1
+                ELSE 2
+            END,
+            u.full_name ASC
+        LIMIT 1
+    ", $params);
+    if (!empty($supplierMatches)) {
+        $entities['supplier_hint'] = $candidate;
+        $entities['scope'] = 'purchasing';
+        $entities['metric_focus'][] = 'purchase_orders';
+        $entities['metric_focus'] = array_values(array_unique($entities['metric_focus']));
+        $entities['entity_inferred'] = true;
     }
 
     return $entities;
@@ -698,6 +854,10 @@ function refineIntentWithEntitiesAndMemory(string $intent, array $entities, arra
         if (in_array('orders', $entities['metric_focus'], true) || in_array('revenue', $entities['metric_focus'], true)) {
             return 'summary';
         }
+    }
+
+    if (!empty($entities['product_hint']) || !empty($entities['supplier_hint'])) {
+        return 'reorder';
     }
 
     if (!empty($entities['follow_up'])) {
@@ -815,31 +975,134 @@ function appendAdminEntityLookupsToContext(Database $db, array $entities, array 
                 p.name,
                 p.sku,
                 p.reorder_level,
-                COALESCE(i.quantity_available, 0) AS quantity_available
+                COALESCE(i.quantity_on_hand, 0) AS quantity_on_hand,
+                COALESCE(i.quantity_reserved, 0) AS quantity_reserved,
+                COALESCE(i.quantity_available, 0) AS quantity_available,
+                i.warehouse_location,
+                COALESCE(velocity.units_sold_30d, 0) AS units_sold_30d,
+                COALESCE(velocity.orders_30d, 0) AS orders_30d,
+                COALESCE(po.pending_po_qty, 0) AS pending_po_qty,
+                CASE
+                    WHEN COALESCE(velocity.units_sold_30d, 0) > 0
+                    THEN ROUND(COALESCE(i.quantity_available, 0) / (velocity.units_sold_30d / 30), 2)
+                    ELSE NULL
+                END AS days_of_cover,
+                GREATEST(0, p.reorder_level - COALESCE(i.quantity_available, 0)) AS qty_to_reorder
             FROM products p
             LEFT JOIN inventory i ON i.product_id = p.id
+            LEFT JOIN (
+                SELECT
+                    z.product_id,
+                    SUM(z.units_sold) AS units_sold_30d,
+                    SUM(z.orders_count) AS orders_30d
+                FROM (
+                    SELECT
+                        si.product_id,
+                        SUM(si.quantity) AS units_sold,
+                        COUNT(DISTINCT s.id) AS orders_count
+                    FROM sale_items si
+                    INNER JOIN sales s ON s.id = si.sale_id
+                    WHERE DATE(s.sale_date) >= DATE_SUB(UTC_DATE(), INTERVAL 30 DAY)
+                      AND s.payment_status <> 'failed'
+                    GROUP BY si.product_id
+
+                    UNION ALL
+
+                    SELECT
+                        coi.product_id,
+                        SUM(coi.quantity) AS units_sold,
+                        COUNT(DISTINCT co.id) AS orders_count
+                    FROM customer_order_items coi
+                    INNER JOIN customer_orders co ON co.id = coi.order_id
+                    WHERE DATE(co.order_date) >= DATE_SUB(UTC_DATE(), INTERVAL 30 DAY)
+                      AND co.status <> 'cancelled'
+                    GROUP BY coi.product_id
+                ) z
+                GROUP BY z.product_id
+            ) velocity ON velocity.product_id = p.id
+            LEFT JOIN (
+                SELECT
+                    poi.product_id,
+                    SUM(GREATEST(poi.quantity_ordered - COALESCE(poi.quantity_received, 0), 0)) AS pending_po_qty
+                FROM purchase_order_items poi
+                INNER JOIN purchase_orders po ON po.id = poi.po_id
+                WHERE po.status IN ('draft', 'pending_supplier', 'approved', 'ordered', 'partially_received')
+                GROUP BY poi.product_id
+            ) po ON po.product_id = p.id
             WHERE p.is_active = 1
               AND (p.name LIKE :term OR p.sku LIKE :term)
-            ORDER BY COALESCE(i.quantity_available, 0) ASC, p.name ASC
+            ORDER BY
+                CASE
+                    WHEN LOWER(p.sku) = LOWER(:exact) THEN 0
+                    WHEN LOWER(p.name) = LOWER(:exact) THEN 1
+                    WHEN LOWER(p.name) LIKE LOWER(:prefix) THEN 2
+                    ELSE 3
+                END,
+                COALESCE(i.quantity_available, 0) ASC,
+                p.name ASC
             LIMIT 8
-        ", [':term' => '%' . $productHint . '%']);
+        ", [
+            ':term' => '%' . $productHint . '%',
+            ':exact' => $productHint,
+            ':prefix' => $productHint . '%'
+        ]);
     }
 
     $supplierHint = trim((string)($entities['supplier_hint'] ?? ''));
     if ($supplierHint !== '') {
         $context['supplier_lookup'] = safeFetchAll($db, "
             SELECT
-                po.po_number,
-                po.status,
-                po.expected_delivery_date,
-                DATEDIFF(UTC_DATE(), po.expected_delivery_date) AS overdue_days,
-                COALESCE(u.full_name, u.username, 'Supplier') AS supplier_name
-            FROM purchase_orders po
-            LEFT JOIN users u ON u.id = po.supplier_id
-            WHERE (u.full_name LIKE :term OR u.username LIKE :term)
-            ORDER BY po.created_at DESC
+                u.id AS supplier_id,
+                COALESCE(s.company_name, u.full_name, u.username, 'Supplier') AS supplier_name,
+                COALESCE(s.supplier_code, '') AS supplier_code,
+                COALESCE(po_stats.pending_po_count, 0) AS pending_po_count,
+                COALESCE(po_stats.overdue_po_count, 0) AS overdue_po_count,
+                po_stats.next_due_date,
+                po_stats.last_po_date,
+                COALESCE(po_stats.total_pending_amount, 0) AS total_pending_amount,
+                po_last.po_number AS latest_po_number,
+                po_last.status AS latest_po_status
+            FROM users u
+            LEFT JOIN suppliers s ON s.user_id = u.id
+            LEFT JOIN (
+                SELECT
+                    po.supplier_id,
+                    SUM(CASE WHEN po.status IN ('draft', 'pending_supplier', 'approved', 'ordered', 'partially_received') THEN 1 ELSE 0 END) AS pending_po_count,
+                    SUM(CASE WHEN po.expected_delivery_date IS NOT NULL AND po.expected_delivery_date < UTC_DATE() AND po.status IN ('ordered', 'partially_received', 'approved') THEN 1 ELSE 0 END) AS overdue_po_count,
+                    MIN(CASE WHEN po.status IN ('draft', 'pending_supplier', 'approved', 'ordered', 'partially_received') THEN po.expected_delivery_date END) AS next_due_date,
+                    MAX(po.order_date) AS last_po_date,
+                    SUM(CASE WHEN po.status IN ('draft', 'pending_supplier', 'approved', 'ordered', 'partially_received') THEN COALESCE(po.total_amount, 0) ELSE 0 END) AS total_pending_amount
+                FROM purchase_orders po
+                GROUP BY po.supplier_id
+            ) po_stats ON po_stats.supplier_id = u.id
+            LEFT JOIN purchase_orders po_last ON po_last.id = (
+                SELECT p2.id
+                FROM purchase_orders p2
+                WHERE p2.supplier_id = u.id
+                ORDER BY p2.created_at DESC
+                LIMIT 1
+            )
+            WHERE u.role = 'supplier'
+              AND (
+                u.full_name LIKE :term
+                OR u.username LIKE :term
+                OR COALESCE(s.company_name, '') LIKE :term
+                OR COALESCE(s.supplier_code, '') LIKE :term
+              )
+            ORDER BY
+                CASE
+                    WHEN LOWER(COALESCE(s.company_name, '')) = LOWER(:exact) THEN 0
+                    WHEN LOWER(u.full_name) = LOWER(:exact) THEN 1
+                    WHEN LOWER(u.username) = LOWER(:exact) THEN 2
+                    ELSE 3
+                END,
+                COALESCE(po_stats.overdue_po_count, 0) DESC,
+                COALESCE(po_stats.pending_po_count, 0) DESC
             LIMIT 8
-        ", [':term' => '%' . $supplierHint . '%']);
+        ", [
+            ':term' => '%' . $supplierHint . '%',
+            ':exact' => $supplierHint
+        ]);
     }
 }
 
@@ -1670,6 +1933,7 @@ function buildAdminCopilotReply(Database $db, string $message, array $context, a
     }
 
     $entities = extractAdminEntities($rawMessage, $normalized, $memory);
+    $entities = inferAdminEntityHintsFromDatabase($db, $rawMessage, $normalized, $entities);
     $language = resolveAdminResponseLanguage($normalized, $entities, $memory);
     $roleProfile = getAdminRoleProfile($role, $language);
     $intent = detectAdminIntent($normalized);
@@ -1752,6 +2016,11 @@ function buildAdminCopilotReply(Database $db, string $message, array $context, a
             'role_profile' => $roleProfile,
             'needs_clarification' => true,
             'clarification' => $clarification,
+            'grounding' => [
+                'grounded' => false,
+                'snapshot_at' => gmdate('c'),
+                'reason' => 'awaiting_user_clarification'
+            ],
             'generated_at' => gmdate('c'),
             'response_detail' => $responseDetail,
             'payload_included' => $includePayloads,
@@ -1855,28 +2124,42 @@ function buildAdminCopilotReply(Database $db, string $message, array $context, a
             'Daily summary'
         ];
     } elseif ($intent === 'reorder') {
-        $reorder = $loadReorder();
-        if (empty($reorder)) {
-            $baseReplyText = $language === 'fil'
-                ? 'Walang urgent na reorder suggestion mula sa kasalukuyang inventory at demand history.'
-                : 'No urgent reorder suggestions were found from current inventory and demand history.';
-        } else {
-            $top = array_slice($reorder, 0, 3);
-            $lines = [];
-            foreach ($top as $item) {
-                $cover = $item['days_of_cover'] !== null
-                    ? number_format((float)$item['days_of_cover'], 1) . ($language === 'fil' ? ' araw' : ' days')
-                    : ($language === 'fil' ? 'walang demand history' : 'no demand history');
-                $dateLabel = (string)($item['optimal_reorder_date'] ?? 'N/A');
-                if ($language === 'fil') {
-                    $lines[] = $item['name'] . ' (' . $item['sku'] . '): mag-order ng ' .
-                        $item['suggested_order_qty'] . ' units bago ' . $dateLabel . ', cover ' . $cover . '.';
-                } else {
-                    $lines[] = $item['name'] . ' (' . $item['sku'] . '): order ' .
-                        $item['suggested_order_qty'] . ' units by ' . $dateLabel . ', cover ' . $cover . '.';
-                }
+        $productFocusedReply = buildProductLookupReply($retrievedContext, $normalized, $language);
+        if ($productFocusedReply !== '') {
+            $baseReplyText = $productFocusedReply;
+        } elseif (!empty($entities['product_hint'])) {
+            $hint = trim((string)$entities['product_hint']);
+            if ($language === 'fil') {
+                $baseReplyText = 'Walang eksaktong product match sa database para sa "' . $hint . '"' . ".\n" .
+                    'Pakibigay ang exact SKU o mas buong product name para ma-pull ko ang tamang stock snapshot.';
+            } else {
+                $baseReplyText = 'No exact product match was found in the database for "' . $hint . '"' . ".\n" .
+                    'Please provide the exact SKU or fuller product name so I can pull the correct stock snapshot.';
             }
-            $baseReplyText = ($language === 'fil' ? "Top na reorder priorities:\n- " : "Top reorder priorities:\n- ") . implode("\n- ", $lines);
+        } else {
+            $reorder = $loadReorder();
+            if (empty($reorder)) {
+                $baseReplyText = $language === 'fil'
+                    ? 'Walang urgent na reorder suggestion mula sa kasalukuyang inventory at demand history.'
+                    : 'No urgent reorder suggestions were found from current inventory and demand history.';
+            } else {
+                $top = array_slice($reorder, 0, 3);
+                $lines = [];
+                foreach ($top as $item) {
+                    $cover = $item['days_of_cover'] !== null
+                        ? number_format((float)$item['days_of_cover'], 1) . ($language === 'fil' ? ' araw' : ' days')
+                        : ($language === 'fil' ? 'walang demand history' : 'no demand history');
+                    $dateLabel = (string)($item['optimal_reorder_date'] ?? 'N/A');
+                    if ($language === 'fil') {
+                        $lines[] = $item['name'] . ' (' . $item['sku'] . '): mag-order ng ' .
+                            $item['suggested_order_qty'] . ' units bago ' . $dateLabel . ', cover ' . $cover . '.';
+                    } else {
+                        $lines[] = $item['name'] . ' (' . $item['sku'] . '): order ' .
+                            $item['suggested_order_qty'] . ' units by ' . $dateLabel . ', cover ' . $cover . '.';
+                    }
+                }
+                $baseReplyText = ($language === 'fil' ? "Top na reorder priorities:\n- " : "Top reorder priorities:\n- ") . implode("\n- ", $lines);
+            }
         }
         $replyText = $baseReplyText;
         $followUp = [
@@ -1909,7 +2192,7 @@ function buildAdminCopilotReply(Database $db, string $message, array $context, a
         $reorder = $loadReorder();
         $anomalies = $loadAnomalies();
         $forecast = $loadForecast();
-        $rulesReply = buildRulesBasedGeneralReply($rawMessage, $summary, $reorder, $anomalies, $forecast, $language);
+        $rulesReply = buildRulesBasedGeneralReply($rawMessage, $summary, $reorder, $anomalies, $forecast, $language, $retrievedContext);
         $llmReply = '';
         $strategy = (string)($routing['strategy'] ?? 'rules');
 
@@ -2028,6 +2311,12 @@ function buildAdminCopilotReply(Database $db, string $message, array $context, a
         ? $advisory['proactive_suggestions']
         : [];
     $roleLine = trim((string)($advisory['role_line'] ?? ''));
+    $summary = empty($summary) ? $loadSummary(false) : $summary;
+    if (empty($retrievedContext)) {
+        $retrievedContext = retrieveAdminLookupContext($db, $intent, $entities);
+    }
+    $grounding = buildAdminGroundingMeta($intent, $summary, $history, $forecast, $reorder, $anomalies, $retrievedContext);
+    $groundingLine = buildAdminGroundingLine($grounding, $language);
 
     if ($resolvedFromClarification) {
         $replyText = ($language === 'fil'
@@ -2046,6 +2335,7 @@ function buildAdminCopilotReply(Database $db, string $message, array $context, a
             $replyText .= "\n- " . $item;
         }
     }
+    $replyText .= "\n\n" . $groundingLine;
 
     $followUp = mergeAdminFollowUpActions($followUp, $proactive);
     setAdminAiPendingClarification(null);
@@ -2090,6 +2380,7 @@ function buildAdminCopilotReply(Database $db, string $message, array $context, a
         'role_profile' => $roleProfile,
         'needs_clarification' => false,
         'clarification' => null,
+        'grounding' => $grounding,
         'generated_at' => gmdate('c'),
         'response_detail' => $responseDetail,
         'payload_included' => $includePayloads,
@@ -3593,7 +3884,15 @@ function safeFetchAll(Database $db, string $sql, array $params = []): array {
     }
 }
 
-function buildRulesBasedGeneralReply(string $message, array $summary, array $reorder, array $anomalies, array $forecast, string $language = 'en'): string {
+function buildRulesBasedGeneralReply(
+    string $message,
+    array $summary,
+    array $reorder,
+    array $anomalies,
+    array $forecast,
+    string $language = 'en',
+    array $retrievedContext = []
+): string {
     $normalized = normalizeAdminAiMessage($message);
 
     if (isAdminLanguageCapabilityQuestion($normalized)) {
@@ -3621,6 +3920,15 @@ function buildRulesBasedGeneralReply(string $message, array $summary, array $reo
         return $language === 'fil'
             ? "Nakafocus ako sa inventory management at system operations lang.\nPwede mong itanong ang sales trends, reorder timing, stock risks, purchase orders, at anomalies."
             : "I'm scoped to inventory management and system operations only.\nYou can ask about sales trends, reorder timing, stock risks, purchase orders, and anomalies.";
+    }
+
+    $productLookupReply = buildProductLookupReply($retrievedContext, $normalized, $language);
+    if ($productLookupReply !== '') {
+        return $productLookupReply;
+    }
+    $supplierLookupReply = buildSupplierLookupReply($retrievedContext, $normalized, $language);
+    if ($supplierLookupReply !== '') {
+        return $supplierLookupReply;
     }
 
     if (preg_match('/\b(help|what can you do|capabilities|commands|how do i use|paano gamitin|anong kaya mo)\b/iu', $normalized) === 1) {
@@ -3907,6 +4215,208 @@ function formatTopAnomalyItems(array $anomalies, int $limit = 3): string {
     return implode('; ', $chunks);
 }
 
+function buildProductLookupReply(array $retrievedContext, string $normalized, string $language = 'en'): string {
+    $rows = isset($retrievedContext['product_lookup']) && is_array($retrievedContext['product_lookup'])
+        ? $retrievedContext['product_lookup']
+        : [];
+    if (empty($rows)) {
+        return '';
+    }
+
+    $isProductFocused = preg_match('/\b(stock|inventory|reorder|restock|coverage|days|qty|quantity|available|availability|product|sku|item|status)\b/iu', $normalized) === 1;
+    if (!$isProductFocused && countWords($normalized) > 10) {
+        return '';
+    }
+
+    $top = $rows[0];
+    $name = (string)($top['name'] ?? 'Product');
+    $sku = (string)($top['sku'] ?? 'N/A');
+    $available = (int)($top['quantity_available'] ?? 0);
+    $onHand = (int)($top['quantity_on_hand'] ?? 0);
+    $reserved = (int)($top['quantity_reserved'] ?? 0);
+    $reorderLevel = (int)($top['reorder_level'] ?? 0);
+    $toReorder = max(0, (int)($top['qty_to_reorder'] ?? 0));
+    $pendingPoQty = (int)($top['pending_po_qty'] ?? 0);
+    $daysCover = isset($top['days_of_cover']) && $top['days_of_cover'] !== null
+        ? number_format((float)$top['days_of_cover'], 1)
+        : null;
+
+    if ($language === 'fil') {
+        $lines = [];
+        $lines[] = "Database product snapshot: {$name} ({$sku})";
+        $lines[] = "- Available: {$available} (On hand: {$onHand}, Reserved: {$reserved})";
+        $lines[] = "- Reorder level: {$reorderLevel}";
+        $lines[] = "- Suggested reorder gap: {$toReorder} units";
+        if ($daysCover !== null) {
+            $lines[] = "- Estimated stock cover: {$daysCover} days";
+        }
+        if ($pendingPoQty > 0) {
+            $lines[] = "- Incoming via pending POs: {$pendingPoQty} units";
+        }
+        $lines[] = $toReorder > 0
+            ? '- Recommendation: prioritize replenishment for this SKU now.'
+            : '- Recommendation: monitor demand velocity; no immediate reorder gap from current level.';
+        return implode("\n", $lines);
+    }
+
+    $lines = [];
+    $lines[] = "Database product snapshot: {$name} ({$sku})";
+    $lines[] = "- Available: {$available} (On hand: {$onHand}, Reserved: {$reserved})";
+    $lines[] = "- Reorder level: {$reorderLevel}";
+    $lines[] = "- Suggested reorder gap: {$toReorder} units";
+    if ($daysCover !== null) {
+        $lines[] = "- Estimated stock cover: {$daysCover} days";
+    }
+    if ($pendingPoQty > 0) {
+        $lines[] = "- Incoming via pending POs: {$pendingPoQty} units";
+    }
+    $lines[] = $toReorder > 0
+        ? '- Recommendation: prioritize replenishment for this SKU now.'
+        : '- Recommendation: monitor demand velocity; no immediate reorder gap at current level.';
+    return implode("\n", $lines);
+}
+
+function buildSupplierLookupReply(array $retrievedContext, string $normalized, string $language = 'en'): string {
+    $rows = isset($retrievedContext['supplier_lookup']) && is_array($retrievedContext['supplier_lookup'])
+        ? $retrievedContext['supplier_lookup']
+        : [];
+    if (empty($rows)) {
+        return '';
+    }
+
+    $isSupplierFocused = preg_match('/\b(supplier|vendor|po|purchase order|delivery|lead time|overdue)\b/iu', $normalized) === 1;
+    if (!$isSupplierFocused && countWords($normalized) > 10) {
+        return '';
+    }
+
+    $top = $rows[0];
+    $name = (string)($top['supplier_name'] ?? 'Supplier');
+    $code = trim((string)($top['supplier_code'] ?? ''));
+    $pending = (int)($top['pending_po_count'] ?? 0);
+    $overdue = (int)($top['overdue_po_count'] ?? 0);
+    $nextDue = (string)($top['next_due_date'] ?? 'N/A');
+    $latestPo = (string)($top['latest_po_number'] ?? 'N/A');
+    $latestStatus = (string)($top['latest_po_status'] ?? 'N/A');
+    $pendingAmount = (float)($top['total_pending_amount'] ?? 0.0);
+
+    if ($language === 'fil') {
+        $lines = [];
+        $lines[] = 'Database supplier snapshot: ' . $name . ($code !== '' ? " ({$code})" : '');
+        $lines[] = "- Pending POs: {$pending}";
+        $lines[] = "- Overdue POs: {$overdue}";
+        $lines[] = "- Next due date: {$nextDue}";
+        $lines[] = "- Latest PO: {$latestPo} ({$latestStatus})";
+        $lines[] = '- Total pending amount: PHP ' . number_format($pendingAmount, 2);
+        $lines[] = $overdue > 0
+            ? '- Recommendation: i-follow up agad ang overdue POs para maiwasan ang stockout risk.'
+            : '- Recommendation: maintain cadence and validate ETA for top pending lines.';
+        return implode("\n", $lines);
+    }
+
+    $lines = [];
+    $lines[] = 'Database supplier snapshot: ' . $name . ($code !== '' ? " ({$code})" : '');
+    $lines[] = "- Pending POs: {$pending}";
+    $lines[] = "- Overdue POs: {$overdue}";
+    $lines[] = "- Next due date: {$nextDue}";
+    $lines[] = "- Latest PO: {$latestPo} ({$latestStatus})";
+    $lines[] = '- Total pending amount: PHP ' . number_format($pendingAmount, 2);
+    $lines[] = $overdue > 0
+        ? '- Recommendation: follow up overdue POs immediately to reduce stockout risk.'
+        : '- Recommendation: maintain cadence and validate ETA for top pending lines.';
+    return implode("\n", $lines);
+}
+
+function buildAdminGroundingMeta(
+    string $intent,
+    array $summary,
+    array $history,
+    array $forecast,
+    array $reorder,
+    array $anomalies,
+    array $retrievedContext
+): array {
+    $sources = ['products', 'inventory'];
+
+    if (!empty($summary['metrics'])) {
+        $sources[] = 'sales';
+        $sources[] = 'customer_orders';
+        $sources[] = 'purchase_orders';
+    }
+    if (!empty($history['series'])) {
+        $sources[] = 'sale_items';
+        $sources[] = 'customer_order_items';
+        $sources[] = 'stock_adjustments';
+        $sources[] = 'goods_received_notes';
+        $sources[] = 'grn_items';
+    }
+    if (!empty($reorder)) {
+        $sources[] = 'purchase_order_items';
+    }
+    if (!empty($retrievedContext['supplier_lookup'])) {
+        $sources[] = 'users';
+        $sources[] = 'suppliers';
+    }
+    if (!empty($anomalies['items'])) {
+        $sources[] = 'stock_adjustments';
+    }
+    $sources = array_values(array_unique($sources));
+
+    $confidence = 0.72;
+    if (!empty($summary['metrics'])) {
+        $confidence += 0.08;
+    }
+    if ($intent === 'history' && !empty($history['series'])) {
+        $confidence += 0.08;
+    }
+    if ($intent === 'forecast' && !empty($forecast['projection'])) {
+        $confidence += 0.08;
+    }
+    if ($intent === 'reorder' && (!empty($reorder) || !empty($retrievedContext['product_lookup']))) {
+        $confidence += 0.08;
+    }
+    if ($intent === 'anomalies' && !empty($anomalies['items'])) {
+        $confidence += 0.06;
+    }
+    if (!empty($retrievedContext['product_lookup']) || !empty($retrievedContext['supplier_lookup'])) {
+        $confidence += 0.04;
+    }
+    $confidence = max(0.5, min(0.98, $confidence));
+
+    return [
+        'grounded' => true,
+        'intent' => $intent,
+        'snapshot_at' => gmdate('c'),
+        'reference_date' => $summary['date'] ?? gmdate('Y-m-d'),
+        'history_window_days' => (int)($history['window_days'] ?? 0),
+        'forecast_horizon_days' => (int)($forecast['horizon_days'] ?? 0),
+        'sources' => $sources,
+        'entity_matches' => [
+            'products' => count($retrievedContext['product_lookup'] ?? []),
+            'suppliers' => count($retrievedContext['supplier_lookup'] ?? [])
+        ],
+        'confidence' => round($confidence, 2)
+    ];
+}
+
+function buildAdminGroundingLine(array $grounding, string $language = 'en'): string {
+    $snapshotAtRaw = trim((string)($grounding['snapshot_at'] ?? ''));
+    $snapshotTs = $snapshotAtRaw !== '' ? strtotime($snapshotAtRaw) : false;
+    $snapshotAt = $snapshotTs !== false
+        ? gmdate('Y-m-d H:i:s \U\T\C', $snapshotTs)
+        : gmdate('Y-m-d H:i:s \U\T\C');
+
+    $sources = isset($grounding['sources']) && is_array($grounding['sources'])
+        ? array_slice($grounding['sources'], 0, 8)
+        : [];
+    $sourceLabel = !empty($sources) ? implode(', ', $sources) : 'core inventory tables';
+
+    if ($language === 'fil') {
+        return "Data basis: live database snapshot {$snapshotAt}. Sources: {$sourceLabel}.";
+    }
+
+    return "Data basis: live database snapshot {$snapshotAt}. Sources: {$sourceLabel}.";
+}
+
 function maybeGenerateAdminLlmReply(
     string $message,
     array $context,
@@ -3974,11 +4484,14 @@ function buildAdminLlmMessages(
         'Use practical analytics from trend, history, forecast, reorder, and anomaly signals.',
         'When suggesting actions, prioritize risk reduction, service level, and operational throughput.',
         'Ground every numeric claim in provided JSON context. If data is missing, state it clearly.',
+        'Never invent product names, SKUs, supplier names, dates, or counts that are not present in context.',
+        'If product/supplier lookup is empty for the request, explicitly say no matching record was found.',
         'If asked about unrelated topics, politely redirect to operations scope.',
         'If the prompt is incomplete or ambiguous, ask one focused clarifying question before answering.',
         'For analytical queries: explain briefly, then give clear recommended next actions and why they are recommended.',
         'Always adapt recommendations to the user role profile in context.',
         'Include at least one proactive improvement suggestion.',
+        'Include one short "Data basis" line mentioning snapshot time and source tables.',
         'Prefer short bullets and keep responses typically under 260 words.',
         $languageInstruction
     ]);
@@ -4067,7 +4580,9 @@ function buildAdminLlmMessages(
         '- Keep it practical and easy to scan.',
         '- Include a concise recommendation and explain the reasoning.',
         '- Add one proactive improvement suggestion tailored to the user role.',
-        '- Mention uncertainty when confidence is low.'
+        '- Mention uncertainty when confidence is low.',
+        '- If there is no matching entity in lookup context, say so directly and ask for exact SKU/supplier name.',
+        '- End with: Data basis: <snapshot + sources>.'
     ]);
 
     return [
@@ -4327,6 +4842,10 @@ function sanitizeLlmReply(string $reply): string {
     if ($reply === '') {
         return '';
     }
+
+    $reply = preg_replace('/\b(as an ai language model|as an ai model)\b/iu', '', $reply) ?? $reply;
+    $reply = preg_replace('/\b(i\s+(have|\'ve)?\s*(approved|updated|executed|processed|created|deleted|sent|changed))\b/iu', 'I recommend', $reply) ?? $reply;
+    $reply = preg_replace('/\n{3,}/', "\n\n", $reply) ?? $reply;
 
     if (strlen($reply) > 1800) {
         $reply = substr($reply, 0, 1800);
