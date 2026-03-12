@@ -12,6 +12,8 @@ class Email {
     private $fromEmail;
     private $fromName;
     private $baseUrl;
+    private $lastSendTransport = 'none';
+    private $lastSendError = null;
 
     public function __construct() {
         // Load email settings from database
@@ -223,24 +225,55 @@ class Email {
      * @param array $attachments Array of file paths to attach (optional)
      * @return bool Success status
      */
-    public function send($to, $subject, $message, $toName = '', $attachments = []) {
-        // If SMTP is not configured, use PHP mail as fallback
+    public function send($to, $subject, $message, $toName = '', $attachments = [], $requireSmtp = false) {
+        $this->lastSendTransport = 'none';
+        $this->lastSendError = null;
+
+        // If SMTP is not configured, use PHP mail as fallback (unless SMTP is required).
         if (empty($this->smtpHost) || empty($this->smtpUsername)) {
+            if ($requireSmtp) {
+                $this->lastSendTransport = 'smtp_unconfigured';
+                $this->lastSendError = 'SMTP is not configured.';
+                error_log('Email send failed: SMTP is required but not configured.');
+                return false;
+            }
+
             $phpMailResult = $this->sendWithPHPMail($to, $subject, $message, $toName);
             if (!$phpMailResult) {
+                $this->lastSendTransport = 'php_mail';
+                $this->lastSendError = 'PHP mail fallback failed.';
                 error_log('Email send failed: SMTP is not configured and PHP mail fallback failed.');
+                return false;
             }
+            $this->lastSendTransport = 'php_mail';
             return $phpMailResult;
         }
 
         // Use SMTP first, then try PHP mail fallback if SMTP fails.
         $smtpResult = $this->sendWithSMTP($to, $subject, $message, $toName, $attachments);
         if ($smtpResult) {
+            $this->lastSendTransport = 'smtp';
             return true;
         }
 
+        if ($requireSmtp) {
+            $this->lastSendTransport = 'smtp_failed';
+            if ($this->lastSendError === null) {
+                $this->lastSendError = 'SMTP send failed.';
+            }
+            return false;
+        }
+
         error_log('SMTP send failed, attempting PHP mail fallback.');
-        return $this->sendWithPHPMail($to, $subject, $message, $toName);
+        $phpMailResult = $this->sendWithPHPMail($to, $subject, $message, $toName);
+        if ($phpMailResult) {
+            $this->lastSendTransport = 'php_mail_fallback';
+            return true;
+        }
+
+        $this->lastSendTransport = 'php_mail_fallback_failed';
+        $this->lastSendError = 'SMTP send failed and PHP mail fallback failed.';
+        return false;
     }
 
     private function sendWithPHPMail($to, $subject, $message, $toName = '') {
@@ -737,14 +770,16 @@ class Email {
     /**
      * Send password reset email (URL version)
      */
-    public function sendPasswordResetEmail($customer, $resetUrl, $verificationCode = null) {
+    public function sendPasswordResetEmail($customer, $resetUrl, $verificationCode = null, $requireSmtp = false) {
         $subject = $verificationCode ? 'Password Reset OTP Code' : 'Password Reset Request';
         $message = $this->buildPasswordResetEmailHTML($customer, $resetUrl, $verificationCode);
         return $this->send(
             $customer['email'],
             $subject,
             $message,
-            $customer['first_name'] . ' ' . $customer['last_name']
+            $customer['first_name'] . ' ' . $customer['last_name'],
+            [],
+            $requireSmtp
         );
     }
 
@@ -869,6 +904,16 @@ class Email {
             'from_email' => $this->fromEmail,
             'from_name' => $this->fromName,
             'site_url' => $this->baseUrl
+        ];
+    }
+
+    /**
+     * Get last send transport and error details for diagnostics.
+     */
+    public function getLastSendInfo() {
+        return [
+            'transport' => $this->lastSendTransport,
+            'error' => $this->lastSendError
         ];
     }
 

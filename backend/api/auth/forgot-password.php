@@ -144,10 +144,23 @@ try {
             'last_name' => isset($user['full_name']) ? explode(' ', $user['full_name'], 2)[1] ?? '' : ''
         ];
 
-        $emailResult = $emailService->sendPasswordResetEmail($userData, $resetUrl, $isStaffReset ? $resetToken : null);
+        $emailResult = $emailService->sendPasswordResetEmail(
+            $userData,
+            $resetUrl,
+            $isStaffReset ? $resetToken : null,
+            $isStaffReset // Staff OTP resets must use SMTP; do not silently fall back.
+        );
+        $lastSendInfo = $emailService->getLastSendInfo();
+        $response['debug_info']['email_transport'] = $lastSendInfo['transport'] ?? 'unknown';
+        if (!empty($lastSendInfo['error'])) {
+            $response['debug_info']['email_transport_error'] = $lastSendInfo['error'];
+        }
         $response['debug_info']['email_send_result'] = $emailResult ? 'SUCCESS' : 'FAILED';
         if (!$emailResult) {
-            throw new RuntimeException('Email send returned false; SMTP and PHP mail fallback both failed.');
+            throw new RuntimeException(
+                'Email send failed via transport: ' . ($lastSendInfo['transport'] ?? 'unknown')
+                . (!empty($lastSendInfo['error']) ? ' (' . $lastSendInfo['error'] . ')' : '')
+            );
         }
 
         Response::success($response);

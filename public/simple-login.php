@@ -2028,9 +2028,16 @@
 
                 } else {
                     // Show error message
+                    let errorDetails = '';
+                    if (IS_DEVELOPMENT && data.errors) {
+                        try {
+                            const serialized = JSON.stringify(data.errors);
+                            errorDetails = `<br><small style="display:block; margin-top:6px; opacity:0.9;">Debug: ${serialized}</small>`;
+                        } catch (_) {}
+                    }
                     forgotAlertContainer.innerHTML = `
                         <div class="alert alert-danger">
-                            <i class="fas fa-exclamation-circle"></i> ${data.message || 'Failed to send reset email. Please try again.'}
+                            <i class="fas fa-exclamation-circle"></i> ${data.message || 'Failed to send reset email. Please try again.'}${errorDetails}
                         </div>
                     `;
                 }
