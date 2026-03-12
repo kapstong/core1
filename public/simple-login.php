@@ -1157,9 +1157,13 @@
 
     <script>
         const IS_DEVELOPMENT = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
-        // Auto-detect base path: /core1 for local dev, empty for production
-        const BASE_PATH = IS_DEVELOPMENT ? '/core1' : '';
-        const API_BASE = BASE_PATH + '/backend/api';
+        // Derive base path from URL so both /public and /<subdir>/public deployments work.
+        const PATH_SEGMENTS = window.location.pathname.split('/').filter(Boolean);
+        const PUBLIC_SEGMENT_INDEX = PATH_SEGMENTS.lastIndexOf('public');
+        const BASE_PATH = PUBLIC_SEGMENT_INDEX > 0
+            ? `/${PATH_SEGMENTS.slice(0, PUBLIC_SEGMENT_INDEX).join('/')}`
+            : '';
+        const API_BASE = `${BASE_PATH}/backend/api`;
 
         // Development-only console logging
         function devLog(message, data = null) {
@@ -1842,6 +1846,7 @@
 
             const username = document.getElementById('username').value;
             const password = document.getElementById('password').value;
+            const remember = rememberCheckbox.checked;
             const loginBtn = document.getElementById('login-btn');
             const originalContent = loginBtn.innerHTML;
 
@@ -1857,7 +1862,8 @@
                     credentials: 'same-origin',
                     body: JSON.stringify({
                         username,
-                        password
+                        password,
+                        remember
                     })
                 });
 
@@ -1910,9 +1916,9 @@
         // Forgot Password Modal
         document.getElementById('forgot-password-link').addEventListener('click', function(e) {
             e.preventDefault();
-            console.log('Forgot password link clicked'); // Debug log
+            devLog('Forgot password link clicked');
             const modalElement = document.getElementById('forgotPasswordModal');
-            console.log('Modal element:', modalElement); // Debug log
+            devLog('Modal element:', modalElement);
             if (modalElement) {
                 const modal = new bootstrap.Modal(modalElement, {
                     backdrop: 'static',
@@ -1920,7 +1926,7 @@
                 });
                 modal.show();
             } else {
-                console.error('Forgot password modal not found!');
+                devLog('Forgot password modal not found');
             }
         });
 

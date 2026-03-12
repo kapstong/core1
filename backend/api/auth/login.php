@@ -40,12 +40,25 @@ try {
         Response::error('Invalid JSON input');
     }
 
-    $username = trim((string)($input['username'] ?? ''));
+    $username = trim((string)($input['username'] ?? $input['email'] ?? ''));
     $password = (string)($input['password'] ?? '');
 
     if ($username === '' || $password === '') {
         Response::error('Username and password required', 400);
     }
+
+    $matchesLoginIdentifier = static function (array $candidateUser, string $identifier): bool {
+        $normalizedIdentifier = strtolower(trim($identifier));
+        if ($normalizedIdentifier === '') {
+            return false;
+        }
+
+        $candidateUsername = strtolower(trim((string)($candidateUser['username'] ?? '')));
+        $candidateEmail = strtolower(trim((string)($candidateUser['email'] ?? '')));
+
+        return $normalizedIdentifier === $candidateUsername
+            || ($candidateEmail !== '' && $normalizedIdentifier === $candidateEmail);
+    };
 
     // Test if database is available, if not use test authentication
     $useTestAuth = false;
@@ -68,8 +81,8 @@ try {
         // Check if we have admin user in database
         try {
             $database = Database::getInstance()->getConnection();
-            $stmt = $database->prepare("SELECT * FROM users WHERE username = ? AND role = 'admin' LIMIT 1");
-            $stmt->execute([$username]);
+            $stmt = $database->prepare("SELECT * FROM users WHERE (username = ? OR email = ?) AND role = 'admin' LIMIT 1");
+            $stmt->execute([$username, $username]);
             $dbUser = $stmt->fetch(PDO::FETCH_ASSOC);
 
             if ($dbUser && password_verify($password, $dbUser['password_hash'])) {
@@ -98,7 +111,7 @@ try {
 
                 $authenticatedUser = null;
                 foreach ($testUsers as $user) {
-                    if ($user['username'] === $username && $password === 'password') {
+                    if ($matchesLoginIdentifier($user, $username) && $password === 'password') {
                         $authenticatedUser = $user;
                         break;
                     }
@@ -131,7 +144,7 @@ try {
 
             $authenticatedUser = null;
             foreach ($testUsers as $user) {
-                if ($user['username'] === $username && $password === 'password') {
+                if ($matchesLoginIdentifier($user, $username) && $password === 'password') {
                     $authenticatedUser = $user;
                     break;
                 }
@@ -155,6 +168,9 @@ try {
         // Full authentication with database
         $userModel = new User();
         $knownUser = $userModel->findByUsername($username);
+        if (!$knownUser && filter_var($username, FILTER_VALIDATE_EMAIL)) {
+            $knownUser = $userModel->findByEmail($username);
+        }
 
         // Differentiate inactive/pending accounts from invalid credentials
         if ($knownUser && isset($knownUser['password_hash']) && password_verify($password, $knownUser['password_hash'])) {
@@ -167,6 +183,23 @@ try {
         }
 
         $user = $userModel->authenticate($username, $password);
+        if (!$user && filter_var($username, FILTER_VALIDATE_EMAIL)) {
+            $emailUser = $userModel->findByEmail($username);
+            if (
+                $emailUser
+                && (bool)($emailUser['is_active'] ?? false)
+                && isset($emailUser['password_hash'])
+                && password_verify($password, $emailUser['password_hash'])
+            ) {
+                $user = $emailUser;
+                try {
+                    $stmt = $database->prepare("UPDATE users SET last_login = NOW() WHERE id = ?");
+                    $stmt->execute([$user['id']]);
+                } catch (Exception $e) {
+                    // Non-blocking; authentication already succeeded.
+                }
+            }
+        }
 
         // Check if supplier is inactive
         if ($user && $user['role'] === 'supplier' && !$user['is_active']) {
@@ -184,7 +217,7 @@ try {
 
             $authenticatedUser = null;
             foreach ($testUsers as $testUser) {
-                if ($testUser['username'] === $username && $password === 'password') {
+                if ($matchesLoginIdentifier($testUser, $username) && $password === 'password') {
                     $authenticatedUser = $testUser;
                     break;
                 }
@@ -192,12 +225,12 @@ try {
 
             if (!$authenticatedUser) {
                 // Log failed login attempt
-                AuditLogger::log('login_failed', 'user', null, "Failed login attempt for username: {$username}");
+                AuditLogger::log('login_failed', 'user', null, "Failed login attempt for identifier: {$username}");
                 Response::error('Invalid username or password', 401);
             }
 
-            // Use test user authentication
-            Auth::login($authenticatedUser);
+            // Continue with test user and unified login flow below.
+            $user = $authenticatedUser;
         }
 
         // Login successful with full features
