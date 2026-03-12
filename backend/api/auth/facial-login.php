@@ -37,8 +37,9 @@ try {
     $blinkCount = (int)($input['blink_count'] ?? 0);
     $livenessVerifiedAt = (string)($input['liveness_verified_at'] ?? '');
 
-    if (!is_array($descriptor) || count($descriptor) < 64) {
-        Response::error('Invalid facial descriptor payload', 400);
+    $descriptor = normalizeDescriptor($descriptor);
+    if ($descriptor === null) {
+        Response::error('Invalid facial descriptor payload. Expected 128 numeric values.', 400);
     }
 
     if ($blinkCount < 1) {
@@ -50,11 +51,12 @@ try {
         Response::error('Liveness challenge expired. Please blink again.', 401);
     }
 
-    $descriptor = array_map('floatval', $descriptor);
-
     $db = Database::getInstance()->getConnection();
     $allowedRoles = ['admin', 'inventory_manager', 'staff'];
-    $threshold = 0.48;
+    $verificationThreshold = 0.42;
+    $autoThreshold = 0.40;
+    $ambiguityDelta = 0.05;
+    $crossUserBetterDelta = 0.02;
     $mode = ($username === '') ? 'auto' : 'username';
     $distance = 999.0;
     $user = null;
@@ -87,17 +89,67 @@ try {
             Response::error('Facial login is not enrolled for this account', 403);
         }
 
-        $storedDescriptor = json_decode($user['face_descriptor'], true);
-        if (!is_array($storedDescriptor) || count($storedDescriptor) !== count($descriptor)) {
+        $storedDescriptor = normalizeDescriptor(json_decode((string)$user['face_descriptor'], true));
+        if ($storedDescriptor === null) {
             AuditLogger::log('face_login_failed', 'user', (int)$user['id'], 'Face descriptor data is invalid for account');
             Response::error('Facial profile is invalid. Please re-enroll face data.', 500);
         }
 
-        $distance = euclideanDistance($descriptor, array_map('floatval', $storedDescriptor));
-        if ($distance > $threshold) {
+        $distance = euclideanDistance($descriptor, $storedDescriptor);
+        if (!is_finite($distance) || $distance > $verificationThreshold) {
             logFaceEvent($db, (int)$user['id'], false, $distance, $_SERVER['REMOTE_ADDR'] ?? null, $_SERVER['HTTP_USER_AGENT'] ?? null);
             AuditLogger::log('face_login_failed', 'user', (int)$user['id'], 'Face login failed: descriptor mismatch');
             Response::error('Face does not match enrolled profile', 401);
+        }
+
+        // Guardrail: if another enrolled account is clearly closer than the claimed username, reject login.
+        $rolePlaceholders = implode(',', array_fill(0, count($allowedRoles), '?'));
+        $otherStmt = $db->prepare("
+            SELECT id, face_descriptor
+            FROM users
+            WHERE is_active = 1
+              AND face_biometric_enabled = 1
+              AND face_descriptor IS NOT NULL
+              AND role IN ($rolePlaceholders)
+              AND id <> ?
+        ");
+        foreach ($allowedRoles as $idx => $role) {
+            $otherStmt->bindValue($idx + 1, $role);
+        }
+        $otherStmt->bindValue(count($allowedRoles) + 1, (int)$user['id'], PDO::PARAM_INT);
+        $otherStmt->execute();
+        $otherCandidates = $otherStmt->fetchAll(PDO::FETCH_ASSOC);
+
+        $closestOtherDistance = INF;
+        foreach ($otherCandidates as $candidate) {
+            $candidateDescriptor = normalizeDescriptor(json_decode((string)$candidate['face_descriptor'], true));
+            if ($candidateDescriptor === null) {
+                continue;
+            }
+
+            $candidateDistance = euclideanDistance($descriptor, $candidateDescriptor);
+            if ($candidateDistance < $closestOtherDistance) {
+                $closestOtherDistance = $candidateDistance;
+            }
+        }
+
+        if (is_finite($closestOtherDistance)) {
+            if (($closestOtherDistance + $crossUserBetterDelta) < $distance) {
+                logFaceEvent($db, (int)$user['id'], false, $distance, $_SERVER['REMOTE_ADDR'] ?? null, $_SERVER['HTTP_USER_AGENT'] ?? null);
+                AuditLogger::log(
+                    'face_login_failed',
+                    'user',
+                    (int)$user['id'],
+                    'Face login failed: scanned face appears to match another enrolled account better'
+                );
+                Response::error('Scanned face appears to match another account. Use the correct username or retry.', 401);
+            }
+
+            if (($closestOtherDistance - $distance) < $ambiguityDelta) {
+                logFaceEvent($db, (int)$user['id'], false, $distance, $_SERVER['REMOTE_ADDR'] ?? null, $_SERVER['HTTP_USER_AGENT'] ?? null);
+                AuditLogger::log('face_login_failed', 'user', (int)$user['id'], 'Face login failed: ambiguous proximity to another enrolled account');
+                Response::error('Face match is too close to another enrolled account. Retry in better lighting.', 401);
+            }
         }
     } else {
         $rolePlaceholders = implode(',', array_fill(0, count($allowedRoles), '?'));
@@ -124,12 +176,12 @@ try {
         $secondBestDistance = INF;
 
         foreach ($candidates as $candidate) {
-            $candidateDescriptor = json_decode((string)$candidate['face_descriptor'], true);
-            if (!is_array($candidateDescriptor) || count($candidateDescriptor) !== count($descriptor)) {
+            $candidateDescriptor = normalizeDescriptor(json_decode((string)$candidate['face_descriptor'], true));
+            if ($candidateDescriptor === null) {
                 continue;
             }
 
-            $candidateDistance = euclideanDistance($descriptor, array_map('floatval', $candidateDescriptor));
+            $candidateDistance = euclideanDistance($descriptor, $candidateDescriptor);
 
             if ($candidateDistance < $bestDistance) {
                 $secondBestDistance = $bestDistance;
@@ -144,12 +196,12 @@ try {
             Response::error('No valid face profiles are available for auto face login.', 403);
         }
 
-        if ($bestDistance > $threshold) {
+        if ($bestDistance > $autoThreshold) {
             AuditLogger::log('face_login_failed', 'user', null, 'Auto face login failed: no enrolled profile matched threshold');
             Response::error('Face not recognized. Please retry with better lighting and framing.', 401);
         }
 
-        if (is_finite($secondBestDistance) && ($secondBestDistance - $bestDistance) < 0.03) {
+        if (is_finite($secondBestDistance) && ($secondBestDistance - $bestDistance) < $ambiguityDelta) {
             AuditLogger::log('face_login_failed', 'user', (int)$bestUser['id'], 'Auto face login failed: ambiguous face match');
             Response::error('Face match is ambiguous. Keep centered and retry once.', 401);
         }
@@ -173,9 +225,41 @@ try {
     Response::serverError('An error occurred during face login');
 }
 
+function normalizeDescriptor($descriptor) {
+    if (!is_array($descriptor) || count($descriptor) !== 128) {
+        return null;
+    }
+
+    $normalized = [];
+    $sumSquares = 0.0;
+    foreach ($descriptor as $value) {
+        $floatValue = (float)$value;
+        if (!is_finite($floatValue)) {
+            return null;
+        }
+        $normalized[] = $floatValue;
+        $sumSquares += $floatValue * $floatValue;
+    }
+
+    if ($sumSquares <= 0.0) {
+        return null;
+    }
+
+    $magnitude = sqrt($sumSquares);
+    foreach ($normalized as $idx => $value) {
+        $normalized[$idx] = $value / $magnitude;
+    }
+
+    return $normalized;
+}
+
 function euclideanDistance($a, $b) {
+    if (!is_array($a) || !is_array($b) || count($a) !== count($b) || !count($a)) {
+        return INF;
+    }
+
     $sum = 0.0;
-    $length = min(count($a), count($b));
+    $length = count($a);
     for ($i = 0; $i < $length; $i++) {
         $delta = (float)$a[$i] - (float)$b[$i];
         $sum += $delta * $delta;
