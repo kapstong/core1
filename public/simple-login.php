@@ -2082,7 +2082,7 @@
                                    font-size: 1.5rem;
                                    margin-bottom: 0.5rem;">Reset Your Password</h5>
                         <p class="mb-0" style="color: var(--text-secondary); font-size: 0.95rem; line-height: 1.5;">
-                            Enter your email address and we'll send you a secure reset link
+                            Enter your email address and we'll send a 6-digit reset code
                         </p>
                     </div>
                     <button type="button"
@@ -2159,7 +2159,7 @@
                                        justify-content: center;
                                        gap: 0.5rem;">
                             <span id="forgotBtnText">
-                                <i class="fas fa-paper-plane"></i>Send Reset Link
+                                <i class="fas fa-paper-plane"></i>Send Reset Code
                             </span>
                             <i class="fas fa-spinner fa-spin" id="forgotSpinner" style="display: none;"></i>
                         </button>

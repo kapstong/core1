@@ -37,7 +37,11 @@ try {
     }
 
     $email = strtolower(trim($input['email']));
-    $userType = $input['type'] ?? 'user'; // 'supplier' or default to 'user'
+    $userType = $input['type'] ?? 'user'; // 'supplier' or default to staff/admin flow
+    $isStaffReset = $userType !== 'supplier';
+    $genericSuccessMessage = $isStaffReset
+        ? 'If an account with that email exists, a 6-digit password reset code has been sent.'
+        : 'If an account with that email exists, a password reset link has been sent.';
 
     // Initialize database and user model
     $db = Database::getInstance()->getConnection();
@@ -50,7 +54,7 @@ try {
         if (!$user || $user['role'] !== 'supplier') {
             // Always return success for security (don't reveal if email exists)
             Response::success([
-                'message' => 'If an account with that email exists, a password reset link has been sent.'
+                'message' => $genericSuccessMessage
             ]);
         }
     } else {
@@ -58,21 +62,24 @@ try {
         if (!$user || !in_array($user['role'], ['admin', 'staff', 'inventory_manager', 'purchasing_officer'])) {
             // Always return success for security (don't reveal if email exists)
             Response::success([
-                'message' => 'If an account with that email exists, a password reset link has been sent.'
+                'message' => $genericSuccessMessage
             ]);
         }
     }
 
-    // Generate reset token
-    $resetToken = bin2hex(random_bytes(32));
+    // Generate reset token/code
+    $resetToken = $isStaffReset
+        ? generateUniqueSixDigitResetCode($db)
+        : bin2hex(random_bytes(32));
 
     try {
         // Delete any existing reset tokens for this user
         $stmt = $db->prepare("DELETE FROM verification_codes WHERE user_id = ? AND code_type = 'password_reset'");
         $stmt->execute([$user['id']]);
 
-        // Use MySQL's DATE_ADD to avoid timezone issues
-        $stmt = $db->prepare("INSERT INTO verification_codes (user_id, code, code_type, expires_at) VALUES (?, ?, 'password_reset', DATE_ADD(NOW(), INTERVAL 1 HOUR))");
+        // Use shorter expiry for OTP-style resets.
+        $expiryInterval = $isStaffReset ? '15 MINUTE' : '1 HOUR';
+        $stmt = $db->prepare("INSERT INTO verification_codes (user_id, code, code_type, expires_at) VALUES (?, ?, 'password_reset', DATE_ADD(NOW(), INTERVAL {$expiryInterval}))");
         $stmt->execute([$user['id'], $resetToken]);
     } catch (PDOException $e) {
         // If verification_codes table doesn't exist, fall back to storing token as a temporary password reset
@@ -80,7 +87,7 @@ try {
         error_log('Verification codes table not available: ' . $e->getMessage() . ' - password reset functionality disabled');
         // Return success to avoid revealing system state
         Response::success([
-            'message' => 'If an account with that email exists, a password reset link has been sent.'
+            'message' => $genericSuccessMessage
         ]);
     }
 
@@ -112,8 +119,10 @@ try {
             'reset_url' => $resetUrl,
             'debug_info' => [
                 'user_type' => $userType,
+                'otp_mode' => $isStaffReset,
                 'user_email' => $user['email'],
                 'token_generated' => true,
+                'token_preview' => $isStaffReset ? $resetToken : substr($resetToken, 0, 8) . '...masked...',
                 'email_settings' => [
                     'smtp_host' => $emailSettings['smtp_host'] ?: 'NOT CONFIGURED',
                     'smtp_port' => $emailSettings['smtp_port'] ?: 'NOT CONFIGURED',
@@ -135,29 +144,69 @@ try {
             'last_name' => isset($user['full_name']) ? explode(' ', $user['full_name'], 2)[1] ?? '' : ''
         ];
 
-        $emailResult = $emailService->sendPasswordResetEmail($userData, $resetUrl);
-        $response['debug_info']['email_send_result'] = $emailResult ? 'SUCCESS' : 'FAILED/LIKELY USED PHP MAIL';
+        $emailResult = $emailService->sendPasswordResetEmail($userData, $resetUrl, $isStaffReset ? $resetToken : null);
+        $response['debug_info']['email_send_result'] = $emailResult ? 'SUCCESS' : 'FAILED';
+        if (!$emailResult) {
+            throw new RuntimeException('Email send returned false; SMTP and PHP mail fallback both failed.');
+        }
 
         Response::success($response);
 
     } catch (Exception $e) {
         // Show detailed error info
         error_log('Failed to send password reset email: ' . $e->getMessage());
-
-        Response::success([
-            'message' => 'Password reset process completed with error details.',
-            'reset_url' => $resetUrl ?? 'Error: Could not generate URL',
-            'debug_info' => [
+        $isDebug = (bool)Env::get('APP_DEBUG', false) || strtolower((string)Env::get('APP_ENV', '')) === 'development';
+        $errors = null;
+        if ($isDebug) {
+            $errors = [
                 'error' => $e->getMessage(),
                 'error_file' => $e->getFile(),
-                'error_line' => $e->getLine()
-            ]
-        ]);
+                'error_line' => $e->getLine(),
+                'reset_url' => $resetUrl ?? null,
+                'otp_mode' => $isStaffReset
+            ];
+        }
+
+        $failureMessage = $isStaffReset
+            ? 'Unable to send reset code email. Please check SMTP settings and try again.'
+            : 'Unable to send password reset email. Please check SMTP settings and try again.';
+
+        Response::error($failureMessage, 500, $errors);
     }
 
 } catch (Exception $e) {
     error_log('Forgot password error: ' . $e->getMessage());
     Response::error('An error occurred. Please try again later.', 500);
+}
+
+/**
+ * Generate a unique 6-digit code for password reset.
+ */
+function generateUniqueSixDigitResetCode(PDO $db) {
+    for ($i = 0; $i < 20; $i++) {
+        $code = str_pad((string)random_int(0, 999999), 6, '0', STR_PAD_LEFT);
+        try {
+            $stmt = $db->prepare("
+                SELECT COUNT(*) AS count
+                FROM verification_codes
+                WHERE code = ?
+                  AND code_type = 'password_reset'
+                  AND is_used = 0
+                  AND expires_at > NOW()
+            ");
+            $stmt->execute([$code]);
+            $result = $stmt->fetch(PDO::FETCH_ASSOC);
+        } catch (PDOException $e) {
+            // If table/columns are missing, return a random 6-digit code.
+            return $code;
+        }
+
+        if (!$result || (int)($result['count'] ?? 0) === 0) {
+            return $code;
+        }
+    }
+
+    return str_pad((string)random_int(0, 999999), 6, '0', STR_PAD_LEFT);
 }
 ?>
 

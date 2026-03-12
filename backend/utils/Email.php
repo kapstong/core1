@@ -737,9 +737,9 @@ class Email {
     /**
      * Send password reset email (URL version)
      */
-    public function sendPasswordResetEmail($customer, $resetUrl) {
-        $subject = 'Password Reset Request';
-        $message = $this->buildPasswordResetEmailHTML($customer, $resetUrl);
+    public function sendPasswordResetEmail($customer, $resetUrl, $verificationCode = null) {
+        $subject = $verificationCode ? 'Password Reset OTP Code' : 'Password Reset Request';
+        $message = $this->buildPasswordResetEmailHTML($customer, $resetUrl, $verificationCode);
         return $this->send(
             $customer['email'],
             $subject,
@@ -1138,7 +1138,19 @@ class Email {
         ";
     }
 
-    private function buildPasswordResetEmailHTML($customer, $resetUrl) {
+    private function buildPasswordResetEmailHTML($customer, $resetUrl, $verificationCode = null) {
+        $isOtpMode = !empty($verificationCode);
+        $otpBlock = '';
+        if ($isOtpMode) {
+            $otpBlock = "
+                <div style='text-align: center; margin: 30px 0;'>
+                    <p style='margin: 0 0 10px 0; color: #2c3e50; font-weight: 700;'>Your 6-digit reset code:</p>
+                    <div style='display: inline-block; background: linear-gradient(135deg, #e74c3c 0%, #c0392b 100%); color: #fff; font-size: 32px; font-weight: 800; letter-spacing: 8px; padding: 14px 24px; border-radius: 10px;'>{$verificationCode}</div>
+                    <p style='margin: 10px 0 0 0; color: #555;'>Code expires in 15 minutes.</p>
+                </div>
+            ";
+        }
+
         return "
         <!DOCTYPE html>
         <html>
@@ -1152,7 +1164,9 @@ class Email {
 
                 <p>Dear {$customer['first_name']} {$customer['last_name']},</p>
 
-                <p>You have requested to reset your password. Click the link below to create a new password:</p>
+                <p>You have requested to reset your password." . ($isOtpMode ? " Use the OTP code below or open the reset link to continue." : " Click the link below to create a new password:") . "</p>
+
+                {$otpBlock}
 
                 <p style='text-align: center; margin: 30px 0;'>
                     <a href='{$resetUrl}' style='background: #3498db; color: white; padding: 12px 24px; text-decoration: none; border-radius: 5px; display: inline-block;'>Reset Password</a>
@@ -1161,7 +1175,7 @@ class Email {
                 <p>If the button doesn't work, copy and paste this link into your browser:</p>
                 <p><a href='{$resetUrl}'>{$resetUrl}</a></p>
 
-                <p>This link will expire in 1 hour for security reasons.</p>
+                <p>" . ($isOtpMode ? "This OTP code expires in 15 minutes." : "This link will expire in 1 hour for security reasons.") . "</p>
 
                 <p>If you didn't request this password reset, please ignore this email.</p>
 
