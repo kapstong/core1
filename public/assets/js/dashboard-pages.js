@@ -399,6 +399,17 @@ const profileFaceEnrollmentState = {
     enrollmentInProgress: false
 };
 let profileFaceLibsPromise = null;
+const FACE_API_VERSION = '1.7.13';
+const FACE_API_SCRIPT_SOURCES = [
+    `https://cdn.jsdelivr.net/npm/@vladmandic/face-api@${FACE_API_VERSION}/dist/face-api.js`,
+    `https://unpkg.com/@vladmandic/face-api@${FACE_API_VERSION}/dist/face-api.js`
+];
+const FACE_API_MODEL_BASES = [
+    `https://cdn.jsdelivr.net/npm/@vladmandic/face-api@${FACE_API_VERSION}/model`,
+    `https://unpkg.com/@vladmandic/face-api@${FACE_API_VERSION}/model`,
+    'assets/models/face-api',
+    '/assets/models/face-api'
+];
 
 function ensureProfileFaceCore() {
     if (!window.FaceAuthCore) {
@@ -478,7 +489,18 @@ async function ensureFaceApiLibraries() {
             await loadScript('assets/js/face-auth-core.js?v=1.0');
         }
         if (!window.faceapi) {
-            await loadScript('https://cdn.jsdelivr.net/npm/@vladmandic/face-api@1.7.13/dist/face-api.js');
+            let lastError = null;
+            for (const src of FACE_API_SCRIPT_SOURCES) {
+                try {
+                    await loadScript(src);
+                    if (window.faceapi) break;
+                } catch (error) {
+                    lastError = error;
+                }
+            }
+            if (!window.faceapi) {
+                throw lastError || new Error('Face detector library failed to load.');
+            }
         }
     })();
 
@@ -496,17 +518,15 @@ async function ensureProfileFaceModels() {
         new Promise((_, reject) => setTimeout(() => reject(new Error(message)), ms))
     ]);
 
-    const modelBases = ['https://cdn.jsdelivr.net/npm/@vladmandic/face-api@1.7.13/model'];
-
     let loaded = false;
     let lastError = null;
-    for (const modelBase of modelBases) {
+    for (const modelBase of FACE_API_MODEL_BASES) {
         try {
             await withTimeout(Promise.all([
                 faceapi.nets.tinyFaceDetector.loadFromUri(modelBase),
                 faceapi.nets.faceLandmark68Net.loadFromUri(modelBase),
                 faceapi.nets.faceRecognitionNet.loadFromUri(modelBase)
-            ]), 20000, `Model load timeout from ${modelBase}`);
+            ]), 15000, `Model load timeout from ${modelBase}`);
             loaded = true;
             break;
         } catch (error) {

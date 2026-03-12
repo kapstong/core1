@@ -1466,9 +1466,74 @@
             });
         }
 
+        const FACE_API_VERSION = '1.7.13';
+        const FACE_API_SCRIPT_SOURCES = [
+            `https://cdn.jsdelivr.net/npm/@vladmandic/face-api@${FACE_API_VERSION}/dist/face-api.js`,
+            `https://unpkg.com/@vladmandic/face-api@${FACE_API_VERSION}/dist/face-api.js`
+        ];
+        const FACE_API_MODEL_BASES = [
+            `https://cdn.jsdelivr.net/npm/@vladmandic/face-api@${FACE_API_VERSION}/model`,
+            `https://unpkg.com/@vladmandic/face-api@${FACE_API_VERSION}/model`,
+            'assets/models/face-api',
+            '/assets/models/face-api'
+        ];
+        let faceApiLibraryPromise = null;
+
+        function loadScriptOnce(src) {
+            return new Promise((resolve, reject) => {
+                const existing = Array.from(document.querySelectorAll('script')).find(s => s.src === src);
+                if (existing) {
+                    const alreadyLoaded = existing.dataset.loaded === 'true'
+                        || existing.readyState === 'complete'
+                        || (src.includes('face-api') && !!window.faceapi);
+                    if (alreadyLoaded) {
+                        resolve();
+                        return;
+                    }
+                    existing.addEventListener('load', () => resolve(), { once: true });
+                    existing.addEventListener('error', () => reject(new Error(`Failed to load ${src}`)), { once: true });
+                    return;
+                }
+
+                const script = document.createElement('script');
+                script.src = src;
+                script.async = true;
+                script.onload = () => {
+                    script.dataset.loaded = 'true';
+                    resolve();
+                };
+                script.onerror = () => reject(new Error(`Failed to load ${src}`));
+                document.head.appendChild(script);
+            });
+        }
+
+        async function ensureFaceApiLibrary() {
+            if (window.faceapi) return;
+            if (faceApiLibraryPromise) {
+                await faceApiLibraryPromise;
+                return;
+            }
+
+            faceApiLibraryPromise = (async () => {
+                let lastError = null;
+                for (const src of FACE_API_SCRIPT_SOURCES) {
+                    try {
+                        await loadScriptOnce(src);
+                        if (window.faceapi) return;
+                    } catch (error) {
+                        lastError = error;
+                    }
+                }
+                throw lastError || new Error('Face detector library failed to load.');
+            })();
+
+            await faceApiLibraryPromise;
+        }
+
         async function loadFaceModels() {
             if (faceState.modelsLoaded) return;
             ensureFaceCore();
+            await ensureFaceApiLibrary();
             if (!window.faceapi) throw new Error('Face detector library failed to load.');
 
             const timeout = (promise, ms, message) => Promise.race([
@@ -1476,12 +1541,25 @@
                 new Promise((_, reject) => setTimeout(() => reject(new Error(message)), ms))
             ]);
 
-            const modelBase = 'https://cdn.jsdelivr.net/npm/@vladmandic/face-api@1.7.13/model';
-            await timeout(Promise.all([
-                faceapi.nets.tinyFaceDetector.loadFromUri(modelBase),
-                faceapi.nets.faceLandmark68Net.loadFromUri(modelBase),
-                faceapi.nets.faceRecognitionNet.loadFromUri(modelBase)
-            ]), 20000, 'Face model loading timeout.');
+            let lastError = null;
+            let loaded = false;
+            for (const modelBase of FACE_API_MODEL_BASES) {
+                try {
+                    await timeout(Promise.all([
+                        faceapi.nets.tinyFaceDetector.loadFromUri(modelBase),
+                        faceapi.nets.faceLandmark68Net.loadFromUri(modelBase),
+                        faceapi.nets.faceRecognitionNet.loadFromUri(modelBase)
+                    ]), 15000, `Face model loading timeout from ${modelBase}`);
+                    loaded = true;
+                    break;
+                } catch (error) {
+                    lastError = error;
+                }
+            }
+
+            if (!loaded) {
+                throw lastError || new Error('Unable to load face detector models.');
+            }
 
             faceState.modelsLoaded = true;
         }
