@@ -4,8 +4,8 @@
  * Run this script via cron job daily
  */
 
-require_once __DIR__ . '/../../config/database.php';
-require_once __DIR__ . '/../../utils/Logger.php';
+require_once __DIR__ . '/../config/database.php';
+require_once __DIR__ . '/Logger.php';
 
 class DatabaseBackup {
     private $backupDir;
@@ -15,7 +15,12 @@ class DatabaseBackup {
     public function __construct() {
         $this->backupDir = __DIR__ . '/../../backups';
         $this->maxBackups = 30; // Keep last 30 days of backups
-        $this->db = new Database();
+        try {
+            $this->db = Database::getInstance();
+        } catch (Exception $e) {
+            $this->db = null;
+            error_log('Database backup initialization failed: ' . $e->getMessage());
+        }
 
         if (!is_dir($this->backupDir)) {
             mkdir($this->backupDir, 0777, true);
@@ -24,6 +29,10 @@ class DatabaseBackup {
 
     public function createBackup() {
         try {
+            if ($this->db === null) {
+                throw new Exception('Database is not available for backup.');
+            }
+
             $timestamp = date('Y-m-d_H-i-s');
             $filename = $this->backupDir . '/backup_' . $timestamp . '.sql';
 
@@ -52,14 +61,14 @@ class DatabaseBackup {
             exec($zipCommand);
 
             // Log success
-            Logger::info("Database backup created successfully: backup_{$timestamp}.sql.gz");
+            $this->logInfo("Database backup created successfully: backup_{$timestamp}.sql.gz");
 
             // Cleanup old backups
             $this->cleanupOldBackups();
 
             return true;
         } catch (Exception $e) {
-            Logger::error("Database backup failed: " . $e->getMessage());
+            $this->logError("Database backup failed: " . $e->getMessage());
             return false;
         }
     }
@@ -76,13 +85,17 @@ class DatabaseBackup {
         if (count($files) > $this->maxBackups) {
             for ($i = $this->maxBackups; $i < count($files); $i++) {
                 unlink($files[$i]);
-                Logger::info("Deleted old backup: " . basename($files[$i]));
+                $this->logInfo("Deleted old backup: " . basename($files[$i]));
             }
         }
     }
 
     public function verifyBackup($filename) {
         try {
+            if ($this->db === null) {
+                throw new Exception('Database is not available for backup verification.');
+            }
+
             // Create test database
             $testDb = 'backup_test_' . time();
             $dbConfig = $this->db->getConfig();
@@ -119,13 +132,17 @@ class DatabaseBackup {
 
             return $returnVar === 0;
         } catch (Exception $e) {
-            Logger::error("Backup verification failed: " . $e->getMessage());
+            $this->logError("Backup verification failed: " . $e->getMessage());
             return false;
         }
     }
 
     public function restoreBackup($filename) {
         try {
+            if ($this->db === null) {
+                throw new Exception('Database is not available for restore.');
+            }
+
             if (!file_exists($filename)) {
                 throw new Exception("Backup file not found: $filename");
             }
@@ -166,11 +183,27 @@ class DatabaseBackup {
                 throw new Exception("Database restore failed with error code: $returnVar");
             }
 
-            Logger::info("Database restored successfully from: " . basename($filename));
+            $this->logInfo("Database restored successfully from: " . basename($filename));
             return true;
         } catch (Exception $e) {
-            Logger::error("Database restore failed: " . $e->getMessage());
+            $this->logError("Database restore failed: " . $e->getMessage());
             return false;
+        }
+    }
+
+    private function logInfo($message) {
+        try {
+            Logger::info($message);
+        } catch (Throwable $e) {
+            error_log($message);
+        }
+    }
+
+    private function logError($message) {
+        try {
+            Logger::error($message);
+        } catch (Throwable $e) {
+            error_log($message);
         }
     }
 }

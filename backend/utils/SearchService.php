@@ -4,11 +4,13 @@
  * Provides comprehensive search functionality across multiple entities
  */
 
+require_once __DIR__ . '/../config/database.php';
+
 class SearchService {
     private $db;
 
     public function __construct() {
-        $this->db = new Database();
+        $this->db = Database::getInstance();
     }
 
     public function searchProducts($query, $filters = []) {

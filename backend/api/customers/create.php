@@ -57,7 +57,7 @@ try {
     $stmt->execute([$customerId]);
     $customer = $stmt->fetch(PDO::FETCH_ASSOC);
 
-    Response::success('Customer created successfully', ['customer' => $customer]);
+    Response::success(['customer' => $customer], 'Customer created successfully');
 } catch (Exception $e) {
     Response::error('Failed to create customer: ' . $e->getMessage());
 }

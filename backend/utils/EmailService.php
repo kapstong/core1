@@ -4,6 +4,8 @@
  * Handles all email notifications for the system
  */
 
+require_once __DIR__ . '/../config/database.php';
+
 class EmailService {
     private $smtp_host;
     private $smtp_port;
@@ -18,7 +20,7 @@ class EmailService {
     }
 
     private function loadConfig() {
-        $db = new Database();
+        $db = Database::getInstance();
         $conn = $db->getConnection();
         
         $stmt = $conn->prepare("SELECT setting_key, setting_value FROM settings WHERE category = 'email'");
@@ -34,7 +36,7 @@ class EmailService {
     }
 
     public function sendOrderConfirmation($orderId) {
-        $db = new Database();
+        $db = Database::getInstance();
         $conn = $db->getConnection();
         
         // Get order details
@@ -68,7 +70,7 @@ class EmailService {
     }
 
     public function sendLowStockAlert($productId, $currentStock) {
-        $db = new Database();
+        $db = Database::getInstance();
         $conn = $db->getConnection();
         
         // Get product details
@@ -111,7 +113,7 @@ class EmailService {
     }
 
     public function sendPasswordReset($userId, $resetToken) {
-        $db = new Database();
+        $db = Database::getInstance();
         $conn = $db->getConnection();
         
         // Get user details

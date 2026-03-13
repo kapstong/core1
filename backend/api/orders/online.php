@@ -216,7 +216,7 @@ function updateOnlineOrder() {
         }
 
         // Update order status
-        $updateQuery = "UPDATE customer_orders SET status = :status, updated_at = datetime('now') WHERE id = :order_id";
+        $updateQuery = "UPDATE customer_orders SET status = :status, updated_at = NOW() WHERE id = :order_id";
         $updateStmt = $db->prepare($updateQuery);
         $updateStmt->bindValue(':status', $newStatus);
         $updateStmt->bindValue(':order_id', $orderId, PDO::PARAM_INT);

@@ -8955,7 +8955,7 @@ async function loadProductsForPOS() {
         const data = await response.json();
 
         if (data.success) {
-            allPOSProducts = data.products || [];
+            allPOSProducts = data?.data?.products || data.products || [];
             renderProductGrid(allPOSProducts);
         } else {
             showPOSMessage('Error loading products: ' + (data.message || 'Unknown error'), 'error');
@@ -9325,11 +9325,11 @@ function setUpPOSEventListeners() {
     document.getElementById('cash-received').addEventListener('input', calculateCashChange);
 
     // Category filter
-    document.getElementById('product-category-filter').addEventListener('change', filterProducts);
+    document.getElementById('pos-product-category-filter').addEventListener('change', filterPOSProducts);
 
     // Product search debounced
-    const searchInput = document.getElementById('product-search');
-    searchInput.addEventListener('input', debounce(filterProducts, 300));
+    const searchInput = document.getElementById('pos-product-search');
+    searchInput.addEventListener('input', debounce(filterPOSProducts, 300));
 }
 
 function showPOSMessage(message, type = 'info') {

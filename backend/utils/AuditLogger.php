@@ -258,7 +258,15 @@ class AuditLogger {
             $params[] = $offset;
 
             $stmt = $db->prepare($sql);
-            $stmt->execute($params);
+
+            foreach ($params as $index => $value) {
+                $position = $index + 1;
+                $isPaginationParam = $index >= (count($params) - 2);
+                $type = $isPaginationParam || is_int($value) ? PDO::PARAM_INT : PDO::PARAM_STR;
+                $stmt->bindValue($position, $value, $type);
+            }
+
+            $stmt->execute();
 
             return $stmt->fetchAll(PDO::FETCH_ASSOC);
         } catch (Exception $e) {

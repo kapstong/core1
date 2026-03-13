@@ -175,7 +175,14 @@ function getCustomerOrders($customerId) {
     $params[] = $limit;
     $params[] = $offset;
 
-    $stmt->execute($params);
+    foreach ($params as $index => $value) {
+        $position = $index + 1;
+        $isPaginationParam = $index >= (count($params) - 2);
+        $type = $isPaginationParam || is_int($value) ? PDO::PARAM_INT : PDO::PARAM_STR;
+        $stmt->bindValue($position, $value, $type);
+    }
+
+    $stmt->execute();
     $orders = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
     // Get total count

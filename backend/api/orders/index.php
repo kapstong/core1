@@ -61,18 +61,18 @@ function getOrders() {
         // Add filters
         if (!empty($_GET['status'])) {
             $query .= " AND co.status = :status";
-            $params['status'] = $_GET['status'];
+            $params[':status'] = $_GET['status'];
         }
 
         if (!empty($_GET['payment_status'])) {
             $query .= " AND co.payment_status = :payment_status";
-            $params['payment_status'] = $_GET['payment_status'];
+            $params[':payment_status'] = $_GET['payment_status'];
         }
 
         if (!empty($_GET['search'])) {
             $search = '%' . $_GET['search'] . '%';
             $query .= " AND (co.order_number LIKE :search OR c.first_name LIKE :search OR c.last_name LIKE :search OR c.email LIKE :search)";
-            $params['search'] = $search;
+            $params[':search'] = $search;
         }
 
         $query .= " GROUP BY co.id ORDER BY co.created_at DESC";
@@ -82,8 +82,8 @@ function getOrders() {
         $offset = isset($_GET['offset']) ? (int)$_GET['offset'] : 0;
 
         $query .= " LIMIT :limit OFFSET :offset";
-        $params['limit'] = $limit;
-        $params['offset'] = $offset;
+        $params[':limit'] = $limit;
+        $params[':offset'] = $offset;
 
         $stmt = $db->prepare($query);
 

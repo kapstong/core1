@@ -114,7 +114,7 @@ class RateLimiter {
      */
     private function createNewWindow($identifier, $endpoint) {
         $query = "INSERT INTO rate_limits (identifier, endpoint, request_count, window_start, last_request)
-                  VALUES (:identifier, :endpoint, 1, datetime('now'), datetime('now'))";
+                  VALUES (:identifier, :endpoint, 1, NOW(), NOW())";
 
         $stmt = $this->db->prepare($query);
         $stmt->execute([
@@ -129,7 +129,7 @@ class RateLimiter {
     private function incrementRequestCount($recordId) {
         $query = "UPDATE rate_limits
                   SET request_count = request_count + 1,
-                      last_request = datetime('now')
+                      last_request = NOW()
                   WHERE id = :id";
 
         $stmt = $this->db->prepare($query);

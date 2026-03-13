@@ -75,23 +75,31 @@ class Product {
 
         $limit = null;
         $offset = null;
+        $limitParamIndex = null;
+        $offsetParamIndex = null;
 
         if (isset($filters['limit'])) {
             $query .= " LIMIT ?";
             $limit = (int)$filters['limit'];
             $params[] = $limit;
+            $limitParamIndex = count($params);
         }
 
         if (isset($filters['offset'])) {
             $query .= " OFFSET ?";
             $offset = (int)$filters['offset'];
             $params[] = $offset;
+            $offsetParamIndex = count($params);
         }
 
         $stmt = $this->conn->prepare($query);
 
         foreach ($params as $index => $value) {
-            $stmt->bindValue($index + 1, $value);
+            $position = $index + 1;
+            $isLimitParam = ($limitParamIndex !== null && $position === $limitParamIndex)
+                || ($offsetParamIndex !== null && $position === $offsetParamIndex);
+            $type = $isLimitParam || is_int($value) ? PDO::PARAM_INT : PDO::PARAM_STR;
+            $stmt->bindValue($position, $value, $type);
         }
 
         $stmt->execute();

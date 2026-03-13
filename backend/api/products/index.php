@@ -143,6 +143,18 @@ try {
         ];
     }
 
+    // Backward compatibility for UIs still expecting stock_quantity.
+    $products = array_map(static function ($product) {
+        $stockQuantity = 0;
+        if (isset($product['quantity_available'])) {
+            $stockQuantity = (int)$product['quantity_available'];
+        } elseif (isset($product['quantity_on_hand'])) {
+            $stockQuantity = (int)$product['quantity_on_hand'];
+        }
+        $product['stock_quantity'] = $stockQuantity;
+        return $product;
+    }, $products);
+
     Response::success([
         'products' => $products,
         'count' => count($products)

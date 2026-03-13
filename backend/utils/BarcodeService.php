@@ -4,7 +4,11 @@
  * Handles creation and management of product barcodes
  */
 
-require_once __DIR__ . '/vendor/autoload.php';
+$autoloadPath = __DIR__ . '/vendor/autoload.php';
+if (file_exists($autoloadPath)) {
+    require_once $autoloadPath;
+}
+require_once __DIR__ . '/../config/database.php';
 
 use Picqer\Barcode\BarcodeGeneratorPNG;
 use Picqer\Barcode\BarcodeGeneratorSVG;
@@ -15,8 +19,12 @@ class BarcodeService {
     private $outputDir;
 
     public function __construct() {
+        if (!class_exists(BarcodeGeneratorPNG::class) || !class_exists(BarcodeGeneratorSVG::class)) {
+            throw new Exception('Barcode generator dependencies are not installed.');
+        }
+
         $this->generator = new BarcodeGeneratorPNG();
-        $this->db = new Database();
+        $this->db = Database::getInstance();
         $this->outputDir = __DIR__ . '/../../public/barcodes';
 
         if (!is_dir($this->outputDir)) {

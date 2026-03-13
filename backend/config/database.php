@@ -113,9 +113,7 @@ class Database {
             return new MockStatement();
         }
         try {
-            $stmt = $this->conn->prepare($sql);
-            $stmt->execute($params);
-            return $stmt;
+            return $this->prepareAndExecute($sql, $params);
         } catch (PDOException $e) {
             $message = $e->getMessage();
             if (stripos($message, 'deleted_at') !== false) {
@@ -129,15 +127,24 @@ class Database {
                 $fallbackSql = preg_replace('/\\s+WHERE\\s*$/i', '', $fallbackSql);
 
                 try {
-                    $stmt = $this->conn->prepare($fallbackSql);
-                    $stmt->execute($params);
-                    return $stmt;
+                    return $this->prepareAndExecute($fallbackSql, $params);
                 } catch (PDOException $fallbackException) {
                     throw new Exception("Query failed: " . $message);
                 }
             }
             throw new Exception("Query failed: " . $message);
         }
+    }
+
+    /**
+     * Execute write/update/delete style queries and return success.
+     */
+    public function execute($sql, $params = []) {
+        if ($this->conn === null) {
+            return true;
+        }
+        $this->query($sql, $params);
+        return true;
     }
 
     /**
@@ -218,6 +225,56 @@ class Database {
             return 1; // Mock ID
         }
         return $this->conn->lastInsertId();
+    }
+
+    /**
+     * Get database configuration values.
+     */
+    public function getConfig() {
+        return [
+            'type' => $this->db_type,
+            'host' => $this->host,
+            'dbname' => $this->db_name,
+            'user' => $this->username,
+            'pass' => $this->password,
+            'charset' => $this->charset
+        ];
+    }
+
+    /**
+     * Prepare, bind parameters, and execute.
+     */
+    private function prepareAndExecute($sql, $params = []) {
+        $stmt = $this->conn->prepare($sql);
+        $this->bindParams($stmt, $params);
+        $stmt->execute();
+        return $stmt;
+    }
+
+    /**
+     * Bind values with explicit PDO types.
+     */
+    private function bindParams($stmt, array $params) {
+        foreach ($params as $key => $value) {
+            $param = is_int($key) ? $key + 1 : ((strlen((string)$key) > 0 && (string)$key[0] === ':') ? $key : ':' . $key);
+
+            if (is_int($value)) {
+                $stmt->bindValue($param, $value, PDO::PARAM_INT);
+                continue;
+            }
+
+            if (is_bool($value)) {
+                $stmt->bindValue($param, $value ? 1 : 0, PDO::PARAM_BOOL);
+                continue;
+            }
+
+            if ($value === null) {
+                $stmt->bindValue($param, null, PDO::PARAM_NULL);
+                continue;
+            }
+
+            $stmt->bindValue($param, (string)$value, PDO::PARAM_STR);
+        }
     }
 
     /**

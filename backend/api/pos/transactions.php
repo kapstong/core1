@@ -3,110 +3,106 @@ require_once __DIR__ . '/../../middleware/Auth.php';
 require_once __DIR__ . '/../../middleware/CORS.php';
 require_once __DIR__ . '/../../utils/Response.php';
 require_once __DIR__ . '/../../config/database.php';
-require_once __DIR__ . '/../../models/Product.php';
 
 header('Content-Type: application/json; charset=UTF-8');
 
 CORS::handle();
-
-// Check authentication using session-based auth
 Auth::requireAuth();
 
-// Get user data
 $user = Auth::user();
-
-// Check permissions - staff, admin, or inventory_manager can access POS
-$allowedRoles = ['admin', 'staff', 'inventory_manager'];
-if (!in_array($user['role'], $allowedRoles)) {
+$allowedRoles = ['admin', 'staff', 'inventory_manager', 'purchasing_officer'];
+if (!in_array((string)($user['role'] ?? ''), $allowedRoles, true)) {
     Response::error('Access denied', 403);
 }
 
-// Initialize database connection
-$database = new Database();
-$db = $database->getConnection();
-
-$method = $_SERVER['REQUEST_METHOD'];
+$method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
+if ($method !== 'GET') {
+    Response::error('Method not allowed', 405);
+}
 
 try {
-    switch ($method) {
-        case 'GET':
-            // List POS transactions with filtering
-            $limit = isset($_GET['limit']) ? (int)$_GET['limit'] : 50;
-            $offset = isset($_GET['offset']) ? (int)$_GET['offset'] : 0;
-            $dateFrom = $_GET['date_from'] ?? null;
-            $dateTo = $_GET['date_to'] ?? null;
+    $db = Database::getInstance()->getConnection();
 
-            // Build query
-            $query = "SELECT
-                        t.id,
-                        t.transaction_number,
-                        t.customer_id,
-                        t.total_amount,
-                        t.payment_method,
-                        t.cash_received,
-                        t.change_given,
-                        t.created_at,
-                        t.updated_at,
-                        c.name as customer_name,
-                        c.email as customer_email,
-                        COUNT(ti.id) as item_count
-                      FROM pos_transactions t
-                      LEFT JOIN customers c ON t.customer_id = c.id
-                      LEFT JOIN pos_transaction_items ti ON t.id = ti.transaction_id";
+    $limit = isset($_GET['limit']) ? max(1, min(200, (int)$_GET['limit'])) : 50;
+    $offset = isset($_GET['offset']) ? max(0, (int)$_GET['offset']) : 0;
+    $dateFrom = trim((string)($_GET['date_from'] ?? ''));
+    $dateTo = trim((string)($_GET['date_to'] ?? ''));
 
-            $conditions = [];
-            $params = [];
+    $query = "
+        SELECT
+            s.id,
+            s.invoice_number AS transaction_number,
+            s.total_amount,
+            s.payment_method,
+            s.created_at,
+            s.updated_at,
+            COALESCE(NULLIF(s.customer_name, ''), 'Walk-in Customer') AS customer_name,
+            s.customer_email AS customer_email,
+            COUNT(si.id) AS item_count
+        FROM sales s
+        LEFT JOIN sale_items si ON s.id = si.sale_id
+        WHERE 1=1
+    ";
 
-            if ($dateFrom) {
-                $conditions[] = "DATE(t.created_at) >= ?";
-                $params[] = $dateFrom;
-            }
+    $params = [];
 
-            if ($dateTo) {
-                $conditions[] = "DATE(t.created_at) <= ?";
-                $params[] = $dateTo;
-            }
-
-            if (!empty($conditions)) {
-                $query .= " WHERE " . implode(" AND ", $conditions);
-            }
-
-            $query .= " GROUP BY t.id ORDER BY t.created_at DESC LIMIT ? OFFSET ?";
-            $params[] = $limit;
-            $params[] = $offset;
-
-            $stmt = $db->prepare($query);
-            $stmt->execute($params);
-            $transactions = $stmt->fetchAll(PDO::FETCH_ASSOC);
-
-            // Get details for each transaction
-            foreach ($transactions as &$transaction) {
-                // Get transaction items
-                $itemQuery = "SELECT
-                               ti.*,
-                               p.name as product_name,
-                               p.sku
-                             FROM pos_transaction_items ti
-                             JOIN products p ON ti.product_id = p.id
-                             WHERE ti.transaction_id = ?
-                             ORDER BY ti.created_at";
-                $itemStmt = $db->prepare($itemQuery);
-                $itemStmt->execute([$transaction['id']]);
-                $transaction['items'] = $itemStmt->fetchAll(PDO::FETCH_ASSOC);
-            }
-
-            Response::success('Transactions retrieved successfully', [
-                'transactions' => $transactions,
-                'limit' => $limit,
-                'offset' => $offset
-            ]);
-            break;
-
-        default:
-            Response::error('Method not allowed', 405);
+    if ($dateFrom !== '') {
+        $query .= " AND DATE(s.created_at) >= :date_from";
+        $params[':date_from'] = $dateFrom;
     }
 
+    if ($dateTo !== '') {
+        $query .= " AND DATE(s.created_at) <= :date_to";
+        $params[':date_to'] = $dateTo;
+    }
+
+    $query .= "
+        GROUP BY
+            s.id, s.invoice_number, s.total_amount, s.payment_method,
+            s.created_at, s.updated_at, s.customer_name, s.customer_email
+        ORDER BY s.created_at DESC
+        LIMIT :limit OFFSET :offset
+    ";
+
+    $stmt = $db->prepare($query);
+    foreach ($params as $key => $value) {
+        $stmt->bindValue($key, $value, PDO::PARAM_STR);
+    }
+    $stmt->bindValue(':limit', $limit, PDO::PARAM_INT);
+    $stmt->bindValue(':offset', $offset, PDO::PARAM_INT);
+    $stmt->execute();
+    $transactions = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+    if (!empty($transactions)) {
+        $itemStmt = $db->prepare("
+            SELECT
+                si.id,
+                si.product_id,
+                si.quantity,
+                si.unit_price,
+                (si.quantity * si.unit_price) AS total_price,
+                p.name AS product_name,
+                p.sku
+            FROM sale_items si
+            INNER JOIN products p ON si.product_id = p.id
+            WHERE si.sale_id = :sale_id
+            ORDER BY si.id ASC
+        ");
+
+        foreach ($transactions as &$transaction) {
+            $itemStmt->bindValue(':sale_id', (int)$transaction['id'], PDO::PARAM_INT);
+            $itemStmt->execute();
+            $transaction['items'] = $itemStmt->fetchAll(PDO::FETCH_ASSOC);
+        }
+        unset($transaction);
+    }
+
+    Response::success([
+        'transactions' => $transactions,
+        'limit' => $limit,
+        'offset' => $offset
+    ], 'Transactions retrieved successfully');
 } catch (Exception $e) {
     Response::error('Database error: ' . $e->getMessage(), 500);
 }
-?>
+

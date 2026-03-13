@@ -258,12 +258,31 @@ class Logger {
     }
 
     /**
+     * Compatibility helper for modules using Logger::info(...)
+     */
+    public static function info($action, $details = [], $userId = null) {
+        $logger = new self($userId);
+        $logger->log($action, 'system', null, (array)$details, 'info');
+    }
+
+    /**
+     * Compatibility helper for modules using Logger::error(...)
+     */
+    public static function error($action, $details = [], $userId = null) {
+        $logger = new self($userId);
+        $logger->log($action, 'error', null, (array)$details, 'error');
+    }
+
+    /**
      * Clean old logs (optional maintenance function)
      */
     public function cleanOldLogs($daysToKeep = 90) {
-        $query = "DELETE FROM activity_logs WHERE created_at < DATE_SUB(NOW(), INTERVAL :days DAY)";
+        $daysToKeep = max(1, (int)$daysToKeep);
+        $cutoff = date('Y-m-d H:i:s', time() - ($daysToKeep * 86400));
+
+        $query = "DELETE FROM activity_logs WHERE created_at < :cutoff";
         $stmt = $this->db->prepare($query);
-        $stmt->bindParam(':days', $daysToKeep, PDO::PARAM_INT);
+        $stmt->bindValue(':cutoff', $cutoff);
         return $stmt->execute();
     }
 }

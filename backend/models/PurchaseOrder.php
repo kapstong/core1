@@ -42,18 +42,21 @@ class PurchaseOrder {
     }
 
     public function getMonthlyCountsBySupplierId($supplier_id, $months = 6) {
+        $months = max(1, (int)$months);
+        $cutoffDate = date('Y-m-d H:i:s', strtotime("-{$months} months"));
+
         $sql = "SELECT 
                     DATE_FORMAT(created_at, '%Y-%m') as month,
                     COUNT(*) as count
                 FROM {$this->table}
                 WHERE supplier_id = :supplier_id
-                AND created_at >= DATE_SUB(NOW(), INTERVAL :months MONTH)
+                AND created_at >= :cutoff_date
                 GROUP BY DATE_FORMAT(created_at, '%Y-%m')
                 ORDER BY month ASC";
         
         return $this->db->fetchAll($sql, [
             ':supplier_id' => $supplier_id,
-            ':months' => $months
+            ':cutoff_date' => $cutoffDate
         ]);
     }
 

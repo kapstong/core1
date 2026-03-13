@@ -58,7 +58,7 @@ class Security {
 
         // Log this request
         $logQuery = "INSERT INTO rate_limits (identifier, action, ip_address, user_agent, created_at)
-                    VALUES (:identifier, :action, :ip_address, :user_agent, datetime('now'))";
+                    VALUES (:identifier, :action, :ip_address, :user_agent, NOW())";
         $logStmt = self::$db->prepare($logQuery);
         $logStmt->bindParam(':identifier', $identifier);
         $logStmt->bindParam(':action', $action);
@@ -258,7 +258,7 @@ class Security {
 
         // Check for rapid requests from same IP
         $recentQuery = "SELECT COUNT(*) as recent_requests FROM rate_limits
-                       WHERE ip_address = :ip AND created_at >= DATE_SUB(datetime('now'), INTERVAL 1 MINUTE)";
+                       WHERE ip_address = :ip AND created_at >= DATE_SUB(NOW(), INTERVAL 1 MINUTE)";
         $recentStmt = self::$db->prepare($recentQuery);
         $recentStmt->bindParam(':ip', $ip);
         $recentStmt->execute();

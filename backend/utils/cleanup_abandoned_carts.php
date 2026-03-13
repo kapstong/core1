@@ -4,14 +4,14 @@
  * This script removes cart items that haven't been updated in over 2 hours
  *
  * Run this script periodically using a cron job or task scheduler:
- * Example cron: */30 * * * * php /path/to/cleanup_abandoned_carts.php
- * (Runs every 30 minutes)
+ * Run every 30 minutes (example schedule: minute 0 and 30 each hour)
  */
 
 require_once __DIR__ . '/../config/database.php';
 
 // Configuration
 $abandonedThresholdHours = 2; // Consider carts abandoned after this many hours of inactivity
+$cutoffTimestamp = date('Y-m-d H:i:s', time() - ($abandonedThresholdHours * 3600));
 
 try {
     $db = Database::getInstance()->getConnection();
@@ -25,12 +25,12 @@ try {
             SUM(sc.quantity) as total_cart_quantity,
             COUNT(sc.id) as cart_count
         FROM shopping_cart sc
-        WHERE sc.updated_at < DATE_SUB(datetime('now'), INTERVAL :hours HOUR)
+        WHERE sc.updated_at < :cutoff
         GROUP BY sc.product_id
     ";
 
     $stmt = $db->prepare($query);
-    $stmt->bindParam(':hours', $abandonedThresholdHours, PDO::PARAM_INT);
+    $stmt->bindValue(':cutoff', $cutoffTimestamp);
     $stmt->execute();
 
     $abandonedItems = $stmt->fetchAll(PDO::FETCH_ASSOC);
@@ -53,11 +53,11 @@ try {
         // Delete abandoned cart items
         $deleteQuery = "
             DELETE FROM shopping_cart
-            WHERE updated_at < DATE_SUB(datetime('now'), INTERVAL :hours HOUR)
+            WHERE updated_at < :cutoff
         ";
 
         $deleteStmt = $db->prepare($deleteQuery);
-        $deleteStmt->bindParam(':hours', $abandonedThresholdHours, PDO::PARAM_INT);
+        $deleteStmt->bindValue(':cutoff', $cutoffTimestamp);
         $deleteStmt->execute();
 
         $deletedCarts = $deleteStmt->rowCount();

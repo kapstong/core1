@@ -216,7 +216,10 @@ function getProductReviews() {
         LIMIT ? OFFSET ?
     ");
 
-    $stmt->execute([$productId, $limit, $offset]);
+    $stmt->bindValue(1, $productId, PDO::PARAM_INT);
+    $stmt->bindValue(2, $limit, PDO::PARAM_INT);
+    $stmt->bindValue(3, $offset, PDO::PARAM_INT);
+    $stmt->execute();
     $reviews = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
     // Get total count

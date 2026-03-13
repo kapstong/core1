@@ -69,20 +69,29 @@ class StockAdjustment {
 
         $query .= " ORDER BY sa.adjustment_date DESC";
 
+        $limitParamIndex = null;
+        $offsetParamIndex = null;
+
         if (isset($filters['limit'])) {
             $query .= " LIMIT ?";
             $params[] = (int)$filters['limit'];
+            $limitParamIndex = count($params);
         }
 
         if (isset($filters['offset'])) {
             $query .= " OFFSET ?";
             $params[] = (int)$filters['offset'];
+            $offsetParamIndex = count($params);
         }
 
         $stmt = $this->db->prepare($query);
 
         foreach ($params as $index => $value) {
-            $stmt->bindValue($index + 1, $value);
+            $position = $index + 1;
+            $isLimitParam = ($limitParamIndex !== null && $position === $limitParamIndex)
+                || ($offsetParamIndex !== null && $position === $offsetParamIndex);
+            $type = $isLimitParam || is_int($value) ? PDO::PARAM_INT : PDO::PARAM_STR;
+            $stmt->bindValue($position, $value, $type);
         }
 
         $stmt->execute();
