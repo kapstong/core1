@@ -686,6 +686,26 @@
             window.history.pushState({page: page}, '', url);
         }
 
+        function getAllowedPagesForRole(role) {
+            const allowedPages = {
+                supplier: ['home', 'purchase-orders', 'po-history', 'profile', 'settings'],
+                admin: ['home', 'products', 'adjustments', 'categories', 'suppliers', 'purchase-orders', 'grn', 'users', 'logs', 'settings', 'profile'],
+                inventory_manager: ['home', 'products', 'adjustments', 'grn', 'settings', 'profile'],
+                purchasing_officer: ['home', 'suppliers', 'purchase-orders', 'grn', 'profile'],
+                staff: ['home', 'pos', 'sales', 'products', 'profile']
+            };
+
+            return allowedPages[role] || ['home', 'profile'];
+        }
+
+        function isPageAllowedForCurrentUser(pageName) {
+            if (!currentUser || !pageName) {
+                return pageName === 'home';
+            }
+
+            return getAllowedPagesForRole(currentUser.role).includes(pageName);
+        }
+
         // Handle browser back/forward buttons
         window.addEventListener('popstate', (event) => {
             if (event.state && event.state.page) {
@@ -703,7 +723,7 @@
 
             // Check URL parameter for initial page
             const initialPage = getUrlParameter('page') || 'home';
-            showPage(initialPage);
+            showPage(isPageAllowedForCurrentUser(initialPage) ? initialPage : 'home');
         });
 
         // Initialize inactivity monitor with user's saved preference
@@ -788,7 +808,7 @@
             // Show Settings dropdown only for admin users
             const settingsDropdownItem = document.getElementById('settings-dropdown-item');
             if (settingsDropdownItem) {
-                if (currentUser.role === 'admin') {
+                if (currentUser.role === 'admin' || currentUser.role === 'inventory_manager') {
                     settingsDropdownItem.style.display = '';
                 } else {
                     settingsDropdownItem.style.display = 'none';
@@ -939,7 +959,7 @@
         }
 
         // Show page
-        async function loadSupplierPendingOrdersPage() {
+        async function legacyLoadSupplierPendingOrdersPage() {
             const content = document.getElementById('page-content');
             content.innerHTML = `
                 <div class="card">
@@ -994,7 +1014,7 @@
             }
         }
 
-        async function loadSupplierOrderHistoryPage() {
+        async function legacyLoadSupplierOrderHistoryPage() {
             const content = document.getElementById('page-content');
             content.innerHTML = `
                 <div class="card">
@@ -1106,7 +1126,7 @@
             }
         }
 
-        async function viewPODetails(id) {
+        async function legacyViewPODetails(id) {
             try {
                 const response = await fetch('/backend/api/purchase_orders/' + id);
                 const po = await response.json();
@@ -1206,7 +1226,7 @@
             }
         }
 
-        async function approvePO(id) {
+        async function legacyApprovePO(id) {
             try {
                 const response = await fetch('/backend/api/purchase_orders/approve/' + id, {
                     method: 'POST'
@@ -1223,7 +1243,7 @@
             }
         }
 
-        async function rejectPO(id) {
+        async function legacyRejectPO(id) {
             const reason = await showPrompt('Please provide a reason for rejection:');
             if (!reason) return;
 
@@ -1247,7 +1267,7 @@
             }
         }
 
-        function formatPOStatus(status) {
+        function legacyFormatPOStatus(status) {
             const statusMap = {
                 'pending': '<span class="badge bg-warning">Pending</span>',
                 'approved': '<span class="badge bg-success">Approved</span>',
@@ -1258,6 +1278,13 @@
         }
 
         async function showPage(pageName, updateUrl = true, filter = null) {
+            if (!isPageAllowedForCurrentUser(pageName)) {
+                if (pageName !== 'home') {
+                    return showPage('home', updateUrl, null);
+                }
+                pageName = 'home';
+            }
+
             if (typeof window.cleanupProfileFaceEnrollment === 'function' && pageName !== 'profile') {
                 window.cleanupProfileFaceEnrollment();
             }
@@ -1816,7 +1843,7 @@
             return iconMap[action] || 'fas fa-info-circle';
         }
 
-        function initSalesTrendChart(salesData) {
+        function legacyInitSalesTrendChart(salesData) {
             const ctx = document.getElementById('sales-trend-chart');
             if (!ctx || !salesData.length) return;
 

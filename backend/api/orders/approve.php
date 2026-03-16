@@ -35,8 +35,8 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
 try {
     error_log('=== STARTING ORDER APPROVAL PROCESS ===');
 
-    // Require staff authentication (ONLY staff members can approve/reject orders)
-    Auth::requireRole(['staff']);
+    // Match POS access rules so admins and related inventory roles can process pending orders.
+    Auth::requireRole(['admin', 'inventory_manager', 'purchasing_officer', 'staff']);
     $currentUser = Auth::user();
     error_log('User authenticated: ' . json_encode($currentUser));
 

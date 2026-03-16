@@ -33,7 +33,7 @@ try {
     $user = Auth::user();
 
     // Role-based access
-    if ($user['role'] === 'staff') {
+    if (!in_array($user['role'], ['admin', 'inventory_manager', 'purchasing_officer', 'supplier'], true)) {
         Response::error('Access denied', 403);
     }
 
@@ -70,6 +70,10 @@ try {
 
     if (!$po) {
         Response::error('Purchase order not found', 404);
+    }
+
+    if ($user['role'] === 'supplier' && (int)$po['supplier_id'] !== (int)$user['id']) {
+        Response::error('Access denied', 403);
     }
 
     // Get purchase order items

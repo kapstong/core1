@@ -33,7 +33,7 @@ try {
     $user = Auth::user();
 
     // Role-based access
-    if ($user['role'] === 'staff') {
+    if (!in_array($user['role'], ['admin', 'inventory_manager', 'purchasing_officer'], true)) {
         Response::error('Access denied', 403);
     }
 

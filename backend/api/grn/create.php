@@ -92,12 +92,7 @@ try {
 
     // Generate GRN number if not provided
     if (!$grnNumber) {
-        $stmt = $conn->query("SELECT setting_value FROM settings WHERE setting_key = 'grn_auto_number'");
-        $prefix = $stmt->fetch(PDO::FETCH_ASSOC)['setting_value'] ?? 'GRN-2025-';
-
-        $stmt = $conn->query("SELECT COUNT(*) + 1 as next_num FROM goods_received_notes");
-        $nextNum = $stmt->fetch(PDO::FETCH_ASSOC)['next_num'];
-        $grnNumber = $prefix . str_pad($nextNum, 5, '0', STR_PAD_LEFT);
+        $grnNumber = generateGrnNumber($conn);
     }
 
     // Check if GRN number already exists
@@ -377,5 +372,38 @@ try {
         $conn->rollBack();
     }
     Response::serverError('Failed to create goods received note: ' . $e->getMessage());
+}
+
+function generateGrnNumber(PDO $conn): string {
+    $prefix = 'GRN-' . date('Y') . '-';
+
+    $stmt = $conn->prepare("SELECT setting_value FROM settings WHERE setting_key = 'grn_auto_number' LIMIT 1");
+    $stmt->execute();
+    $configuredPrefix = $stmt->fetchColumn();
+
+    if (is_string($configuredPrefix) && trim($configuredPrefix) !== '') {
+        $prefix = trim($configuredPrefix);
+    }
+
+    if (!preg_match('/[-_]$/', $prefix)) {
+        $prefix .= '-';
+    }
+
+    $stmt = $conn->prepare("
+        SELECT grn_number
+        FROM goods_received_notes
+        WHERE grn_number LIKE :prefix
+        ORDER BY id DESC
+        LIMIT 1
+    ");
+    $stmt->execute([':prefix' => $prefix . '%']);
+    $lastGrnNumber = $stmt->fetchColumn();
+
+    $nextNumber = 1;
+    if (is_string($lastGrnNumber) && preg_match('/(\d+)\s*$/', $lastGrnNumber, $matches)) {
+        $nextNumber = ((int)$matches[1]) + 1;
+    }
+
+    return $prefix . str_pad((string)$nextNumber, 5, '0', STR_PAD_LEFT);
 }
 

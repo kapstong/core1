@@ -19,14 +19,27 @@ $supplier_id = $user['id'];
 // Get statistics and recent orders for the supplier
 try {
     $db = Database::getInstance();
+    $conn = $db->getConnection();
     $po = new PurchaseOrder($db);
 
     // Get summary statistics - all POs for this supplier
     $total_pos = $po->countBySupplierId($supplier_id); // All POs
 
-    $approved_count = $po->countBySupplierId($supplier_id, 'approved');
-    $pending_count = $po->countBySupplierId($supplier_id, 'pending');
-    $completed_count = $po->countBySupplierId($supplier_id, 'completed');
+    $approved_count =
+        $po->countBySupplierId($supplier_id, 'approved') +
+        $po->countBySupplierId($supplier_id, 'ordered') +
+        $po->countBySupplierId($supplier_id, 'partially_received');
+
+    $pending_count = $po->countBySupplierId($supplier_id, 'pending_supplier');
+
+    $completedStmt = $conn->prepare("
+        SELECT COUNT(*) AS total
+        FROM purchase_orders
+        WHERE supplier_id = :supplier_id
+          AND status IN ('received', 'completed')
+    ");
+    $completedStmt->execute([':supplier_id' => $supplier_id]);
+    $completed_count = (int)($completedStmt->fetch(PDO::FETCH_ASSOC)['total'] ?? 0);
 
     $summary = [
         'total_pos' => $total_pos,

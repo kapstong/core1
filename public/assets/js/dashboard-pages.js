@@ -344,11 +344,15 @@ async function loadSupplierHomePage() {
 
         if (data.success) {
             // Update stats cards
-            document.getElementById('supplier-total-pos').textContent = data.data.summary.total_pos || 0;
-            document.getElementById('supplier-approved-pos').textContent = data.data.summary.approved_orders || 0;
-            document.getElementById('supplier-pending-pos').textContent = data.data.summary.pending_orders || 0;
-            document.getElementById('supplier-completed-pos').textContent = data.data.summary.completed_orders || 0;
-            document.getElementById('supplier-rating').textContent = 'N/A'; // Rating not implemented yet
+            const totalPosEl = document.getElementById('supplier-total-pos');
+            const approvedPosEl = document.getElementById('supplier-approved-pos');
+            const pendingPosEl = document.getElementById('supplier-pending-pos');
+            const completedPosEl = document.getElementById('supplier-completed-pos');
+
+            if (totalPosEl) totalPosEl.textContent = data.data.summary.total_pos || 0;
+            if (approvedPosEl) approvedPosEl.textContent = data.data.summary.approved_orders || 0;
+            if (pendingPosEl) pendingPosEl.textContent = data.data.summary.pending_orders || 0;
+            if (completedPosEl) completedPosEl.textContent = data.data.summary.completed_orders || 0;
 
             // Load recent POs
             const tbody = document.getElementById('supplier-recent-pos');
@@ -360,7 +364,7 @@ async function loadSupplierHomePage() {
                         <td><span class="badge bg-${getStatusColor(order.status)}">${order.status}</span></td>
                         <td>₱${parseFloat(order.total_amount).toLocaleString()}</td>
                         <td>
-                            <button onclick="viewPODetails('${order.id}')" class="btn btn-sm btn-primary">View</button>
+                            <button onclick="viewSupplierPurchaseOrder('${order.id}')" class="btn btn-sm btn-primary">View</button>
                         </td>
                     </tr>
                 `).join('');
@@ -2778,8 +2782,9 @@ async function loadPendingOrders() {
 
         loadingIndicator.classList.add('d-none');
 
-        if (data.success && data.orders && data.orders.length > 0) {
-            tbody.innerHTML = data.orders.map(order => `
+        const orders = data.data?.orders || data.orders || [];
+        if (data.success && orders.length > 0) {
+            tbody.innerHTML = orders.map(order => `
                 <tr>
                     <td>
                         <strong>${order.po_number || `PO-${order.id}`}</strong>
@@ -2787,7 +2792,7 @@ async function loadPendingOrders() {
                     <td>${formatDate(order.created_at)}</td>
                     <td>${formatDate(order.expected_delivery)}</td>
                     <td>
-                        <span class="badge bg-info">${order.total_items || 0} items</span>
+                        <span class="badge bg-info">${order.total_items || order.items?.length || 0} items</span>
                     </td>
                     <td>
                         <strong class="text-primary">${formatCurrency(order.total_amount)}</strong>
@@ -2799,13 +2804,13 @@ async function loadPendingOrders() {
                     </td>
                     <td>
                         <div class="btn-group btn-group-sm">
-                            <button onclick="viewPurchaseOrder(${order.id})" class="btn btn-outline-primary" title="View Details">
+                            <button onclick="viewSupplierPurchaseOrder(${order.id})" class="btn btn-outline-primary" title="View Details">
                                 <i class="fas fa-eye"></i>
                             </button>
-                            <button onclick="approvePurchaseOrder(${order.id})" class="btn btn-outline-success" title="Approve Order">
+                            <button onclick="approveSupplierPurchaseOrder(${order.id})" class="btn btn-outline-success" title="Approve Order">
                                 <i class="fas fa-check"></i>
                             </button>
-                            <button onclick="rejectPurchaseOrder(${order.id})" class="btn btn-outline-danger" title="Reject Order">
+                            <button onclick="rejectSupplierPurchaseOrder(${order.id})" class="btn btn-outline-danger" title="Reject Order">
                                 <i class="fas fa-times"></i>
                             </button>
                         </div>
@@ -2925,8 +2930,9 @@ async function loadOrderHistory(statusFilter = 'all') {
 
         loadingIndicator.classList.add('d-none');
 
-        if (data.success && data.orders && data.orders.length > 0) {
-            tbody.innerHTML = data.orders.map(order => {
+        const orders = data.data?.orders || data.orders || [];
+        if (data.success && orders.length > 0) {
+            tbody.innerHTML = orders.map(order => {
                 let statusBadge = '';
                 let statusIcon = '';
 
@@ -2939,6 +2945,7 @@ async function loadOrderHistory(statusFilter = 'all') {
                         statusBadge = 'bg-danger';
                         statusIcon = 'fas fa-times-circle';
                         break;
+                    case 'received':
                     case 'completed':
                         statusBadge = 'bg-primary';
                         statusIcon = 'fas fa-check-double';
@@ -2967,7 +2974,7 @@ async function loadOrderHistory(statusFilter = 'all') {
                         </td>
                         <td>${formatDate(order.updated_at || order.created_at)}</td>
                         <td>
-                            <button onclick="viewPurchaseOrder(${order.id})" class="btn btn-outline-primary btn-sm" title="View Details">
+                            <button onclick="viewSupplierPurchaseOrder(${order.id})" class="btn btn-outline-primary btn-sm" title="View Details">
                                 <i class="fas fa-eye"></i> View
                             </button>
                         </td>
@@ -2987,9 +2994,9 @@ async function loadOrderHistory(statusFilter = 'all') {
 }
 
 // Purchase Order Action Functions
-async function viewPurchaseOrder(orderId) {
+async function viewSupplierPurchaseOrder(orderId) {
     try {
-        const response = await fetch(`${API_BASE}/purchase_orders/show.php?id=${orderId}`, {
+        const response = await fetch(`${API_BASE}/supplier/purchase-order-details.php?id=${orderId}`, {
             method: 'GET',
             credentials: 'same-origin',
             headers: {
@@ -3105,11 +3112,11 @@ async function viewPurchaseOrder(orderId) {
                             </div>
                             <div class="modal-footer" style="border-color: var(--border-color);">
                                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
-                                ${order.status === 'pending' && currentUser.role === 'supplier' ? `
-                                    <button onclick="approvePurchaseOrder(${order.id})" class="btn btn-success">
+                                ${order.status === 'pending_supplier' && currentUser.role === 'supplier' ? `
+                                    <button onclick="approveSupplierPurchaseOrder(${order.id})" class="btn btn-success">
                                         <i class="fas fa-check me-1"></i>Approve Order
                                     </button>
-                                    <button onclick="rejectPurchaseOrder(${order.id})" class="btn btn-danger">
+                                    <button onclick="rejectSupplierPurchaseOrder(${order.id})" class="btn btn-danger">
                                         <i class="fas fa-times me-1"></i>Reject Order
                                     </button>
                                 ` : ''}
@@ -3146,7 +3153,7 @@ async function viewPurchaseOrder(orderId) {
     }
 }
 
-async function approvePurchaseOrder(orderId) {
+async function approveSupplierPurchaseOrder(orderId) {
     if (!await showConfirm('Are you sure you want to approve this purchase order?', {
         title: 'Approve Purchase Order',
         confirmText: 'Approve',
@@ -3157,12 +3164,14 @@ async function approvePurchaseOrder(orderId) {
     }
 
     try {
-        const response = await fetch(`${API_BASE}/purchase_orders/approve.php?id=${orderId}`, {
+        const response = await fetch(`${API_BASE}/supplier/approve-po.php`, {
             method: 'POST',
             credentials: 'same-origin',
             headers: {
+                'Content-Type': 'application/json',
                 'Accept': 'application/json'
-            }
+            },
+            body: JSON.stringify({ po_id: orderId })
         });
 
         if (!response.ok) {
@@ -3173,11 +3182,10 @@ async function approvePurchaseOrder(orderId) {
 
         if (data.success) {
             showSuccess('Purchase order approved successfully');
-            // Refresh current page
-            if (window.location.hash.includes('purchase-orders')) {
-                await loadSupplierPendingOrdersPage();
-            } else if (window.location.hash.includes('po-history')) {
+            if (typeof currentPage !== 'undefined' && currentPage === 'po-history') {
                 await loadSupplierOrderHistoryPage();
+            } else {
+                await loadSupplierPendingOrdersPage();
             }
         } else {
             showError(data.message || 'Failed to approve purchase order');
@@ -3188,7 +3196,7 @@ async function approvePurchaseOrder(orderId) {
     }
 }
 
-async function rejectPurchaseOrder(orderId) {
+async function rejectSupplierPurchaseOrder(orderId) {
     const reason = await showPrompt('Please provide a reason for rejecting this purchase order:', {
         title: 'Reject Purchase Order',
         required: true
@@ -3197,14 +3205,14 @@ async function rejectPurchaseOrder(orderId) {
     if (!reason) return;
 
     try {
-        const response = await fetch(`${API_BASE}/purchase_orders/reject.php?id=${orderId}`, {
+        const response = await fetch(`${API_BASE}/supplier/reject-po.php`, {
             method: 'POST',
             credentials: 'same-origin',
             headers: {
                 'Content-Type': 'application/json',
                 'Accept': 'application/json'
             },
-            body: JSON.stringify({ reason })
+            body: JSON.stringify({ po_id: orderId, reason })
         });
 
         if (!response.ok) {
@@ -3215,11 +3223,10 @@ async function rejectPurchaseOrder(orderId) {
 
         if (data.success) {
             showSuccess('Purchase order rejected successfully');
-            // Refresh current page
-            if (window.location.hash.includes('purchase-orders')) {
-                await loadSupplierPendingOrdersPage();
-            } else if (window.location.hash.includes('po-history')) {
+            if (typeof currentPage !== 'undefined' && currentPage === 'po-history') {
                 await loadSupplierOrderHistoryPage();
+            } else {
+                await loadSupplierPendingOrdersPage();
             }
         } else {
             showError(data.message || 'Failed to reject purchase order');
@@ -5040,10 +5047,10 @@ async function loadStockAdjustmentsPage() {
                     <nav id="adjustments-pagination" class="mt-4" style="display: none;">
                         <ul class="pagination justify-content-center">
                             <li class="page-item" id="prev-page">
-                                <a class="page-link" href="#" onclick="changePage(currentPage - 1)">Previous</a>
+                                <a class="page-link" href="#" onclick="changePage((window.stockAdjustmentsCurrentPage || 1) - 1)">Previous</a>
                             </li>
                             <li class="page-item" id="next-page">
-                                <a class="page-link" href="#" onclick="changePage(currentPage + 1)">Next</a>
+                                <a class="page-link" href="#" onclick="changePage((window.stockAdjustmentsCurrentPage || 1) + 1)">Next</a>
                             </li>
                         </ul>
                     </nav>
@@ -5067,8 +5074,8 @@ async function loadStockAdjustmentsPage() {
     await loadProductsForAdjustments();
 
     // Load adjustments
-    currentPage = 1;
-    await loadStockAdjustments();
+    window.stockAdjustmentsCurrentPage = 1;
+    await loadStockAdjustments(window.stockAdjustmentsCurrentPage);
 
     // Add event listeners
     document.getElementById('adjustment-type-filter').addEventListener('change', () => loadStockAdjustments());
@@ -5081,6 +5088,7 @@ async function loadStockAdjustmentsPage() {
 let allProductsForAdjustments = [];
 let loadedAdjustments = []; // Store loaded adjustments for viewing details
 const itemsPerPage = 20;
+window.stockAdjustmentsCurrentPage = window.stockAdjustmentsCurrentPage || 1;
 
 async function loadProductsForAdjustments() {
     try {
@@ -5096,6 +5104,9 @@ async function loadProductsForAdjustments() {
 }
 
 async function loadStockAdjustments(page = 1) {
+    page = Math.max(1, Number(page) || Number(window.stockAdjustmentsCurrentPage) || 1);
+    window.stockAdjustmentsCurrentPage = page;
+
     const loadingIndicator = document.getElementById('adjustments-loading');
     const content = document.getElementById('adjustments-content');
     const noAdjustmentsMessage = document.getElementById('no-adjustments-message');
@@ -5236,8 +5247,8 @@ function getAdjustmentReasonBadge(reason) {
 }
 
 function changePage(page) {
-    currentPage = Math.max(1, page);
-    loadStockAdjustments(currentPage);
+    window.stockAdjustmentsCurrentPage = Math.max(1, Number(page) || 1);
+    loadStockAdjustments(window.stockAdjustmentsCurrentPage);
 }
 
 async function openStockAdjustmentModal() {
@@ -5855,9 +5866,7 @@ function stopLivePageAutoRefresh() {
 }
 
 function getCurrentAdjustmentsPage() {
-    const activePaginationLink = document.querySelector('#adjustments-pagination .page-item.active .page-link');
-    if (!activePaginationLink) return 1;
-    const parsed = parseInt(activePaginationLink.textContent, 10);
+    const parsed = Number(window.stockAdjustmentsCurrentPage);
     return Number.isFinite(parsed) && parsed > 0 ? parsed : 1;
 }
 
@@ -5975,6 +5984,7 @@ window.stopLivePageAutoRefresh = stopLivePageAutoRefresh;
 
 async function loadSuppliersPage() {
     const content = document.getElementById('page-content');
+    const canManagePendingSuppliers = currentUser?.role === 'admin';
     stopSuppliersAutoRefresh();
     content.innerHTML = `
         <div class="page-header">
@@ -6043,6 +6053,7 @@ async function loadSuppliersPage() {
             </div>
         </div>
 
+        ${canManagePendingSuppliers ? `
         <div class="card mt-4" style="background: var(--bg-card); border: 1px solid var(--border-color);">
             <div class="card-header" style="background: var(--bg-tertiary); border-color: var(--border-color);">
                 <h5 class="mb-0"><i class="fas fa-clock me-2"></i>Pending Supplier Approvals</h5>
@@ -6081,12 +6092,15 @@ async function loadSuppliersPage() {
                 </div>
             </div>
         </div>
+        ` : ''}
     `;
 
     // Load suppliers and pending approvals
     await loadSuppliers();
-    await loadPendingSuppliers();
-    startSuppliersAutoRefresh();
+    if (canManagePendingSuppliers) {
+        await loadPendingSuppliers();
+        startSuppliersAutoRefresh();
+    }
 
     // Add event listeners
     document.getElementById('supplier-search').addEventListener('input', debounce(() => loadSuppliers(), 500));
@@ -6163,6 +6177,7 @@ async function loadSuppliers() {
 
 function displaySuppliers(suppliers, statusFilter, searchFilter, includePerformance) {
     const tbody = document.getElementById('suppliers-table-body');
+    const canManageSuppliers = currentUser?.role === 'admin';
     const filtered = suppliers.filter(supplier => {
         // Status filter
         if (statusFilter !== 'all') {
@@ -6209,6 +6224,7 @@ function displaySuppliers(suppliers, statusFilter, searchFilter, includePerforma
             </td>
             <td>${getSupplierStatusBadge(supplier)}</td>
             <td>
+                ${canManageSuppliers ? `
                 <div class="btn-group btn-group-sm">
                     <button onclick="toggleSupplierStatus(${supplier.id}, ${supplier.is_active})" class="btn btn-outline-${supplier.is_active ? 'warning' : 'success'}" title="${supplier.is_active ? 'Deactivate' : 'Activate'}">
                         <i class="fas fa-${supplier.is_active ? 'ban' : 'check'}"></i>
@@ -6217,6 +6233,7 @@ function displaySuppliers(suppliers, statusFilter, searchFilter, includePerforma
                         <i class="fas fa-trash"></i>
                     </button>
                 </div>
+                ` : '<span class="text-muted">View only</span>'}
             </td>
         </tr>
     `).join('');
@@ -6522,7 +6539,7 @@ async function loadPurchaseOrders() {
         let url = `${API_BASE}/purchase_orders/index.php`;
         const params = [];
 
-        if (statusFilter !== 'all') params.push(`inspection_status=${encodeURIComponent(statusFilter)}`);
+        if (statusFilter !== 'all') params.push(`status=${encodeURIComponent(statusFilter)}`);
         if (supplierFilter !== 'all') params.push(`supplier_id=${supplierFilter}`);
 
         if (params.length > 0) url += '?' + params.join('&');
@@ -6554,7 +6571,7 @@ async function loadPurchaseOrders() {
                 const approved = allPurchaseOrders.filter(po => po.status === 'approved').length;
                 const pending = allPurchaseOrders.filter(po => po.status === 'pending' || po.status === 'pending_supplier').length;
                 const completed = allPurchaseOrders.filter(po => po.status === 'completed' || po.status === 'delivered' || po.status === 'received').length;
-                summary.textContent = `${allPurchaseOrders.length} PO${allPurchaseOrders.length === 1 ? '' : 's'} • ${approved} approved • ${pending} pending • ${completed} completed`;
+                summary.textContent = `${allPurchaseOrders.length} PO${allPurchaseOrders.length === 1 ? '' : 's'} | ${approved} approved | ${pending} pending | ${completed} completed`;
             }
         } else {
             noPOMessage.classList.remove('d-none');
@@ -6569,6 +6586,7 @@ async function loadPurchaseOrders() {
 
 function displayPurchaseOrders(purchaseOrders) {
     const tbody = document.getElementById('po-table-body');
+    const canDeletePurchaseOrders = currentUser?.role === 'admin';
     tbody.innerHTML = purchaseOrders.map(po => `
         <tr>
             <td>
@@ -6599,9 +6617,11 @@ function displayPurchaseOrders(purchaseOrders) {
                         <button onclick="editPurchaseOrder(${po.id})" class="btn btn-outline-primary" title="Edit Order">
                             <i class="fas fa-edit"></i>
                         </button>
+                        ${canDeletePurchaseOrders ? `
                         <button onclick="deletePurchaseOrder(${po.id})" class="btn btn-outline-danger" title="Delete">
                             <i class="fas fa-trash"></i>
                         </button>
+                        ` : ''}
                     ` : ''}
                 </div>
             </td>
@@ -6624,7 +6644,7 @@ function getPOStatusBadge(status) {
 }
 
 // Purchase Order Action Functions
-async function editPurchaseOrder(id) {
+async function legacyEditPurchaseOrder(id) {
     // Check if PO is approved before allowing edit
     try {
         const response = await fetch(`${API_BASE}/purchase_orders/show.php?id=${id}`);
@@ -6642,7 +6662,7 @@ async function editPurchaseOrder(id) {
     await openPurchaseOrderModal(id);
 }
 
-async function approvePurchaseOrder(id) {
+async function legacyApprovePurchaseOrder(id) {
     if (!await showConfirm('Are you sure you want to approve this purchase order?', {
         title: 'Approve Purchase Order',
         confirmText: 'Approve',
@@ -6671,7 +6691,7 @@ async function approvePurchaseOrder(id) {
     }
 }
 
-async function rejectPurchaseOrder(id) {
+async function legacyRejectPurchaseOrder(id) {
     if (!await showConfirm('Are you sure you want to reject this purchase order?', {
         title: 'Reject Purchase Order',
         confirmText: 'Reject',
@@ -6700,7 +6720,7 @@ async function rejectPurchaseOrder(id) {
     }
 }
 
-async function deletePurchaseOrder(id) {
+async function legacyDeletePurchaseOrder(id) {
     // Check if PO is approved before allowing delete
     try {
         const response = await fetch(`${API_BASE}/purchase_orders/show.php?id=${id}`);
@@ -7607,57 +7627,13 @@ async function editPurchaseOrder(id) {
 }
 
 async function approvePurchaseOrder(id) {
-    if (!await showConfirm('Are you sure you want to approve this purchase order?', {
-        title: 'Approve Purchase Order',
-        confirmText: 'Approve',
-        type: 'success',
-        icon: 'fas fa-check'
-    })) {
-        return;
-    }
-
-    try {
-        const response = await fetch(`${API_BASE}/purchase_orders/approve.php?id=${id}`, {
-            method: 'POST'
-        });
-
-        const result = await response.json();
-        if (result.success) {
-            showSuccess('Purchase order approved successfully');
-            await loadPurchaseOrders();
-        } else {
-            showError(result.message || 'Failed to approve purchase order');
-        }
-    } catch (error) {
-        showError('Failed to approve purchase order');
-    }
+    void id;
+    showError('Direct purchase order approval is not available on this page. Supplier approval is handled from the supplier portal.');
 }
 
 async function rejectPurchaseOrder(id) {
-    const reason = await showPrompt('Please provide a reason for rejecting this purchase order:', {
-        title: 'Reject Purchase Order',
-        required: true
-    });
-
-    if (!reason) return;
-
-    try {
-        const response = await fetch(`${API_BASE}/purchase_orders/reject.php?id=${id}`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ reason })
-        });
-
-        const result = await response.json();
-        if (result.success) {
-            showSuccess('Purchase order rejected successfully');
-            await loadPurchaseOrders();
-        } else {
-            showError(result.message || 'Failed to reject purchase order');
-        }
-    } catch (error) {
-        showError('Failed to reject purchase order');
-    }
+    void id;
+    showError('Direct purchase order rejection is not available on this page. Supplier rejection is handled from the supplier portal.');
 }
 
 async function deletePurchaseOrder(id) {
@@ -10609,6 +10585,9 @@ async function deleteProduct(id) {
 
 // Stock Adjustments functions
 async function loadStockAdjustments(page = 1) {
+    page = Math.max(1, Number(page) || Number(window.stockAdjustmentsCurrentPage) || 1);
+    window.stockAdjustmentsCurrentPage = page;
+
     const loadingIndicator = document.getElementById('adjustments-loading');
     const content = document.getElementById('adjustments-content');
     const noAdjustmentsMessage = document.getElementById('no-adjustments-message');
@@ -10743,8 +10722,8 @@ function getAdjustmentReasonBadge(reason) {
 }
 
 function changePage(page) {
-    currentPage = Math.max(1, page);
-    loadStockAdjustments(currentPage);
+    window.stockAdjustmentsCurrentPage = Math.max(1, Number(page) || 1);
+    loadStockAdjustments(window.stockAdjustmentsCurrentPage);
 }
 
 async function openStockAdjustmentModal() {

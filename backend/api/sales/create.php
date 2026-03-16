@@ -69,13 +69,8 @@ try {
     // Start transaction
     $conn->beginTransaction();
 
-    // Generate invoice number
-    $stmt = $conn->query("SELECT setting_value FROM settings WHERE setting_key = 'invoice_auto_number'");
-    $prefix = $stmt->fetch(PDO::FETCH_ASSOC)['setting_value'] ?? 'INV-2025-';
-
-    $stmt = $conn->query("SELECT COUNT(*) + 1 as next_num FROM sales");
-    $nextNum = $stmt->fetch(PDO::FETCH_ASSOC)['next_num'];
-    $invoiceNumber = $prefix . str_pad($nextNum, 5, '0', STR_PAD_LEFT);
+    // Generate invoice number from the latest existing invoice.
+    $invoiceNumber = generateInvoiceNumber($conn);
 
     // Process items and calculate/validate totals
     $calculatedSubtotal = 0;
@@ -257,5 +252,38 @@ try {
     }
     error_log('Sale creation error: ' . $e->getMessage() . ' | Trace: ' . $e->getTraceAsString());
     Response::serverError('Failed to create sale: ' . $e->getMessage());
+}
+
+function generateInvoiceNumber(PDO $conn): string {
+    $prefix = 'INV-' . date('Y') . '-';
+
+    $stmt = $conn->prepare("SELECT setting_value FROM settings WHERE setting_key = 'invoice_auto_number' LIMIT 1");
+    $stmt->execute();
+    $configuredPrefix = $stmt->fetchColumn();
+
+    if (is_string($configuredPrefix) && trim($configuredPrefix) !== '') {
+        $prefix = trim($configuredPrefix);
+    }
+
+    if (!preg_match('/[-_]$/', $prefix)) {
+        $prefix .= '-';
+    }
+
+    $stmt = $conn->prepare("
+        SELECT invoice_number
+        FROM sales
+        WHERE invoice_number LIKE :prefix
+        ORDER BY id DESC
+        LIMIT 1
+    ");
+    $stmt->execute([':prefix' => $prefix . '%']);
+    $lastInvoiceNumber = $stmt->fetchColumn();
+
+    $nextNumber = 1;
+    if (is_string($lastInvoiceNumber) && preg_match('/(\d+)\s*$/', $lastInvoiceNumber, $matches)) {
+        $nextNumber = ((int)$matches[1]) + 1;
+    }
+
+    return $prefix . str_pad((string)$nextNumber, 5, '0', STR_PAD_LEFT);
 }
 

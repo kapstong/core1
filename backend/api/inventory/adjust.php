@@ -27,6 +27,11 @@ if (!Auth::check()) {
 
 // Get user data
 $user = Auth::user();
+$allowedRoles = ['admin', 'inventory_manager', 'purchasing_officer', 'staff'];
+
+if (!in_array((string)($user['role'] ?? ''), $allowedRoles, true)) {
+    Response::error('Access denied', 403);
+}
 
 $method = $_SERVER['REQUEST_METHOD'];
 

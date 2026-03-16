@@ -138,6 +138,8 @@ class Auth {
             require_once __DIR__ . '/../utils/Response.php';
             Response::unauthorized('Please login to continue');
         }
+
+        return self::user();
     }
 
     /**

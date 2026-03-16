@@ -20,8 +20,8 @@ require_once __DIR__ . '/../../middleware/CORS.php';
 
 CORS::handle();
 
-// Require authentication (any authenticated user can view orders for now)
-Auth::requireAuth();
+// Customer order management is restricted to internal staff roles.
+Auth::requireRole(['admin', 'inventory_manager', 'purchasing_officer', 'staff']);
 
 $method = $_SERVER['REQUEST_METHOD'];
 
@@ -159,7 +159,7 @@ function getOrderDetails($orderId) {
 
 function updateOrderStatus() {
     // Check staff authentication for updates (admin, inventory_manager, staff, or purchasing_officer)
-    if (!Auth::isInventoryManager() && !Auth::hasRole('staff') && !Auth::hasRole('purchasing_officer')) {
+    if (!Auth::hasRole(['admin', 'inventory_manager', 'staff', 'purchasing_officer'])) {
         Response::error('Staff access required for order updates', 403);
     }
 

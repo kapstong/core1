@@ -14,7 +14,7 @@ require_once '../../utils/AuditLogger.php';
 // Ensure only suppliers can approve POs
 Auth::requireRole('supplier');
 $user = Auth::user();
-$supplier_id = $user->id;
+$supplier_id = (int)($user['id'] ?? 0);
 
 // Only allow POST requests
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
@@ -23,18 +23,19 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
 
 try {
     $input = json_decode(file_get_contents('php://input'), true);
-    
-    if (!isset($input['id']) || !isset($input['action'])) {
-        Response::error('Purchase order ID and action are required', 400);
+    if (!is_array($input)) {
+        $input = [];
     }
 
-    $po_id = intval($input['id']);
-    $action = $input['action']; // 'approve' or 'reject'
-    $reason = $input['reason'] ?? null;
+    $po_id = isset($_GET['id'])
+        ? (int)$_GET['id']
+        : (isset($input['id']) ? (int)$input['id'] : (isset($input['po_id']) ? (int)$input['po_id'] : 0));
 
-    if (!in_array($action, ['approve', 'reject'])) {
-        Response::error('Invalid action. Must be either approve or reject', 400);
+    if ($po_id <= 0) {
+        Response::error('Purchase order ID is required', 400);
     }
+
+    $reason = isset($input['reason']) ? trim((string)$input['reason']) : null;
 
     $db = Database::getInstance();
     $po = new PurchaseOrder($db);
@@ -52,37 +53,33 @@ try {
 
     // Verify PO is in pending status
     if ($poDetails['status'] !== 'pending_supplier') {
-        Response::error('Purchase order is not pending supplier approval');
+        Response::error('Purchase order is not pending supplier approval', 400);
     }
 
-    // Determine new status and notes
-    $newStatus = $action === 'approve' ? 'approved' : 'rejected';
-    $notes = $action === 'approve' ? 
-        'Approved by supplier' : 
-        'Rejected by supplier' . ($reason ? ": $reason" : '');
+    $newStatus = 'approved';
+    $notes = 'Approved by supplier' . ($reason ? ": {$reason}" : '');
 
     // Update the PO status
     if ($po->updateStatus($po_id, $newStatus, $supplier_id, $notes)) {
         // Log the approval/rejection to audit logs
-        AuditLogger::logUpdate('purchase_order', $po_id, "Purchase order {$poDetails['po_number']} {$action}d by supplier", [
+        AuditLogger::logUpdate('purchase_order', $po_id, "Purchase order {$poDetails['po_number']} approved by supplier", [
             'old_status' => $poDetails['status'],
             'new_status' => $newStatus,
             'po_number' => $poDetails['po_number'],
             'supplier_id' => $supplier_id,
-            'action' => $action,
             'reason' => $reason
         ], [
             'status' => $newStatus,
             'notes' => $notes,
-            'supplier_approved_at' => $newStatus === 'approved' ? date('Y-m-d H:i:s') : null
+            'supplier_approved_at' => date('Y-m-d H:i:s')
         ]);
 
         Response::success([
             'status' => $newStatus,
-            'message' => "Purchase order has been {$action}d successfully"
+            'message' => 'Purchase order has been approved successfully'
         ]);
     } else {
-        Response::error("Failed to {$action} purchase order");
+        Response::error('Failed to approve purchase order');
     }
 } catch (Exception $e) {
     Response::error('An error occurred: ' . $e->getMessage());

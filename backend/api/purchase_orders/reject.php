@@ -11,7 +11,8 @@ require_once '../../utils/Response.php';
 
 // Ensure only suppliers can reject POs
 Auth::requireRole('supplier');
-$supplier_id = Auth::user()->id;
+$supplier = Auth::user();
+$supplier_id = (int)($supplier['id'] ?? 0);
 
 // Only allow POST requests
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
@@ -40,8 +41,8 @@ try {
     }
 
     // Verify PO is in pending status
-    if ($poDetails['status'] !== 'pending_approval') {
-        Response::error('Purchase order is not pending approval');
+    if ($poDetails['status'] !== 'pending_supplier') {
+        Response::error('Purchase order is not pending supplier approval', 400);
     }
 
     // Get the rejection reason from the request body

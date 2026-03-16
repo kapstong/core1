@@ -84,7 +84,7 @@ class PurchaseOrder {
                 LEFT JOIN users u ON po.supplier_id = u.id AND u.role = 'supplier'
                 LEFT JOIN users cu ON po.created_by = cu.id
                 WHERE po.supplier_id = :supplier_id
-                AND po.status = 'pending_approval'
+                AND po.status = 'pending_supplier'
                 ORDER BY po.created_at DESC";
 
         return $this->db->fetchAll($sql, [':supplier_id' => $supplier_id]);
