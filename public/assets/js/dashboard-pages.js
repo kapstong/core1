@@ -385,7 +385,10 @@ const profileFaceEnrollmentState = {
     rafHandle: null,
     libsLoaded: false,
     modelsLoaded: false,
+    scannerConfig: null,
+    useTinyLandmarkNet: true,
     lastDescriptor: null,
+    lastDescriptorAt: 0,
     descriptorAverager: null,
     blinkEngine: null,
     overlayState: null,
@@ -419,8 +422,11 @@ function ensureProfileFaceCore() {
     if (!window.FaceAuthCore) {
         throw new Error('Face auth core library failed to load.');
     }
+    if (!profileFaceEnrollmentState.scannerConfig) {
+        profileFaceEnrollmentState.scannerConfig = FaceAuthCore.createScannerConfig();
+    }
     if (!profileFaceEnrollmentState.descriptorAverager) {
-        profileFaceEnrollmentState.descriptorAverager = FaceAuthCore.createDescriptorAverager(24);
+        profileFaceEnrollmentState.descriptorAverager = FaceAuthCore.createDescriptorAverager(profileFaceEnrollmentState.scannerConfig.maxDescriptorSamples);
     }
     if (!profileFaceEnrollmentState.blinkEngine) {
         profileFaceEnrollmentState.blinkEngine = FaceAuthCore.createBlinkEngine();
@@ -433,6 +439,7 @@ function ensureProfileFaceCore() {
 function resetProfileFaceLiveState() {
     ensureProfileFaceCore();
     profileFaceEnrollmentState.lastDescriptor = null;
+    profileFaceEnrollmentState.lastDescriptorAt = 0;
     profileFaceEnrollmentState.descriptorAverager.reset();
     profileFaceEnrollmentState.blinkEngine.reset();
     profileFaceEnrollmentState.overlayState = FaceAuthCore.createOverlayState();
@@ -490,7 +497,7 @@ async function ensureFaceApiLibraries() {
 
     profileFaceLibsPromise = (async () => {
         if (!window.FaceAuthCore) {
-            await loadScript('assets/js/face-auth-core.js?v=1.0');
+            await loadScript('assets/js/face-auth-core.js?v=1.1');
         }
         if (!window.faceapi) {
             let lastError = null;
@@ -516,33 +523,45 @@ async function ensureProfileFaceModels() {
     if (profileFaceEnrollmentState.modelsLoaded) return;
     await ensureFaceApiLibraries();
     ensureProfileFaceCore();
+    const scannerConfig = profileFaceEnrollmentState.scannerConfig || FaceAuthCore.createScannerConfig();
+    profileFaceEnrollmentState.scannerConfig = scannerConfig;
 
     const withTimeout = (promise, ms, message) => Promise.race([
         promise,
         new Promise((_, reject) => setTimeout(() => reject(new Error(message)), ms))
     ]);
 
-    let loaded = false;
+    const supportsTinyLandmarks = !!(
+        faceapi.nets
+        && faceapi.nets.faceLandmark68TinyNet
+        && typeof faceapi.nets.faceLandmark68TinyNet.loadFromUri === 'function'
+    );
+    const landmarkModes = (scannerConfig.useTinyLandmarkNet && supportsTinyLandmarks)
+        ? [true, false]
+        : [false];
+
     let lastError = null;
-    for (const modelBase of FACE_API_MODEL_BASES) {
-        try {
-            await withTimeout(Promise.all([
-                faceapi.nets.tinyFaceDetector.loadFromUri(modelBase),
-                faceapi.nets.faceLandmark68Net.loadFromUri(modelBase),
-                faceapi.nets.faceRecognitionNet.loadFromUri(modelBase)
-            ]), 15000, `Model load timeout from ${modelBase}`);
-            loaded = true;
-            break;
-        } catch (error) {
-            lastError = error;
+    for (const useTinyLandmarkNet of landmarkModes) {
+        for (const modelBase of FACE_API_MODEL_BASES) {
+            try {
+                await withTimeout(Promise.all([
+                    faceapi.nets.tinyFaceDetector.loadFromUri(modelBase),
+                    useTinyLandmarkNet
+                        ? faceapi.nets.faceLandmark68TinyNet.loadFromUri(modelBase)
+                        : faceapi.nets.faceLandmark68Net.loadFromUri(modelBase),
+                    faceapi.nets.faceRecognitionNet.loadFromUri(modelBase)
+                ]), 15000, `Model load timeout from ${modelBase}`);
+
+                profileFaceEnrollmentState.useTinyLandmarkNet = useTinyLandmarkNet;
+                profileFaceEnrollmentState.modelsLoaded = true;
+                return;
+            } catch (error) {
+                lastError = error;
+            }
         }
     }
 
-    if (!loaded) {
-        throw lastError || new Error('Unable to load face detector models');
-    }
-
-    profileFaceEnrollmentState.modelsLoaded = true;
+    throw lastError || new Error('Unable to load face detector models');
 }
 
 function cleanupProfileFaceEnrollment() {
@@ -1306,32 +1325,55 @@ async function initProfileFaceEnrollmentSection() {
             video: modalVideoEl,
             detection,
             metrics: liveMetrics || {},
-            overlayState: profileFaceEnrollmentState.overlayState
+            overlayState: profileFaceEnrollmentState.overlayState,
+            detailLevel: profileFaceEnrollmentState.scannerConfig ? profileFaceEnrollmentState.scannerConfig.overlayDetail : 'full'
         });
     };
 
     const runDetectionLoop = async () => {
         stopDetectionLoop();
         ensureProfileFaceCore();
-        const detectorOptions = new faceapi.TinyFaceDetectorOptions({
-            inputSize: 320,
-            scoreThreshold: 0.14
-        });
+        const scannerConfig = profileFaceEnrollmentState.scannerConfig || FaceAuthCore.createScannerConfig();
+        profileFaceEnrollmentState.scannerConfig = scannerConfig;
+        const detectorOptions = FaceAuthCore.createTinyFaceDetectorOptions(scannerConfig)
+            || new faceapi.TinyFaceDetectorOptions({
+                inputSize: scannerConfig.detectorInputSize,
+                scoreThreshold: scannerConfig.detectorScoreThreshold
+            });
 
         const detect = async () => {
             try {
-                const now = Date.now();
-                if (now - profileFaceEnrollmentState.lastDetectionAt >= 70) {
-                    profileFaceEnrollmentState.lastDetectionAt = now;
+                if (!modalVideoEl || modalVideoEl.readyState < 2) {
+                    return;
+                }
 
-                    const detection = await faceapi
+                const now = Date.now();
+                const detectInterval = (
+                    profileFaceEnrollmentState.lastFaceSeenAt > 0
+                    && (now - profileFaceEnrollmentState.lastFaceSeenAt) <= scannerConfig.trackGraceMs
+                )
+                    ? scannerConfig.detectIntervalMs
+                    : scannerConfig.idleDetectIntervalMs;
+
+                if (now - profileFaceEnrollmentState.lastDetectionAt >= detectInterval) {
+                    profileFaceEnrollmentState.lastDetectionAt = now;
+                    const shouldCaptureDescriptor = (
+                        !profileFaceEnrollmentState.lastDescriptor
+                        || profileFaceEnrollmentState.descriptorSamples.length < scannerConfig.maxDescriptorSamples
+                        || (now - profileFaceEnrollmentState.lastDescriptorAt) >= scannerConfig.descriptorIntervalMs
+                    );
+                    let detectionTask = faceapi
                         .detectSingleFace(modalVideoEl, detectorOptions)
-                        .withFaceLandmarks()
-                        .withFaceDescriptor();
+                        .withFaceLandmarks(!!profileFaceEnrollmentState.useTinyLandmarkNet);
+                    if (shouldCaptureDescriptor) {
+                        detectionTask = detectionTask.withFaceDescriptor();
+                    }
+
+                    const detection = await detectionTask;
 
                     if (!detection) {
                         profileFaceEnrollmentState.missedDetectionFrames += 1;
-                        const trackGraceMs = 1800;
+                        const trackGraceMs = scannerConfig.trackGraceMs;
                         const hasRecentTrack = profileFaceEnrollmentState.lastFaceSeenAt > 0
                             && (now - profileFaceEnrollmentState.lastFaceSeenAt) <= trackGraceMs;
                         const hasShortMissBurst = profileFaceEnrollmentState.lastFaceSeenAt > 0
@@ -1370,7 +1412,10 @@ async function initProfileFaceEnrollmentSection() {
                     } else {
                         profileFaceEnrollmentState.lastFaceSeenAt = now;
                         profileFaceEnrollmentState.missedDetectionFrames = 0;
-                        pushDescriptorSample(Array.from(detection.descriptor));
+                        if (detection.descriptor) {
+                            pushDescriptorSample(Array.from(detection.descriptor));
+                            profileFaceEnrollmentState.lastDescriptorAt = now;
+                        }
                         const liveMetrics = profileFaceEnrollmentState.blinkEngine.update({
                             landmarks: detection.landmarks,
                             box: detection.detection.box,
@@ -1440,12 +1485,7 @@ async function initProfileFaceEnrollmentSection() {
             }
 
             profileFaceEnrollmentState.stream = await navigator.mediaDevices.getUserMedia({
-                video: {
-                    facingMode: 'user',
-                    width: { ideal: 960 },
-                    height: { ideal: 720 },
-                    frameRate: { ideal: 30, max: 30 }
-                },
+                video: FaceAuthCore.getVideoConstraints(profileFaceEnrollmentState.scannerConfig),
                 audio: false
             });
 

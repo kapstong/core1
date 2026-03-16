@@ -87,19 +87,47 @@
         const limit = Math.max(6, Number(maxSamples) || 18);
         const state = {
             samples: [],
+            sum: new Array(128).fill(0),
             averaged: null
         };
 
+        function rebuildAverage() {
+            if (!state.samples.length) {
+                state.averaged = null;
+                return null;
+            }
+
+            const count = state.samples.length;
+            const average = new Array(128);
+            for (let i = 0; i < 128; i++) {
+                average[i] = state.sum[i] / count;
+            }
+            state.averaged = normalizeDescriptor(average);
+            return state.averaged;
+        }
+
         return {
             add: function(descriptor) {
-                if (!Array.isArray(descriptor) || descriptor.length !== 128) return state.averaged;
-                state.samples.push(descriptor);
-                if (state.samples.length > limit) state.samples.shift();
-                state.averaged = averageDescriptors(state.samples);
-                return state.averaged;
+                const normalized = normalizeDescriptor(descriptor);
+                if (!normalized) return state.averaged;
+
+                state.samples.push(normalized);
+                for (let i = 0; i < 128; i++) {
+                    state.sum[i] += normalized[i];
+                }
+
+                if (state.samples.length > limit) {
+                    const removed = state.samples.shift();
+                    for (let i = 0; i < 128; i++) {
+                        state.sum[i] -= removed[i];
+                    }
+                }
+
+                return rebuildAverage();
             },
             reset: function() {
                 state.samples = [];
+                state.sum = new Array(128).fill(0);
                 state.averaged = null;
             },
             getDescriptor: function() {
@@ -376,6 +404,124 @@
         };
     }
 
+    function getClientHardwareInfo() {
+        const nav = global.navigator || {};
+        const width = Number(global.innerWidth) || 0;
+        const height = Number(global.innerHeight) || 0;
+        const smallestViewportSide = Math.min(width || Number.MAX_SAFE_INTEGER, height || Number.MAX_SAFE_INTEGER);
+
+        return {
+            hardwareConcurrency: Math.max(0, Number(nav.hardwareConcurrency) || 0),
+            deviceMemory: Math.max(0, Number(nav.deviceMemory) || 0),
+            prefersReducedMotion: !!(global.matchMedia && global.matchMedia('(prefers-reduced-motion: reduce)').matches),
+            smallestViewportSide: Number.isFinite(smallestViewportSide) ? smallestViewportSide : 0
+        };
+    }
+
+    function createScannerConfig(options) {
+        const opts = Object.assign({
+            preferLowPower: false,
+            detailLevel: null,
+            maxSamples: null
+        }, options || {});
+        const hardware = getClientHardwareInfo();
+        const lowEnd = !!(
+            opts.preferLowPower
+            || hardware.prefersReducedMotion
+            || (hardware.deviceMemory > 0 && hardware.deviceMemory <= 4)
+            || (hardware.hardwareConcurrency > 0 && hardware.hardwareConcurrency <= 4)
+        );
+        const strongHardware = !lowEnd && !!(
+            (hardware.smallestViewportSide === 0 || hardware.smallestViewportSide > 900)
+            && (
+                hardware.deviceMemory > 8
+                || hardware.hardwareConcurrency > 8
+            )
+        );
+        const balanced = !lowEnd && !strongHardware;
+
+        const base = lowEnd
+            ? {
+                cameraWidth: 640,
+                cameraHeight: 480,
+                cameraFrameRateIdeal: 12,
+                cameraFrameRateMax: 15,
+                detectorInputSize: 160,
+                detectorScoreThreshold: 0.16,
+                detectIntervalMs: 135,
+                idleDetectIntervalMs: 220,
+                descriptorIntervalMs: 420,
+                maxDescriptorSamples: 10,
+                overlayDetail: 'minimal',
+                useTinyLandmarkNet: true,
+                trackGraceMs: 1800
+            }
+            : balanced
+                ? {
+                    cameraWidth: 640,
+                    cameraHeight: 480,
+                    cameraFrameRateIdeal: 15,
+                    cameraFrameRateMax: 18,
+                    detectorInputSize: 224,
+                    detectorScoreThreshold: 0.15,
+                    detectIntervalMs: 105,
+                    idleDetectIntervalMs: 180,
+                    descriptorIntervalMs: 320,
+                    maxDescriptorSamples: 12,
+                    overlayDetail: 'full',
+                    useTinyLandmarkNet: true,
+                    trackGraceMs: 1800
+                }
+                : {
+                    cameraWidth: 768,
+                    cameraHeight: 576,
+                    cameraFrameRateIdeal: 18,
+                    cameraFrameRateMax: 20,
+                    detectorInputSize: 224,
+                    detectorScoreThreshold: 0.14,
+                    detectIntervalMs: 90,
+                    idleDetectIntervalMs: 150,
+                    descriptorIntervalMs: 260,
+                    maxDescriptorSamples: 14,
+                    overlayDetail: 'full',
+                    useTinyLandmarkNet: true,
+                    trackGraceMs: 1800
+                };
+
+        return Object.assign({
+            tier: lowEnd ? 'low' : (strongHardware ? 'high' : 'balanced'),
+            hardware: hardware
+        }, base, {
+            overlayDetail: opts.detailLevel || base.overlayDetail,
+            maxDescriptorSamples: Math.max(6, Number(opts.maxSamples) || base.maxDescriptorSamples)
+        });
+    }
+
+    function getVideoConstraints(config) {
+        const profile = config || createScannerConfig();
+        return {
+            facingMode: 'user',
+            width: { ideal: profile.cameraWidth },
+            height: { ideal: profile.cameraHeight },
+            frameRate: {
+                ideal: profile.cameraFrameRateIdeal,
+                max: profile.cameraFrameRateMax
+            }
+        };
+    }
+
+    function createTinyFaceDetectorOptions(config) {
+        const profile = config || createScannerConfig();
+        if (!global.faceapi || typeof global.faceapi.TinyFaceDetectorOptions !== 'function') {
+            return null;
+        }
+
+        return new global.faceapi.TinyFaceDetectorOptions({
+            inputSize: profile.detectorInputSize,
+            scoreThreshold: profile.detectorScoreThreshold
+        });
+    }
+
     function ensureCanvasSize(canvas, video) {
         if (!canvas || !video) return;
         const width = video.clientWidth || 0;
@@ -493,6 +639,8 @@
         const detection = params.detection;
         const metrics = params.metrics || {};
         const overlayState = params.overlayState || createOverlayState();
+        const detailLevel = params.detailLevel || 'full';
+        const minimalDetail = detailLevel === 'minimal';
 
         ensureCanvasSize(canvas, video);
         const width = canvas.width;
@@ -528,84 +676,97 @@
 
         const pulse = 0.45 + (0.55 * ((Math.sin(overlayState.pulsePhase) + 1) * 0.5));
 
-        const frameGradient = ctx.createLinearGradient(box.x, box.y, box.x + box.width, box.y + box.height);
-        frameGradient.addColorStop(0, 'rgba(76, 234, 255, 0.96)');
-        frameGradient.addColorStop(1, 'rgba(98, 255, 194, 0.95)');
-        ctx.strokeStyle = frameGradient;
+        const frameStroke = minimalDetail
+            ? 'rgba(92, 239, 255, 0.95)'
+            : ctx.createLinearGradient(box.x, box.y, box.x + box.width, box.y + box.height);
+        if (!minimalDetail) {
+            frameStroke.addColorStop(0, 'rgba(76, 234, 255, 0.96)');
+            frameStroke.addColorStop(1, 'rgba(98, 255, 194, 0.95)');
+        }
+        ctx.strokeStyle = frameStroke;
         ctx.lineWidth = 1.8;
         ctx.strokeRect(box.x, box.y, box.width, box.height);
         drawCornerBrackets(ctx, box, 'rgba(115, 255, 231, 0.95)');
 
-        const haloGradient = ctx.createRadialGradient(
-            box.x + (box.width / 2),
-            box.y + (box.height / 2),
-            box.width * 0.1,
-            box.x + (box.width / 2),
-            box.y + (box.height / 2),
-            box.width * 0.75
-        );
-        haloGradient.addColorStop(0, 'rgba(70, 231, 255, 0.2)');
-        haloGradient.addColorStop(1, 'rgba(70, 231, 255, 0)');
-        ctx.fillStyle = haloGradient;
-        ctx.fillRect(box.x, box.y, box.width, box.height);
+        if (!minimalDetail) {
+            const haloGradient = ctx.createRadialGradient(
+                box.x + (box.width / 2),
+                box.y + (box.height / 2),
+                box.width * 0.1,
+                box.x + (box.width / 2),
+                box.y + (box.height / 2),
+                box.width * 0.75
+            );
+            haloGradient.addColorStop(0, 'rgba(70, 231, 255, 0.2)');
+            haloGradient.addColorStop(1, 'rgba(70, 231, 255, 0)');
+            ctx.fillStyle = haloGradient;
+            ctx.fillRect(box.x, box.y, box.width, box.height);
 
-        ctx.strokeStyle = 'rgba(140, 233, 255, 0.12)';
-        ctx.lineWidth = 1;
-        for (let i = 1; i < 4; i++) {
-            const x = box.x + ((box.width * i) / 4);
-            const y = box.y + ((box.height * i) / 4);
-            ctx.beginPath();
-            ctx.moveTo(x, box.y);
-            ctx.lineTo(x, box.y + box.height);
-            ctx.moveTo(box.x, y);
-            ctx.lineTo(box.x + box.width, y);
-            ctx.stroke();
+            ctx.strokeStyle = 'rgba(140, 233, 255, 0.12)';
+            ctx.lineWidth = 1;
+            for (let i = 1; i < 4; i++) {
+                const x = box.x + ((box.width * i) / 4);
+                const y = box.y + ((box.height * i) / 4);
+                ctx.beginPath();
+                ctx.moveTo(x, box.y);
+                ctx.lineTo(x, box.y + box.height);
+                ctx.moveTo(box.x, y);
+                ctx.lineTo(box.x + box.width, y);
+                ctx.stroke();
+            }
         }
 
-        drawGlowPolyline(ctx, leftEye, '#00e5ff', 2.2, true);
-        drawGlowPolyline(ctx, rightEye, '#00e5ff', 2.2, true);
-        drawGlowPolyline(ctx, nose, '#49ffba', 2.1, false);
-        drawGlowPolyline(ctx, mouth, '#ffd36d', 2.1, true);
-        drawPolyline(ctx, jaw, 'rgba(235, 248, 255, 0.43)', 1.45, false, 1);
-        drawPolyline(ctx, leftBrow, 'rgba(98, 228, 255, 0.9)', 1.7, false, 1);
-        drawPolyline(ctx, rightBrow, 'rgba(98, 228, 255, 0.9)', 1.7, false, 1);
+        if (minimalDetail) {
+            drawPolyline(ctx, leftEye, '#00e5ff', 1.7, true, 0.95);
+            drawPolyline(ctx, rightEye, '#00e5ff', 1.7, true, 0.95);
+            drawPolyline(ctx, nose, '#49ffba', 1.6, false, 0.9);
+            drawPolyline(ctx, mouth, '#ffd36d', 1.5, true, 0.85);
+        } else {
+            drawGlowPolyline(ctx, leftEye, '#00e5ff', 2.2, true);
+            drawGlowPolyline(ctx, rightEye, '#00e5ff', 2.2, true);
+            drawGlowPolyline(ctx, nose, '#49ffba', 2.1, false);
+            drawGlowPolyline(ctx, mouth, '#ffd36d', 2.1, true);
+            drawPolyline(ctx, jaw, 'rgba(235, 248, 255, 0.43)', 1.45, false, 1);
+            drawPolyline(ctx, leftBrow, 'rgba(98, 228, 255, 0.9)', 1.7, false, 1);
+            drawPolyline(ctx, rightBrow, 'rgba(98, 228, 255, 0.9)', 1.7, false, 1);
 
-        drawPolyline(ctx, [leftEyeCenter, noseTip, rightEyeCenter], 'rgba(118,255,219,0.85)', 1.7, false, 0.9);
-        drawPolyline(ctx, [leftEyeCenter, mouthCenter, rightEyeCenter], 'rgba(250,210,127,0.72)', 1.2, false, 0.85);
+            drawPolyline(ctx, [leftEyeCenter, noseTip, rightEyeCenter], 'rgba(118,255,219,0.85)', 1.7, false, 0.9);
+            drawPolyline(ctx, [leftEyeCenter, mouthCenter, rightEyeCenter], 'rgba(250,210,127,0.72)', 1.2, false, 0.85);
 
-        ctx.save();
-        ctx.setLineDash([7, 5]);
-        ctx.strokeStyle = 'rgba(112, 240, 255, 0.34)';
-        ctx.lineWidth = 1.4;
-        ctx.beginPath();
-        ctx.ellipse(
-            box.x + (box.width / 2),
-            box.y + (box.height / 2),
-            box.width * 0.48,
-            box.height * 0.46,
-            0,
-            0,
-            Math.PI * 2
-        );
-        ctx.stroke();
-        ctx.restore();
+            ctx.save();
+            ctx.setLineDash([7, 5]);
+            ctx.strokeStyle = 'rgba(112, 240, 255, 0.34)';
+            ctx.lineWidth = 1.4;
+            ctx.beginPath();
+            ctx.ellipse(
+                box.x + (box.width / 2),
+                box.y + (box.height / 2),
+                box.width * 0.48,
+                box.height * 0.46,
+                0,
+                0,
+                Math.PI * 2
+            );
+            ctx.stroke();
+            ctx.restore();
 
-        drawNode(ctx, leftEyeCenter, 2.4 + (pulse * 0.9), 'rgba(110, 255, 245, 0.95)');
-        drawNode(ctx, rightEyeCenter, 2.4 + (pulse * 0.9), 'rgba(110, 255, 245, 0.95)');
-        drawNode(ctx, noseTip, 2.1 + (pulse * 0.7), 'rgba(255, 230, 176, 0.95)');
+            drawNode(ctx, leftEyeCenter, 2.4 + (pulse * 0.9), 'rgba(110, 255, 245, 0.95)');
+            drawNode(ctx, rightEyeCenter, 2.4 + (pulse * 0.9), 'rgba(110, 255, 245, 0.95)');
+            drawNode(ctx, noseTip, 2.1 + (pulse * 0.7), 'rgba(255, 230, 176, 0.95)');
 
-        const scanY = box.y + (((Math.sin(overlayState.scanPhase) + 1) * 0.5) * box.height);
-        const scanGradient = ctx.createLinearGradient(box.x, scanY, box.x + box.width, scanY);
-        scanGradient.addColorStop(0, 'rgba(120, 255, 187, 0)');
-        scanGradient.addColorStop(0.2, 'rgba(120, 255, 187, 0.86)');
-        scanGradient.addColorStop(0.8, 'rgba(120, 255, 187, 0.86)');
-        scanGradient.addColorStop(1, 'rgba(120, 255, 187, 0)');
-        ctx.beginPath();
-        ctx.strokeStyle = scanGradient;
-        ctx.lineWidth = 2.2;
-        ctx.moveTo(box.x, scanY);
-        ctx.lineTo(box.x + box.width, scanY);
-        ctx.stroke();
+            const scanY = box.y + (((Math.sin(overlayState.scanPhase) + 1) * 0.5) * box.height);
+            const scanGradient = ctx.createLinearGradient(box.x, scanY, box.x + box.width, scanY);
+            scanGradient.addColorStop(0, 'rgba(120, 255, 187, 0)');
+            scanGradient.addColorStop(0.2, 'rgba(120, 255, 187, 0.86)');
+            scanGradient.addColorStop(0.8, 'rgba(120, 255, 187, 0.86)');
+            scanGradient.addColorStop(1, 'rgba(120, 255, 187, 0)');
+            ctx.beginPath();
+            ctx.strokeStyle = scanGradient;
+            ctx.lineWidth = 2.2;
+            ctx.moveTo(box.x, scanY);
+            ctx.lineTo(box.x + box.width, scanY);
+            ctx.stroke();
+        }
 
         const signal = Number(metrics.signal) || 0;
         const closeThreshold = Number(metrics.signalCloseThreshold) || 0.12;
@@ -628,6 +789,9 @@
         averageDescriptors: averageDescriptors,
         createDescriptorAverager: createDescriptorAverager,
         createBlinkEngine: createBlinkEngine,
+        createScannerConfig: createScannerConfig,
+        getVideoConstraints: getVideoConstraints,
+        createTinyFaceDetectorOptions: createTinyFaceDetectorOptions,
         ensureCanvasSize: ensureCanvasSize,
         clearOverlay: clearOverlay,
         createOverlayState: createOverlayState,

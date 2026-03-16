@@ -1153,7 +1153,7 @@
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@vladmandic/face-api@1.7.13/dist/face-api.js"></script>
-    <script src="assets/js/face-auth-core.js?v=1.0"></script>
+    <script src="assets/js/face-auth-core.js?v=1.1"></script>
 
     <script>
         const IS_DEVELOPMENT = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
@@ -1336,7 +1336,10 @@
             stream: null,
             modelsLoaded: false,
             rafHandle: null,
+            scannerConfig: null,
+            useTinyLandmarkNet: true,
             lastDescriptor: null,
+            lastDescriptorAt: 0,
             descriptorSamples: [],
             descriptorAverager: null,
             blinkEngine: null,
@@ -1358,8 +1361,11 @@
             if (!window.FaceAuthCore) {
                 throw new Error('Face auth core failed to load.');
             }
+            if (!faceState.scannerConfig) {
+                faceState.scannerConfig = FaceAuthCore.createScannerConfig();
+            }
             if (!faceState.descriptorAverager) {
-                faceState.descriptorAverager = FaceAuthCore.createDescriptorAverager(24);
+                faceState.descriptorAverager = FaceAuthCore.createDescriptorAverager(faceState.scannerConfig.maxDescriptorSamples);
             }
             if (!faceState.blinkEngine) {
                 faceState.blinkEngine = FaceAuthCore.createBlinkEngine();
@@ -1413,6 +1419,7 @@
         function resetFaceState() {
             ensureFaceCore();
             faceState.lastDescriptor = null;
+            faceState.lastDescriptorAt = 0;
             faceState.descriptorSamples = [];
             faceState.descriptorAverager.reset();
             faceState.blinkEngine.reset();
@@ -1462,7 +1469,8 @@
                 video: faceVideo,
                 detection,
                 metrics: metrics || {},
-                overlayState: faceState.overlayState
+                overlayState: faceState.overlayState,
+                detailLevel: faceState.scannerConfig ? faceState.scannerConfig.overlayDetail : 'full'
             });
         }
 
@@ -1535,33 +1543,45 @@
             ensureFaceCore();
             await ensureFaceApiLibrary();
             if (!window.faceapi) throw new Error('Face detector library failed to load.');
+            const scannerConfig = faceState.scannerConfig || FaceAuthCore.createScannerConfig();
+            faceState.scannerConfig = scannerConfig;
 
             const timeout = (promise, ms, message) => Promise.race([
                 promise,
                 new Promise((_, reject) => setTimeout(() => reject(new Error(message)), ms))
             ]);
 
+            const supportsTinyLandmarks = !!(
+                faceapi.nets
+                && faceapi.nets.faceLandmark68TinyNet
+                && typeof faceapi.nets.faceLandmark68TinyNet.loadFromUri === 'function'
+            );
+            const landmarkModes = (scannerConfig.useTinyLandmarkNet && supportsTinyLandmarks)
+                ? [true, false]
+                : [false];
+
             let lastError = null;
-            let loaded = false;
-            for (const modelBase of FACE_API_MODEL_BASES) {
-                try {
-                    await timeout(Promise.all([
-                        faceapi.nets.tinyFaceDetector.loadFromUri(modelBase),
-                        faceapi.nets.faceLandmark68Net.loadFromUri(modelBase),
-                        faceapi.nets.faceRecognitionNet.loadFromUri(modelBase)
-                    ]), 15000, `Face model loading timeout from ${modelBase}`);
-                    loaded = true;
-                    break;
-                } catch (error) {
-                    lastError = error;
+            for (const useTinyLandmarkNet of landmarkModes) {
+                for (const modelBase of FACE_API_MODEL_BASES) {
+                    try {
+                        await timeout(Promise.all([
+                            faceapi.nets.tinyFaceDetector.loadFromUri(modelBase),
+                            useTinyLandmarkNet
+                                ? faceapi.nets.faceLandmark68TinyNet.loadFromUri(modelBase)
+                                : faceapi.nets.faceLandmark68Net.loadFromUri(modelBase),
+                            faceapi.nets.faceRecognitionNet.loadFromUri(modelBase)
+                        ]), 15000, `Face model loading timeout from ${modelBase}`);
+
+                        faceState.useTinyLandmarkNet = useTinyLandmarkNet;
+                        faceState.modelsLoaded = true;
+                        return;
+                    } catch (error) {
+                        lastError = error;
+                    }
                 }
             }
 
-            if (!loaded) {
-                throw lastError || new Error('Unable to load face detector models.');
-            }
-
-            faceState.modelsLoaded = true;
+            throw lastError || new Error('Unable to load face detector models.');
         }
 
         function stopFaceLoop() {
@@ -1626,26 +1646,48 @@
         async function startFaceLoop() {
             stopFaceLoop();
             ensureFaceCore();
-            const detectorOptions = new faceapi.TinyFaceDetectorOptions({
-                inputSize: 320,
-                scoreThreshold: 0.14
-            });
+            const scannerConfig = faceState.scannerConfig || FaceAuthCore.createScannerConfig();
+            faceState.scannerConfig = scannerConfig;
+            const detectorOptions = FaceAuthCore.createTinyFaceDetectorOptions(scannerConfig)
+                || new faceapi.TinyFaceDetectorOptions({
+                    inputSize: scannerConfig.detectorInputSize,
+                    scoreThreshold: scannerConfig.detectorScoreThreshold
+                });
 
             const detect = async () => {
                 try {
-                    const now = Date.now();
-                    if (now - faceState.lastDetectAt >= 70) {
-                        faceState.lastDetectAt = now;
+                    if (!faceVideo || faceVideo.readyState < 2) {
+                        return;
+                    }
 
-                        const detection = await faceapi
+                    const now = Date.now();
+                    const detectInterval = (
+                        faceState.lastSeenAt > 0
+                        && (now - faceState.lastSeenAt) <= scannerConfig.trackGraceMs
+                    )
+                        ? scannerConfig.detectIntervalMs
+                        : scannerConfig.idleDetectIntervalMs;
+
+                    if (now - faceState.lastDetectAt >= detectInterval) {
+                        faceState.lastDetectAt = now;
+                        const shouldCaptureDescriptor = (
+                            !faceState.lastDescriptor
+                            || faceState.descriptorSamples.length < scannerConfig.maxDescriptorSamples
+                            || (now - faceState.lastDescriptorAt) >= scannerConfig.descriptorIntervalMs
+                        );
+                        let detectionTask = faceapi
                             .detectSingleFace(faceVideo, detectorOptions)
-                            .withFaceLandmarks()
-                            .withFaceDescriptor();
+                            .withFaceLandmarks(!!faceState.useTinyLandmarkNet);
+                        if (shouldCaptureDescriptor) {
+                            detectionTask = detectionTask.withFaceDescriptor();
+                        }
+
+                        const detection = await detectionTask;
 
                         if (!detection) {
                             faceState.missed++;
                             const tracking = faceState.lastSeenAt > 0
-                                && ((now - faceState.lastSeenAt) <= 1800 || faceState.missed <= 7);
+                                && ((now - faceState.lastSeenAt) <= scannerConfig.trackGraceMs || faceState.missed <= 7);
 
                             if (tracking && faceState.lastDescriptor) {
                                 faceLoginBtn.disabled = !faceState.livenessAt;
@@ -1685,7 +1727,10 @@
                         } else {
                             faceState.lastSeenAt = now;
                             faceState.missed = 0;
-                            addDescriptorSample(Array.from(detection.descriptor));
+                            if (detection.descriptor) {
+                                addDescriptorSample(Array.from(detection.descriptor));
+                                faceState.lastDescriptorAt = now;
+                            }
 
                             const metrics = faceState.blinkEngine.update({
                                 landmarks: detection.landmarks,
@@ -1765,12 +1810,7 @@
                 await loadFaceModels();
 
                 faceState.stream = await navigator.mediaDevices.getUserMedia({
-                    video: {
-                        facingMode: 'user',
-                        width: { ideal: 960 },
-                        height: { ideal: 720 },
-                        frameRate: { ideal: 30, max: 30 }
-                    },
+                    video: FaceAuthCore.getVideoConstraints(faceState.scannerConfig),
                     audio: false
                 });
 
