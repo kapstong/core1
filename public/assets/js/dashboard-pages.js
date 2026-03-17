@@ -8154,6 +8154,8 @@ function displayPOItemsForGRN(po) {
     }
 
     po.items.forEach((item, index) => {
+        const remainingQty = item.quantity_remaining ?? Math.max((item.quantity_ordered || 0) - (item.quantity_received || 0), 0);
+        const alreadyReceived = item.quantity_received || 0;
         const itemRow = document.createElement('div');
         itemRow.className = 'po-grn-item-row border rounded p-3 mb-3 bg-light';
         itemRow.dataset.index = index;
@@ -8168,17 +8170,19 @@ function displayPOItemsForGRN(po) {
                     </div>
                     <div>
                         <span class="badge bg-info">Ordered: ${item.quantity_ordered}</span>
+                        <span class="badge bg-secondary">Received: ${alreadyReceived}</span>
+                        <span class="badge bg-success">Remaining: ${remainingQty}</span>
                     </div>
                 </div>
                 <div class="col-md-8">
                     <div class="row">
                         <div class="col-md-3">
                             <label class="form-label">Received *</label>
-                            <input type="number" class="form-control quantity-received-input" min="0" value="${item.quantity_ordered}" required>
+                            <input type="number" class="form-control quantity-received-input" min="0" max="${remainingQty}" value="${remainingQty}" required>
                         </div>
                         <div class="col-md-3">
                             <label class="form-label">Accepted *</label>
-                            <input type="number" class="form-control quantity-accepted-input" min="0" value="${item.quantity_ordered}" required>
+                            <input type="number" class="form-control quantity-accepted-input" min="0" max="${remainingQty}" value="${remainingQty}" required>
                         </div>
                         <div class="col-md-3">
                             <label class="form-label">Rejected</label>
@@ -8209,7 +8213,12 @@ function displayPOItemsForGRN(po) {
         const rejectedInput = itemRow.querySelector('.quantity-rejected-input');
 
         receivedInput.addEventListener('input', () => {
-            const received = parseInt(receivedInput.value) || 0;
+            const maxReceived = parseInt(receivedInput.max) || 0;
+            let received = parseInt(receivedInput.value) || 0;
+            if (maxReceived > 0 && received > maxReceived) {
+                received = maxReceived;
+                receivedInput.value = received;
+            }
             const accepted = Math.min(parseInt(acceptedInput.value) || 0, received);
             acceptedInput.value = accepted;
             rejectedInput.value = received - accepted;
@@ -8217,8 +8226,15 @@ function displayPOItemsForGRN(po) {
         });
 
         acceptedInput.addEventListener('input', () => {
-            const received = parseInt(receivedInput.value) || 0;
-            const accepted = parseInt(acceptedInput.value) || 0;
+            const maxReceived = parseInt(receivedInput.max) || 0;
+            let received = parseInt(receivedInput.value) || 0;
+            if (maxReceived > 0 && received > maxReceived) {
+                received = maxReceived;
+                receivedInput.value = received;
+            }
+            let accepted = parseInt(acceptedInput.value) || 0;
+            accepted = Math.min(accepted, received);
+            acceptedInput.value = accepted;
             rejectedInput.value = Math.max(0, received - accepted);
             updateInspectionSummary();
         });
@@ -8319,7 +8335,7 @@ async function saveGRN(grnId) {
         const unitCost = parseFloat(row.querySelector('.unit-cost-input').value) || 0;
         const notes = row.querySelector('.quality-notes-input').value;
 
-        if (currentGRNItems[index]) {
+        if (currentGRNItems[index] && received > 0) {
             items.push({
                 po_item_id: currentGRNItems[index].id,
                 product_id: currentGRNItems[index].product?.id,
@@ -8413,9 +8429,9 @@ async function loadGRNForEdit(id) {
 }
 
 async function completeGRN(grnId) {
-    if (!await showConfirm('Marking this GRN as complete will update inventory and finalize the receipt. This action cannot be undone.', {
+    if (!await showConfirm('Marking this GRN as complete will finalize the inspection. Stock was already updated when the GRN was created.', {
         title: 'Complete Goods Inspection',
-        confirmText: 'Complete & Update Inventory',
+        confirmText: 'Complete Inspection',
         type: 'success',
         icon: 'fas fa-check-double'
     })) {
@@ -8429,7 +8445,7 @@ async function completeGRN(grnId) {
 
         const result = await response.json();
         if (result.success) {
-            showSuccess('GRN completed successfully and inventory updated');
+            showSuccess('GRN completed successfully');
             bootstrap.Modal.getInstance(document.getElementById('grnModal')).hide();
             await loadGRNs();
         } else {
@@ -8636,9 +8652,9 @@ async function editGRN(id) {
 }
 
 async function finishGRN(id) {
-    if (!await showConfirm('Completing this GRN will finalize the inspection and update inventory. This action cannot be undone.', {
+    if (!await showConfirm('Completing this GRN will finalize the inspection. Stock was already updated when the GRN was created.', {
         title: 'Complete Goods Receiving',
-        confirmText: 'Complete & Update Inventory',
+        confirmText: 'Complete Inspection',
         type: 'success',
         icon: 'fas fa-check-double'
     })) {
@@ -8652,7 +8668,7 @@ async function finishGRN(id) {
 
         const result = await response.json();
         if (result.success) {
-            showSuccess('GRN completed successfully and inventory updated');
+            showSuccess('GRN completed successfully');
             await loadGRNs();
         } else {
             showError(result.message || 'Failed to complete GRN');

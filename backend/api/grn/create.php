@@ -134,10 +134,19 @@ try {
             Response::error('PO item not found: ' . $poItemId);
         }
 
+        $orderedQuantity = intval($poItem['quantity_ordered']);
+        $alreadyReceived = intval($poItem['quantity_received']);
+        $remainingQuantity = max(0, $orderedQuantity - $alreadyReceived);
+
         // Validate quantities
         if ($quantityReceived < 0 || $quantityAccepted < 0 || $quantityAccepted > $quantityReceived) {
             $conn->rollBack();
             Response::error('Invalid quantities for item: ' . $poItem['product_name']);
+        }
+
+        if ($quantityReceived > $remainingQuantity) {
+            $conn->rollBack();
+            Response::error('Cannot receive more than the remaining quantity for item: ' . $poItem['product_name'] . '. Remaining quantity: ' . $remainingQuantity);
         }
 
         $totalReceived += $quantityReceived;
@@ -225,11 +234,11 @@ try {
             $stmt->execute([':product_id' => $item['product_id']]);
             $currentStock = $stmt->fetch(PDO::FETCH_ASSOC)['quantity_on_hand'] ?? 0;
 
-            // Update inventory
+            // Update inventory, creating the inventory row if needed.
             $stmt = $conn->prepare("
-                UPDATE inventory
-                SET quantity_on_hand = quantity_on_hand + :quantity
-                WHERE product_id = :product_id
+                INSERT INTO inventory (product_id, quantity_on_hand, quantity_reserved)
+                VALUES (:product_id, :quantity, 0)
+                ON DUPLICATE KEY UPDATE quantity_on_hand = quantity_on_hand + VALUES(quantity_on_hand)
             ");
             $stmt->execute([
                 ':quantity' => $item['quantity_accepted'],

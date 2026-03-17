@@ -557,11 +557,13 @@ window.loadPOItemsForGRN = async function() {
                         btn.click();
                         count++;
                     });
-                    showSuccess(`All ${count} items filled with ordered quantities!`);
+                    showSuccess(`All ${count} items filled with remaining quantities!`);
                 };
             }
 
             items.forEach((item, index) => {
+                const remainingQty = item.quantity_remaining ?? Math.max((item.quantity_ordered || item.quantity || 0) - (item.quantity_received || 0), 0);
+                const alreadyReceived = item.quantity_received || 0;
                 const itemCard = document.createElement('div');
                 itemCard.className = 'grn-item-card';
                 itemCard.style = 'background: var(--bg-tertiary); border: 2px solid var(--border-color); border-radius: 8px; padding: 1.25rem; margin-bottom: 1rem;';
@@ -574,6 +576,7 @@ window.loadPOItemsForGRN = async function() {
                                 <div>
                                     <strong style="font-size: 1.05rem;">${item.product.name}</strong>
                                     <br><small class="text-muted">SKU: ${item.product.sku || 'N/A'}</small>
+                                    <br><small class="text-muted">Already received: ${alreadyReceived} | Remaining: ${remainingQty}</small>
                                 </div>
                             </div>
                             <input type="hidden" class="item-product-id" value="${item.product.id}">
@@ -596,7 +599,7 @@ window.loadPOItemsForGRN = async function() {
                                 <i class="fas fa-truck-loading me-1" style="color: var(--accent);"></i>Received *
                             </label>
                             <input type="number" class="form-control item-received-qty"
-                                   min="0" max="${item.quantity_ordered || item.quantity}"
+                                   min="0" max="${remainingQty}"
                                    value="0" required placeholder="0"
                                    style="font-size: 1.3rem; padding: 14px; font-weight: 600; height: auto; border: 2px solid var(--accent);">
                         </div>
@@ -607,7 +610,7 @@ window.loadPOItemsForGRN = async function() {
                                 <i class="fas fa-check-circle text-success me-1"></i>Accepted *
                             </label>
                             <input type="number" class="form-control item-accepted-qty"
-                                   min="0" value="0" required placeholder="0"
+                                   min="0" max="${remainingQty}" value="0" required placeholder="0"
                                    style="font-size: 1.3rem; padding: 14px; font-weight: 600; height: auto; border: 2px solid var(--success);">
                         </div>
 
@@ -637,14 +640,14 @@ window.loadPOItemsForGRN = async function() {
                 const quickFillBtn = itemCard.querySelector('.quick-fill-all');
                 const receivedInput = itemCard.querySelector('.item-received-qty');
                 const acceptedInput = itemCard.querySelector('.item-accepted-qty');
-                const orderedQty = item.quantity_ordered || item.quantity;
+                const fillQty = remainingQty;
 
                 quickFillBtn.addEventListener('click', () => {
-                    receivedInput.value = orderedQty;
-                    acceptedInput.value = orderedQty;
+                    receivedInput.value = fillQty;
+                    acceptedInput.value = fillQty;
                     receivedInput.dispatchEvent(new Event('input'));
                     acceptedInput.dispatchEvent(new Event('input'));
-                    showSuccess(`${orderedQty} units marked as received and accepted`);
+                    showSuccess(`${fillQty} units marked as received and accepted`);
                 });
             });
 
@@ -672,8 +675,20 @@ function calculateItemRejected(event) {
     const card = event.target.closest('.grn-item-card');
     if (!card) return;
 
-    const received = parseFloat(card.querySelector('.item-received-qty').value) || 0;
-    const accepted = parseFloat(card.querySelector('.item-accepted-qty').value) || 0;
+    const receivedInput = card.querySelector('.item-received-qty');
+    const acceptedInput = card.querySelector('.item-accepted-qty');
+    const receivedMax = parseFloat(receivedInput.max) || 0;
+
+    let received = parseFloat(receivedInput.value) || 0;
+    if (receivedMax > 0 && received > receivedMax) {
+        received = receivedMax;
+        receivedInput.value = receivedMax;
+    }
+
+    let accepted = parseFloat(acceptedInput.value) || 0;
+    accepted = Math.min(accepted, received);
+    acceptedInput.value = accepted;
+
     const rejected = Math.max(0, received - accepted);
 
     card.querySelector('.item-rejected-qty').value = rejected;

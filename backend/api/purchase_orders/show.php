@@ -131,6 +131,7 @@ try {
                 ],
                 'quantity_ordered' => intval($item['quantity_ordered']),
                 'quantity_received' => intval($item['quantity_received']),
+                'quantity_remaining' => max(0, intval($item['quantity_ordered']) - intval($item['quantity_received'])),
                 'unit_cost' => floatval($item['unit_cost']),
                 'total_cost' => floatval($item['total_cost']),
                 'notes' => $item['notes']
