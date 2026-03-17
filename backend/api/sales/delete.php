@@ -18,7 +18,7 @@ require_once __DIR__ . '/../../middleware/CORS.php';
 
 CORS::handle();
 
-Auth::requireAuth();
+Auth::requireRole(['admin', 'inventory_manager', 'purchasing_officer', 'staff']);
 
 $method = $_SERVER['REQUEST_METHOD'];
 
@@ -37,14 +37,21 @@ try {
 }
 
 function voidSale($user) {
-    if (!isset($_GET['id']) || empty($_GET['id'])) {
+    $input = json_decode(file_get_contents('php://input'), true);
+    if (!$input) {
+        $input = $_POST;
+    }
+
+    $saleId = (int)($input['id'] ?? $_GET['id'] ?? 0);
+    if ($saleId <= 0) {
         Response::error('Sale ID is required', 400);
     }
 
-    $saleId = (int)$_GET['id'];
-    $reason = $_GET['reason'] ?? 'Voided by ' . $user['full_name'];
+    $reason = trim($input['reason'] ?? $_GET['reason'] ?? ('Voided by ' . $user['full_name']));
 
-    $db = Database::getInstance()->getConnection();
+    $dbInstance = Database::getInstance();
+    $db = $dbInstance->getConnection();
+    $hasStatusColumn = $dbInstance->columnExists('sales', 'status');
     $db->beginTransaction();
 
     try {
@@ -60,8 +67,12 @@ function voidSale($user) {
             throw new Exception('Sale not found');
         }
 
-        // Check if already voided
-        if ($sale['status'] === 'voided') {
+        // Check if already voided/refunded
+        $alreadyVoided = $hasStatusColumn && (($sale['status'] ?? null) === 'voided');
+        $alreadyVoided = $alreadyVoided || (($sale['payment_status'] ?? null) === 'refunded');
+        $alreadyVoided = $alreadyVoided || (is_string($sale['notes'] ?? null) && strpos($sale['notes'], '[VOIDED]') !== false);
+
+        if ($alreadyVoided) {
             throw new Exception('Sale is already voided');
         }
 
@@ -79,40 +90,53 @@ function voidSale($user) {
 
         // Restore inventory for each item
         foreach ($items as $item) {
-            // Restore stock
-            $inventoryQuery = "UPDATE inventory SET quantity_on_hand = quantity_on_hand + :quantity
-                              WHERE product_id = :product_id";
+            $quantity = (int)$item['quantity'];
+            $productId = (int)$item['product_id'];
+
+            $inventoryQuery = "SELECT quantity_on_hand FROM inventory WHERE product_id = :product_id LIMIT 1";
             $inventoryStmt = $db->prepare($inventoryQuery);
-            $inventoryStmt->bindParam(':quantity', $item['quantity'], PDO::PARAM_INT);
-            $inventoryStmt->bindParam(':product_id', $item['product_id'], PDO::PARAM_INT);
-            $inventoryStmt->execute();
+            $inventoryStmt->execute([':product_id' => $productId]);
+            $quantityBefore = (int)($inventoryStmt->fetchColumn() ?: 0);
+
+            $restoreStmt = $db->prepare("
+                INSERT INTO inventory (product_id, quantity_on_hand, quantity_reserved)
+                VALUES (:product_id, :quantity, 0)
+                ON DUPLICATE KEY UPDATE quantity_on_hand = quantity_on_hand + VALUES(quantity_on_hand)
+            ");
+            $restoreStmt->execute([
+                ':product_id' => $productId,
+                ':quantity' => $quantity
+            ]);
 
             // Create stock movement record (return)
             $movementQuery = "
                 INSERT INTO stock_movements (
                     product_id, movement_type, quantity, quantity_before, quantity_after,
                     reference_type, reference_id, performed_by, notes
+                ) VALUES (
+                    :product_id, 'return', :quantity, :quantity_before, :quantity_after,
+                    'SALE', :sale_id, :user_id, :notes
                 )
-                SELECT
-                    :product_id, 'return', :quantity, i.quantity_on_hand - :quantity,
-                    i.quantity_on_hand, 'SALE_VOIDED', :sale_id, :user_id, :notes
-                FROM inventory i
-                WHERE i.product_id = :product_id
             ";
 
             $movementStmt = $db->prepare($movementQuery);
-            $movementStmt->bindParam(':product_id', $item['product_id'], PDO::PARAM_INT);
-            $movementStmt->bindParam(':quantity', $item['quantity'], PDO::PARAM_INT);
-            $movementStmt->bindParam(':sale_id', $saleId, PDO::PARAM_INT);
-            $movementStmt->bindParam(':user_id', $user['id'], PDO::PARAM_INT);
-            $notes = "Sale Voided - Invoice: {$sale['invoice_number']} - Reason: {$reason}";
-            $movementStmt->bindParam(':notes', $notes);
-            $movementStmt->execute();
+            $movementStmt->execute([
+                ':product_id' => $productId,
+                ':quantity' => $quantity,
+                ':quantity_before' => $quantityBefore,
+                ':quantity_after' => $quantityBefore + $quantity,
+                ':sale_id' => $saleId,
+                ':user_id' => $user['id'],
+                ':notes' => "Sale Voided - Invoice: {$sale['invoice_number']} - Reason: {$reason}"
+            ]);
         }
 
-        // Update sale status to voided
-        $updateQuery = "UPDATE sales SET status = 'voided', notes = CONCAT(COALESCE(notes, ''), '\n[VOIDED] ', :reason)
-                       WHERE id = :id";
+        // Update sale record to prevent repeat inventory restoration
+        $updateQuery = "UPDATE sales SET payment_status = 'refunded', notes = CONCAT(COALESCE(notes, ''), '\n[VOIDED] ', :reason), updated_at = NOW()";
+        if ($hasStatusColumn) {
+            $updateQuery .= ", status = 'voided'";
+        }
+        $updateQuery .= " WHERE id = :id";
         $updateStmt = $db->prepare($updateQuery);
         $updateStmt->bindParam(':reason', $reason);
         $updateStmt->bindParam(':id', $saleId, PDO::PARAM_INT);

@@ -4,10 +4,8 @@
  * DELETE /backend/api/grn/delete.php - Delete GRN and reverse inventory changes
  */
 
-
-// TEMPORARY: Enable error display for debugging
 error_reporting(E_ALL);
-ini_set('display_errors', '1');
+ini_set('display_errors', '0');
 ini_set('log_errors', '1');
 header('Content-Type: application/json');
 
@@ -19,185 +17,163 @@ require_once __DIR__ . '/../../middleware/CORS.php';
 
 CORS::handle();
 
-// Start session before auth
 if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
 
-Auth::requireAuth();
+Auth::requireRole(['admin', 'inventory_manager', 'purchasing_officer']);
 
 $method = $_SERVER['REQUEST_METHOD'];
-
-// Get user data
 $user = Auth::user();
 
 try {
-    // Accept POST or DELETE methods
     if ($method === 'POST' || $method === 'DELETE') {
         deleteGRN($user);
     } else {
         Response::error("Method $method not allowed. Use POST or DELETE.", 405);
     }
-
 } catch (Exception $e) {
     error_log("GRN Delete Error: " . $e->getMessage());
     Response::serverError('Failed to delete GRN: ' . $e->getMessage());
 }
 
-function deleteGRN($user) {
-    // Accept ID from either POST body or query string
-    if (!isset($_POST['id']) && !isset($_GET['id'])) {
+function deleteGRN(array $user): void {
+    $input = json_decode(file_get_contents('php://input'), true);
+    if (!$input) {
+        $input = $_POST;
+    }
+
+    $grnId = (int)($input['id'] ?? $_GET['id'] ?? 0);
+    if ($grnId <= 0) {
         Response::error('GRN ID is required', 400);
     }
 
-    $grnId = (int)($_POST['id'] ?? $_GET['id'] ?? 0);
-    $reason = $_POST['reason'] ?? $_GET['reason'] ?? 'Deleted by ' . $user['full_name'];
+    $reason = trim((string)($input['reason'] ?? $_GET['reason'] ?? ('Deleted by ' . $user['full_name'])));
 
     $dbInstance = Database::getInstance();
     $db = $dbInstance->getConnection();
     $hasDeletedAt = $dbInstance->columnExists('goods_received_notes', 'deleted_at');
+
     $db->beginTransaction();
 
     try {
-        // Get GRN details
-        $grnQuery = "SELECT g.*, po.po_number
-                     FROM goods_received_notes g
-                     INNER JOIN purchase_orders po ON g.po_id = po.id
-                     WHERE g.id = :id" . ($hasDeletedAt ? " AND g.deleted_at IS NULL" : "");
+        $grnQuery = "
+            SELECT g.*, po.po_number
+            FROM goods_received_notes g
+            INNER JOIN purchase_orders po ON g.po_id = po.id
+            WHERE g.id = :id" . ($hasDeletedAt ? " AND g.deleted_at IS NULL" : "");
         $grnStmt = $db->prepare($grnQuery);
-        $grnStmt->bindParam(':id', $grnId, PDO::PARAM_INT);
-        $grnStmt->execute();
-
+        $grnStmt->execute([':id' => $grnId]);
         $grn = $grnStmt->fetch(PDO::FETCH_ASSOC);
 
         if (!$grn) {
             throw new Exception('GRN not found');
         }
 
-        // Get GRN items
-        $itemsQuery = "SELECT * FROM grn_items WHERE grn_id = :grn_id";
-        $itemsStmt = $db->prepare($itemsQuery);
-        $itemsStmt->bindParam(':grn_id', $grnId, PDO::PARAM_INT);
-        $itemsStmt->execute();
-
+        $itemsStmt = $db->prepare("
+            SELECT id, po_item_id, product_id, quantity_received, quantity_accepted
+            FROM grn_items
+            WHERE grn_id = :grn_id
+            ORDER BY id
+        ");
+        $itemsStmt->execute([':grn_id' => $grnId]);
         $items = $itemsStmt->fetchAll(PDO::FETCH_ASSOC);
 
         if (empty($items)) {
             throw new Exception('GRN has no items');
         }
 
-        // Reverse inventory for each accepted item
         $warnings = [];
+
         foreach ($items as $item) {
-            if ($item['quantity_accepted'] > 0) {
-                // Get current inventory
-                $checkQuery = "SELECT quantity_on_hand FROM inventory WHERE product_id = :product_id";
-                $checkStmt = $db->prepare($checkQuery);
-                $checkStmt->bindParam(':product_id', $item['product_id'], PDO::PARAM_INT);
-                $checkStmt->execute();
-                $currentInventory = $checkStmt->fetch(PDO::FETCH_ASSOC);
+            $acceptedQuantity = (int)$item['quantity_accepted'];
+            $receivedQuantity = (int)$item['quantity_received'];
+            $productId = (int)$item['product_id'];
 
-                if (!$currentInventory) {
-                    throw new Exception("Cannot delete GRN: Inventory record not found for product ID {$item['product_id']}");
+            if ($acceptedQuantity > 0) {
+                $inventoryStmt = $db->prepare("SELECT quantity_on_hand FROM inventory WHERE product_id = :product_id LIMIT 1");
+                $inventoryStmt->execute([':product_id' => $productId]);
+                $quantityBefore = $inventoryStmt->fetchColumn();
+
+                if ($quantityBefore === false) {
+                    throw new Exception("Cannot delete GRN: Inventory record not found for product ID {$productId}");
                 }
 
-                // Calculate before/after quantities BEFORE updating
-                $quantityBefore = $currentInventory['quantity_on_hand'];
-                $quantityAfter = $quantityBefore - $item['quantity_accepted'];
+                $quantityBefore = (int)$quantityBefore;
+                $quantityAfter = $quantityBefore - $acceptedQuantity;
 
-                // Warn if inventory will go negative (but allow it)
                 if ($quantityAfter < 0) {
-                    $warnings[] = "Product ID {$item['product_id']} inventory will become negative ({$quantityAfter}). This indicates inventory was consumed after GRN creation.";
+                    $warnings[] = "Product ID {$productId} inventory will become negative ({$quantityAfter}). This indicates inventory was consumed after GRN creation.";
                 }
 
-                // Reduce inventory
-                $inventoryQuery = "UPDATE inventory SET quantity_on_hand = quantity_on_hand - :quantity
-                                  WHERE product_id = :product_id";
-                $inventoryStmt = $db->prepare($inventoryQuery);
-                $inventoryStmt->bindParam(':quantity', $item['quantity_accepted'], PDO::PARAM_INT);
-                $inventoryStmt->bindParam(':product_id', $item['product_id'], PDO::PARAM_INT);
-                $inventoryStmt->execute();
+                $updateInventoryStmt = $db->prepare("
+                    UPDATE inventory
+                    SET quantity_on_hand = quantity_on_hand - :quantity
+                    WHERE product_id = :product_id
+                ");
+                $updateInventoryStmt->execute([
+                    ':quantity' => $acceptedQuantity,
+                    ':product_id' => $productId
+                ]);
 
-                // Create stock movement record (reversal) - simple INSERT
-                $movementQuery = "
+                $movementStmt = $db->prepare("
                     INSERT INTO stock_movements (
                         product_id, movement_type, quantity, quantity_before, quantity_after,
                         reference_type, reference_id, performed_by, notes
                     ) VALUES (
-                        :product_id, 'adjustment', :quantity_neg, :quantity_before, :quantity_after,
-                        'GRN_DELETED', :grn_id, :user_id, :notes
+                        :product_id, 'adjustment', :quantity, :quantity_before, :quantity_after,
+                        'GRN', :reference_id, :performed_by, :notes
                     )
-                ";
-
-                $movementStmt = $db->prepare($movementQuery);
-                $movementStmt->bindParam(':product_id', $item['product_id'], PDO::PARAM_INT);
-                $negativeQty = -$item['quantity_accepted'];
-                $movementStmt->bindParam(':quantity_neg', $negativeQty, PDO::PARAM_INT);
-                $movementStmt->bindParam(':quantity_before', $quantityBefore, PDO::PARAM_INT);
-                $movementStmt->bindParam(':quantity_after', $quantityAfter, PDO::PARAM_INT);
-                $movementStmt->bindParam(':grn_id', $grnId, PDO::PARAM_INT);
-                $movementStmt->bindParam(':user_id', $user['id'], PDO::PARAM_INT);
-                $notes = "GRN Deleted - {$grn['grn_number']} - PO: {$grn['po_number']} - Reason: {$reason}";
-                $movementStmt->bindParam(':notes', $notes);
-                $movementStmt->execute();
-
-                // Update purchase order item received quantities
-                $poItemQuery = "UPDATE purchase_order_items
-                               SET quantity_received = quantity_received - :quantity
-                               WHERE po_id = :po_id AND product_id = :product_id";
-                $poItemStmt = $db->prepare($poItemQuery);
-                $poItemStmt->bindParam(':quantity', $item['quantity_accepted'], PDO::PARAM_INT);
-                $poItemStmt->bindParam(':po_id', $grn['po_id'], PDO::PARAM_INT);
-                $poItemStmt->bindParam(':product_id', $item['product_id'], PDO::PARAM_INT);
-                $poItemStmt->execute();
+                ");
+                $movementStmt->execute([
+                    ':product_id' => $productId,
+                    ':quantity' => -$acceptedQuantity,
+                    ':quantity_before' => $quantityBefore,
+                    ':quantity_after' => $quantityAfter,
+                    ':reference_id' => $grnId,
+                    ':performed_by' => $user['id'],
+                    ':notes' => "GRN Deleted - {$grn['grn_number']} - PO: {$grn['po_number']} - Reason: {$reason}"
+                ]);
             }
+
+            $poItemStmt = $db->prepare("
+                UPDATE purchase_order_items
+                SET quantity_received = GREATEST(0, quantity_received - :quantity)
+                WHERE id = :po_item_id
+            ");
+            $poItemStmt->execute([
+                ':quantity' => $receivedQuantity,
+                ':po_item_id' => $item['po_item_id']
+            ]);
         }
 
-        // Update purchase order status
-        $checkPOQuery = "SELECT
-                            SUM(poi.quantity_ordered) as total_ordered,
-                            SUM(poi.quantity_received) as total_received
-                         FROM purchase_order_items poi
-                         WHERE poi.po_id = :po_id";
-        $checkPOStmt = $db->prepare($checkPOQuery);
-        $checkPOStmt->bindParam(':po_id', $grn['po_id'], PDO::PARAM_INT);
-        $checkPOStmt->execute();
-        $poStatus = $checkPOStmt->fetch(PDO::FETCH_ASSOC);
+        $newPOStatus = updatePurchaseOrderStatusAfterDelete($db, (int)$grn['po_id']);
 
-        $newPOStatus = 'approved'; // Default back to approved
-        if ($poStatus['total_received'] > 0 && $poStatus['total_received'] < $poStatus['total_ordered']) {
-            $newPOStatus = 'partially_received';
-        } elseif ($poStatus['total_received'] >= $poStatus['total_ordered']) {
-            $newPOStatus = 'received';
-        }
-
-        $updatePOQuery = "UPDATE purchase_orders SET status = :status WHERE id = :po_id";
-        $updatePOStmt = $db->prepare($updatePOQuery);
-        $updatePOStmt->bindParam(':status', $newPOStatus);
-        $updatePOStmt->bindParam(':po_id', $grn['po_id'], PDO::PARAM_INT);
-        $updatePOStmt->execute();
-
-        // Soft delete GRN if supported, otherwise hard delete
         if ($hasDeletedAt) {
-            $deleteGRNQuery = "UPDATE goods_received_notes SET deleted_at = NOW() WHERE id = :id";
-            $deleteGRNStmt = $db->prepare($deleteGRNQuery);
-            $deleteGRNStmt->bindParam(':id', $grnId, PDO::PARAM_INT);
-            $deleteGRNStmt->execute();
+            $deleteGRNStmt = $db->prepare("
+                UPDATE goods_received_notes
+                SET deleted_at = NOW(),
+                    updated_at = NOW()
+                WHERE id = :id
+            ");
+            $deleteGRNStmt->execute([':id' => $grnId]);
         } else {
-            $deleteGRNQuery = "DELETE FROM goods_received_notes WHERE id = :id";
-            $deleteGRNStmt = $db->prepare($deleteGRNQuery);
-            $deleteGRNStmt->bindParam(':id', $grnId, PDO::PARAM_INT);
-            $deleteGRNStmt->execute();
+            $deleteItemsStmt = $db->prepare("DELETE FROM grn_items WHERE grn_id = :grn_id");
+            $deleteItemsStmt->execute([':grn_id' => $grnId]);
+
+            $deleteGRNStmt = $db->prepare("DELETE FROM goods_received_notes WHERE id = :id");
+            $deleteGRNStmt->execute([':id' => $grnId]);
         }
 
         $db->commit();
 
-        // Log GRN deletion
         AuditLogger::logDelete('grn', $grnId, "GRN {$grn['grn_number']} deleted - Inventory reversed", [
             'grn_number' => $grn['grn_number'],
             'po_number' => $grn['po_number'],
             'items_reversed' => count($items),
-            'inventory_reversed' => array_sum(array_column($items, 'quantity_accepted')),
+            'inventory_reversed' => array_sum(array_map(static function ($item) {
+                return (int)$item['quantity_accepted'];
+            }, $items)),
             'reason' => $reason,
             'deleted_by' => $user['full_name']
         ]);
@@ -217,10 +193,45 @@ function deleteGRN($user) {
         }
 
         Response::success($responseData);
-
     } catch (Exception $e) {
-        $db->rollBack();
+        if ($db->inTransaction()) {
+            $db->rollBack();
+        }
         throw $e;
     }
 }
 
+function updatePurchaseOrderStatusAfterDelete(PDO $db, int $poId): string {
+    $checkPOStmt = $db->prepare("
+        SELECT
+            COALESCE(SUM(quantity_ordered), 0) AS total_ordered,
+            COALESCE(SUM(quantity_received), 0) AS total_received
+        FROM purchase_order_items
+        WHERE po_id = :po_id
+    ");
+    $checkPOStmt->execute([':po_id' => $poId]);
+    $poStatus = $checkPOStmt->fetch(PDO::FETCH_ASSOC);
+
+    $totalOrdered = (int)($poStatus['total_ordered'] ?? 0);
+    $totalReceived = (int)($poStatus['total_received'] ?? 0);
+
+    $newPOStatus = 'approved';
+    if ($totalReceived > 0 && $totalReceived < $totalOrdered) {
+        $newPOStatus = 'partially_received';
+    } elseif ($totalOrdered > 0 && $totalReceived >= $totalOrdered) {
+        $newPOStatus = 'received';
+    }
+
+    $updatePOStmt = $db->prepare("
+        UPDATE purchase_orders
+        SET status = :status,
+            updated_at = NOW()
+        WHERE id = :po_id
+    ");
+    $updatePOStmt->execute([
+        ':status' => $newPOStatus,
+        ':po_id' => $poId
+    ]);
+
+    return $newPOStatus;
+}

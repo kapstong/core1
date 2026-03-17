@@ -4,8 +4,6 @@
  * PUT /backend/api/grn/update.php?id={id} - Update GRN status and details
  */
 
-
-// Suppress error display for clean JSON responses
 error_reporting(E_ALL);
 ini_set('display_errors', '0');
 ini_set('log_errors', '1');
@@ -13,53 +11,43 @@ header('Content-Type: application/json');
 
 require_once __DIR__ . '/../../config/database.php';
 require_once __DIR__ . '/../../utils/Response.php';
-require_once __DIR__ . '/../../utils/Logger.php';
 require_once __DIR__ . '/../../utils/AuditLogger.php';
 require_once __DIR__ . '/../../middleware/Auth.php';
 require_once __DIR__ . '/../../middleware/CORS.php';
 
 CORS::handle();
 
-// Require authentication
 if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
 
-// Check authentication first
 if (!Auth::check()) {
     Response::error('Unauthorized', 401);
 }
 
-// Get user data
 $user = Auth::user();
 
-// Check if user has permission to manage GRN
-if (!in_array($user['role'], ['admin', 'inventory_manager', 'purchasing_officer'])) {
+if (!in_array($user['role'], ['admin', 'inventory_manager', 'purchasing_officer'], true)) {
     Response::error('Access denied. Admin, inventory manager, or purchasing officer role required', 403);
 }
 
-$method = $_SERVER['REQUEST_METHOD'];
+if ($_SERVER['REQUEST_METHOD'] !== 'PUT') {
+    Response::error('Method not allowed', 405);
+}
 
 try {
-    if ($method === 'PUT') {
-        updateGRN();
-    } else {
-        Response::error('Method not allowed', 405);
-    }
-
+    updateGRN($user);
 } catch (Exception $e) {
     Response::serverError('GRN update failed: ' . $e->getMessage());
 }
 
-function updateGRN() {
-    $grnId = isset($_GET['id']) ? (int)$_GET['id'] : null;
-
-    if (!$grnId) {
+function updateGRN(array $user): void {
+    $grnId = isset($_GET['id']) ? (int)$_GET['id'] : 0;
+    if ($grnId <= 0) {
         Response::error('GRN ID is required', 400);
     }
 
     $input = json_decode(file_get_contents('php://input'), true);
-
     if (!$input) {
         $input = $_POST;
     }
@@ -68,144 +56,210 @@ function updateGRN() {
     $db = $dbInstance->getConnection();
     $hasDeletedAt = $dbInstance->columnExists('goods_received_notes', 'deleted_at');
 
-    // Check if GRN exists and can be edited
-    $existingQuery = "SELECT grn.*, po.status as po_status FROM goods_received_notes grn
-                      INNER JOIN purchase_orders po ON grn.po_id = po.id
-                      WHERE grn.id = :id" . ($hasDeletedAt ? " AND grn.deleted_at IS NULL" : "");
+    $existingQuery = "
+        SELECT grn.*, po.po_number, po.status AS po_status
+        FROM goods_received_notes grn
+        INNER JOIN purchase_orders po ON grn.po_id = po.id
+        WHERE grn.id = :id" . ($hasDeletedAt ? " AND grn.deleted_at IS NULL" : "");
     $existingStmt = $db->prepare($existingQuery);
-    $existingStmt->bindParam(':id', $grnId, PDO::PARAM_INT);
-    $existingStmt->execute();
-
+    $existingStmt->execute([':id' => $grnId]);
     $grn = $existingStmt->fetch(PDO::FETCH_ASSOC);
 
     if (!$grn) {
         Response::error('GRN not found', 404);
     }
 
-    // Cannot edit completed GRNs
-    if ($grn['inspection_status'] === 'completed') {
+    if (($grn['inspection_status'] ?? null) === 'completed') {
         Response::error('Cannot edit a completed GRN', 400);
     }
 
-    // Validate GRN number if provided
-    $grnNumber = $input['grn_number'] ?? $grn['grn_number'];
+    $grnNumber = trim((string)($input['grn_number'] ?? $grn['grn_number']));
+    if ($grnNumber === '') {
+        Response::error('GRN number is required', 400);
+    }
+
     if ($grnNumber !== $grn['grn_number']) {
-        $checkStmt = $db->prepare("SELECT COUNT(*) as count FROM goods_received_notes WHERE grn_number = :grn_number AND id != :id" . ($hasDeletedAt ? " AND deleted_at IS NULL" : ""));
-        $checkStmt->execute([':grn_number' => $grnNumber, ':id' => $grnId]);
-        if ($checkStmt->fetch(PDO::FETCH_ASSOC)['count'] > 0) {
+        $checkStmt = $db->prepare("
+            SELECT COUNT(*) AS count
+            FROM goods_received_notes
+            WHERE grn_number = :grn_number
+              AND id != :id" . ($hasDeletedAt ? " AND deleted_at IS NULL" : "")
+        );
+        $checkStmt->execute([
+            ':grn_number' => $grnNumber,
+            ':id' => $grnId
+        ]);
+
+        if ((int)$checkStmt->fetchColumn() > 0) {
             Response::error('GRN number already exists', 400);
         }
     }
 
-    // Validate inspection status if provided
-    $inspectionStatus = $input['inspection_status'] ?? $grn['inspection_status'];
-    $validStatuses = ['pending', 'in_progress', 'completed', 'rejected'];
-    if (!in_array($inspectionStatus, $validStatuses)) {
-        Response::error('Invalid inspection status. Must be: pending, in_progress, completed, or rejected', 400);
+    $existingItemsStmt = $db->prepare("
+        SELECT id, po_item_id, product_id, quantity_received, quantity_accepted, unit_cost, notes
+        FROM grn_items
+        WHERE grn_id = :grn_id
+        ORDER BY id
+    ");
+    $existingItemsStmt->execute([':grn_id' => $grnId]);
+    $existingItems = $existingItemsStmt->fetchAll(PDO::FETCH_ASSOC);
+
+    $existingReceivedByPoItem = [];
+    foreach ($existingItems as $existingItem) {
+        $existingReceivedByPoItem[(int)$existingItem['po_item_id']] = (int)$existingItem['quantity_received'];
     }
 
-    // Process items if provided
     $processedItems = [];
+    $itemCount = count($existingItems);
     $totalReceived = 0;
     $totalAccepted = 0;
 
-    if (isset($input['items']) && is_array($input['items'])) {
-        // First, reverse existing inventory changes
-        $revertStmt = $db->prepare("
-            SELECT product_id, quantity_accepted
-            FROM grn_items
-            WHERE grn_id = :grn_id AND quantity_accepted > 0
-        ");
-        $revertStmt->execute([':grn_id' => $grnId]);
-        $existingItems = $revertStmt->fetchAll(PDO::FETCH_ASSOC);
-
-        foreach ($existingItems as $item) {
-            // Reverse inventory
-            $invStmt = $db->prepare("UPDATE inventory SET quantity_on_hand = quantity_on_hand - :quantity WHERE product_id = :product_id");
-            $invStmt->execute([
-                ':quantity' => $item['quantity_accepted'],
-                ':product_id' => $item['product_id']
-            ]);
-
-            // Reverse PO item received quantity
-            $poStmt = $db->prepare("
-                UPDATE purchase_order_items
-                SET quantity_received = quantity_received - :quantity
-                WHERE po_id = :po_id AND product_id = :product_id
-            ");
-            $poStmt->execute([
-                ':quantity' => $item['quantity_accepted'],
-                ':po_id' => $grn['po_id'],
-                ':product_id' => $item['product_id']
-            ]);
+    if (array_key_exists('items', $input)) {
+        if (!is_array($input['items']) || empty($input['items'])) {
+            Response::error('Items array is required and cannot be empty', 400);
         }
 
-        // Delete existing GRN items
-        $deleteStmt = $db->prepare("DELETE FROM grn_items WHERE grn_id = :grn_id");
-        $deleteStmt->execute([':grn_id' => $grnId]);
-
-        // Process new items
         foreach ($input['items'] as $item) {
-            if (!isset($item['po_item_id']) || !isset($item['quantity_received']) || !isset($item['quantity_accepted'])) {
-                $db->rollBack();
-                Response::error('Each item must have po_item_id, quantity_received, and quantity_accepted');
+            if (!isset($item['po_item_id'], $item['quantity_received'], $item['quantity_accepted'])) {
+                Response::error('Each item must have po_item_id, quantity_received, and quantity_accepted', 400);
             }
 
-            $poItemId = intval($item['po_item_id']);
-            $quantityReceived = intval($item['quantity_received']);
-            $quantityAccepted = intval($item['quantity_accepted']);
+            $poItemId = (int)$item['po_item_id'];
+            $quantityReceived = (int)$item['quantity_received'];
+            $quantityAccepted = (int)$item['quantity_accepted'];
 
-            // Get PO item details
             $poItemStmt = $db->prepare("
-                SELECT poi.*, p.name as product_name, p.id as product_id
+                SELECT poi.*, p.name AS product_name, p.id AS product_id
                 FROM purchase_order_items poi
                 LEFT JOIN products p ON poi.product_id = p.id
                 WHERE poi.id = :po_item_id AND poi.po_id = :po_id
             ");
-            $poItemStmt->execute([':po_item_id' => $poItemId, ':po_id' => $grn['po_id']]);
+            $poItemStmt->execute([
+                ':po_item_id' => $poItemId,
+                ':po_id' => $grn['po_id']
+            ]);
             $poItem = $poItemStmt->fetch(PDO::FETCH_ASSOC);
 
             if (!$poItem) {
-                $db->rollBack();
-                Response::error('PO item not found: ' . $poItemId);
+                Response::error('PO item not found: ' . $poItemId, 400);
             }
 
-            // Validate quantities
             if ($quantityReceived < 0 || $quantityAccepted < 0 || $quantityAccepted > $quantityReceived) {
-                $db->rollBack();
-                Response::error('Invalid quantities for item: ' . $poItem['product_name']);
+                Response::error('Invalid quantities for item: ' . $poItem['product_name'], 400);
             }
 
-            $totalReceived += $quantityReceived;
-            $totalAccepted += $quantityAccepted;
+            $orderedQuantity = (int)$poItem['quantity_ordered'];
+            $currentReceived = (int)$poItem['quantity_received'];
+            $oldReceivedForThisGrn = (int)($existingReceivedByPoItem[$poItemId] ?? 0);
+            $remainingQuantity = max(0, $orderedQuantity - max(0, $currentReceived - $oldReceivedForThisGrn));
+
+            if ($quantityReceived > $remainingQuantity) {
+                Response::error(
+                    'Cannot receive more than the remaining quantity for item: ' .
+                    $poItem['product_name'] . '. Remaining quantity: ' . $remainingQuantity,
+                    400
+                );
+            }
 
             $processedItems[] = [
                 'po_item_id' => $poItemId,
-                'product_id' => $poItem['product_id'],
+                'product_id' => (int)$poItem['product_id'],
+                'product_name' => $poItem['product_name'] ?? ('Product #' . $poItem['product_id']),
                 'quantity_received' => $quantityReceived,
                 'quantity_accepted' => $quantityAccepted,
-                'unit_cost' => floatval($poItem['unit_cost']),
+                'unit_cost' => (float)$poItem['unit_cost'],
                 'notes' => $item['notes'] ?? null
             ];
+
+            $totalReceived += $quantityReceived;
+            $totalAccepted += $quantityAccepted;
+        }
+
+        $itemCount = count($processedItems);
+    } else {
+        foreach ($existingItems as $existingItem) {
+            $totalReceived += (int)$existingItem['quantity_received'];
+            $totalAccepted += (int)$existingItem['quantity_accepted'];
         }
     }
 
-    // Determine inspection status based on items if not explicitly set
-    if (!isset($input['inspection_status']) && isset($input['items'])) {
-        $inspectionStatus = 'pending';
-        if ($totalAccepted === 0) {
-            $inspectionStatus = 'rejected';
-        } elseif ($totalAccepted < $totalReceived) {
-            $inspectionStatus = 'in_progress';
-        } else {
-            $inspectionStatus = 'completed';
+    $inspectionStatus = null;
+    if (array_key_exists('inspection_status', $input)) {
+        $inspectionStatus = normalizeInspectionStatus($input['inspection_status']);
+        if ($inspectionStatus === null) {
+            Response::error('Invalid inspection status. Must be pending, passed, partial, or failed', 400);
         }
+    } elseif (array_key_exists('items', $input)) {
+        $inspectionStatus = deriveInspectionStatus($totalReceived, $totalAccepted);
+    } else {
+        $inspectionStatus = normalizeInspectionStatus($grn['inspection_status']) ?? $grn['inspection_status'];
     }
 
     $db->beginTransaction();
 
     try {
-        // Update GRN header
+        if (array_key_exists('items', $input)) {
+            foreach ($existingItems as $existingItem) {
+                $existingAccepted = (int)$existingItem['quantity_accepted'];
+                $existingReceived = (int)$existingItem['quantity_received'];
+
+                if ($existingAccepted > 0) {
+                    $inventoryStmt = $db->prepare("SELECT quantity_on_hand FROM inventory WHERE product_id = :product_id LIMIT 1");
+                    $inventoryStmt->execute([':product_id' => $existingItem['product_id']]);
+                    $quantityBefore = $inventoryStmt->fetchColumn();
+
+                    if ($quantityBefore === false) {
+                        throw new Exception('Inventory record not found for product ID ' . $existingItem['product_id']);
+                    }
+
+                    $quantityBefore = (int)$quantityBefore;
+                    $quantityAfter = $quantityBefore - $existingAccepted;
+
+                    $reverseInventoryStmt = $db->prepare("
+                        UPDATE inventory
+                        SET quantity_on_hand = quantity_on_hand - :quantity
+                        WHERE product_id = :product_id
+                    ");
+                    $reverseInventoryStmt->execute([
+                        ':quantity' => $existingAccepted,
+                        ':product_id' => $existingItem['product_id']
+                    ]);
+
+                    $movementStmt = $db->prepare("
+                        INSERT INTO stock_movements (
+                            product_id, movement_type, quantity, quantity_before, quantity_after,
+                            reference_type, reference_id, performed_by, notes
+                        ) VALUES (
+                            :product_id, 'adjustment', :quantity, :quantity_before, :quantity_after,
+                            'GRN', :reference_id, :performed_by, :notes
+                        )
+                    ");
+                    $movementStmt->execute([
+                        ':product_id' => $existingItem['product_id'],
+                        ':quantity' => -$existingAccepted,
+                        ':quantity_before' => $quantityBefore,
+                        ':quantity_after' => $quantityAfter,
+                        ':reference_id' => $grnId,
+                        ':performed_by' => $user['id'],
+                        ':notes' => 'GRN update reversal: ' . $grn['grn_number']
+                    ]);
+                }
+
+                $reversePoStmt = $db->prepare("
+                    UPDATE purchase_order_items
+                    SET quantity_received = GREATEST(0, quantity_received - :quantity_received)
+                    WHERE id = :po_item_id
+                ");
+                $reversePoStmt->execute([
+                    ':quantity_received' => $existingReceived,
+                    ':po_item_id' => $existingItem['po_item_id']
+                ]);
+            }
+
+            $deleteItemsStmt = $db->prepare("DELETE FROM grn_items WHERE grn_id = :grn_id");
+            $deleteItemsStmt->execute([':grn_id' => $grnId]);
+        }
+
         $updateStmt = $db->prepare("
             UPDATE goods_received_notes
             SET grn_number = :grn_number,
@@ -223,12 +277,16 @@ function updateGRN() {
             ':id' => $grnId
         ]);
 
-        // Insert new GRN items if provided
-        if (!empty($processedItems)) {
+        if (array_key_exists('items', $input)) {
             foreach ($processedItems as $item) {
                 $itemStmt = $db->prepare("
-                    INSERT INTO grn_items (grn_id, po_item_id, product_id, quantity_received, quantity_accepted, unit_cost, notes)
-                    VALUES (:grn_id, :po_item_id, :product_id, :quantity_received, :quantity_accepted, :unit_cost, :notes)
+                    INSERT INTO grn_items (
+                        grn_id, po_item_id, product_id, quantity_received,
+                        quantity_accepted, unit_cost, notes
+                    ) VALUES (
+                        :grn_id, :po_item_id, :product_id, :quantity_received,
+                        :quantity_accepted, :unit_cost, :notes
+                    )
                 ");
                 $itemStmt->execute([
                     ':grn_id' => $grnId,
@@ -240,7 +298,6 @@ function updateGRN() {
                     ':notes' => $item['notes']
                 ]);
 
-                // Update PO item received quantity
                 $poItemStmt = $db->prepare("
                     UPDATE purchase_order_items
                     SET quantity_received = quantity_received + :quantity_received
@@ -251,190 +308,143 @@ function updateGRN() {
                     ':po_item_id' => $item['po_item_id']
                 ]);
 
-                // Update inventory for accepted items
                 if ($item['quantity_accepted'] > 0) {
-                    $invStmt = $db->prepare("
-                        UPDATE inventory
-                        SET quantity_on_hand = quantity_on_hand + :quantity
-                        WHERE product_id = :product_id
+                    $inventoryStmt = $db->prepare("SELECT quantity_on_hand FROM inventory WHERE product_id = :product_id LIMIT 1");
+                    $inventoryStmt->execute([':product_id' => $item['product_id']]);
+                    $quantityBefore = (int)($inventoryStmt->fetchColumn() ?: 0);
+
+                    $applyInventoryStmt = $db->prepare("
+                        INSERT INTO inventory (product_id, quantity_on_hand, quantity_reserved)
+                        VALUES (:product_id, :quantity, 0)
+                        ON DUPLICATE KEY UPDATE quantity_on_hand = quantity_on_hand + VALUES(quantity_on_hand)
                     ");
-                    $invStmt->execute([
-                        ':quantity' => $item['quantity_accepted'],
-                        ':product_id' => $item['product_id']
+                    $applyInventoryStmt->execute([
+                        ':product_id' => $item['product_id'],
+                        ':quantity' => $item['quantity_accepted']
                     ]);
 
-                    // Create stock movement record
-                    $stockStmt = $db->prepare("
+                    $movementStmt = $db->prepare("
                         INSERT INTO stock_movements (
                             product_id, movement_type, quantity, quantity_before, quantity_after,
                             reference_type, reference_id, performed_by, notes
                         ) VALUES (
                             :product_id, 'purchase', :quantity, :quantity_before, :quantity_after,
-                            'GRN', :grn_id, :user_id, :notes
+                            'GRN', :reference_id, :performed_by, :notes
                         )
                     ");
-
-                    // Get current stock for before/after calculation
-                    $stockCheckStmt = $db->prepare("SELECT quantity_on_hand FROM inventory WHERE product_id = :product_id");
-                    $stockCheckStmt->execute([':product_id' => $item['product_id']]);
-                    $currentStock = $stockCheckStmt->fetch(PDO::FETCH_ASSOC)['quantity_on_hand'] ?? 0;
-
-                    $stockStmt->execute([
+                    $movementStmt->execute([
                         ':product_id' => $item['product_id'],
                         ':quantity' => $item['quantity_accepted'],
-                        ':quantity_before' => $currentStock - $item['quantity_accepted'],
-                        ':quantity_after' => $currentStock,
-                        ':grn_id' => $grnId,
-                        ':user_id' => $user['id'],
+                        ':quantity_before' => $quantityBefore,
+                        ':quantity_after' => $quantityBefore + $item['quantity_accepted'],
+                        ':reference_id' => $grnId,
+                        ':performed_by' => $user['id'],
                         ':notes' => 'GRN Updated: ' . $grnNumber
                     ]);
                 }
             }
         }
 
-        // Update PO status if items were updated
-        if (!empty($processedItems)) {
-            $poTotalsStmt = $db->prepare("
-                SELECT
-                    SUM(quantity_ordered) as total_ordered,
-                    SUM(quantity_received) as total_received
-                FROM purchase_order_items
-                WHERE po_id = :po_id
-            ");
-            $poTotalsStmt->execute([':po_id' => $grn['po_id']]);
-            $poTotals = $poTotalsStmt->fetch(PDO::FETCH_ASSOC);
-
-            $newStatus = 'approved';
-            if ($poTotals['total_received'] > 0) {
-                $newStatus = $poTotals['total_received'] >= $poTotals['total_ordered'] ? 'received' : 'partially_received';
-            }
-
-            $poUpdateStmt = $db->prepare("UPDATE purchase_orders SET status = :status WHERE id = :po_id");
-            $poUpdateStmt->execute([':status' => $newStatus, ':po_id' => $grn['po_id']]);
-        }
+        $newPoStatus = updatePurchaseOrderStatusForGrn($db, (int)$grn['po_id']);
 
         $db->commit();
 
-        // Log GRN update
-        AuditLogger::logUpdate('grn', $grnId, "GRN $grnNumber updated - Status: $inspectionStatus", [
+        AuditLogger::logUpdate('grn', $grnId, "GRN {$grnNumber} updated - Status: {$inspectionStatus}", [
             'old_status' => $grn['inspection_status'],
             'new_status' => $inspectionStatus,
             'grn_number' => $grnNumber,
             'po_id' => $grn['po_id'],
+            'po_number' => $grn['po_number'],
             'updated_by' => $user['full_name']
         ], [
-            'grn_number' => $grnNumber,
-            'inspection_status' => $inspectionStatus,
             'received_date' => $input['received_date'] ?? $grn['received_date'],
             'notes' => $input['notes'] ?? $grn['notes'],
-            'item_count' => count($processedItems)
+            'item_count' => $itemCount,
+            'total_received' => $totalReceived,
+            'total_accepted' => $totalAccepted,
+            'po_status' => $newPoStatus
         ]);
 
         Response::success([
             'message' => 'GRN updated successfully',
             'grn_id' => $grnId,
-            'inspection_status' => $inspectionStatus
+            'inspection_status' => $inspectionStatus,
+            'po_status' => $newPoStatus
         ]);
-
     } catch (Exception $e) {
-        $db->rollBack();
+        if ($db->inTransaction()) {
+            $db->rollBack();
+        }
         throw $e;
     }
 }
 
-function processPassedInspection($db, $grnId, $userId) {
-    // Get GRN items
-    $itemsQuery = "SELECT * FROM grn_items WHERE grn_id = :grn_id";
-    $itemsStmt = $db->prepare($itemsQuery);
-    $itemsStmt->bindParam(':grn_id', $grnId, PDO::PARAM_INT);
-    $itemsStmt->execute();
-    $grnItems = $itemsStmt->fetchAll(PDO::FETCH_ASSOC);
-
-    foreach ($grnItems as $item) {
-        // Update inventory
-        $inventoryQuery = "UPDATE inventory SET
-                           quantity_on_hand = quantity_on_hand + :quantity,
-                           last_stock_check = NOW()
-                           WHERE product_id = :product_id";
-        $invStmt = $db->prepare($inventoryQuery);
-        $invStmt->bindParam(':quantity', $item['quantity_received'], PDO::PARAM_INT);
-        $invStmt->bindParam(':product_id', $item['product_id'], PDO::PARAM_INT);
-        $invStmt->execute();
-
-        // Log stock movement
-        $movementQuery = "INSERT INTO stock_movements
-                         (product_id, movement_type, quantity, reference_type, reference_id, performed_by, notes)
-                         VALUES
-                         (:product_id, 'purchase', :quantity, 'GRN', :reference_id, :performed_by, 'GRN inspection passed')";
-
-        $movStmt = $db->prepare($movementQuery);
-        $movStmt->bindParam(':product_id', $item['product_id'], PDO::PARAM_INT);
-        $movStmt->bindParam(':quantity', $item['quantity_received'], PDO::PARAM_INT);
-        $movStmt->bindParam(':reference_id', $grnId, PDO::PARAM_INT);
-        $movStmt->bindParam(':performed_by', $userId, PDO::PARAM_INT);
-        $movStmt->execute();
-
-        // Update purchase order item
-        $poUpdateQuery = "UPDATE purchase_order_items SET
-                         quantity_received = quantity_received + :quantity
-                         WHERE id = :po_item_id";
-        $poStmt = $db->prepare($poUpdateQuery);
-        $poStmt->bindParam(':quantity', $item['quantity_received'], PDO::PARAM_INT);
-        $poStmt->bindParam(':po_item_id', $item['po_item_id'], PDO::PARAM_INT);
-        $poStmt->execute();
+function normalizeInspectionStatus($status): ?string {
+    if ($status === null) {
+        return null;
     }
 
-    // Check if PO is fully received
-    updatePurchaseOrderStatus($db, $grnId);
+    $normalized = strtolower(trim((string)$status));
+    $map = [
+        'pending' => 'pending',
+        'passed' => 'passed',
+        'partial' => 'partial',
+        'failed' => 'failed',
+        'completed' => 'passed',
+        'in_progress' => 'partial',
+        'rejected' => 'failed'
+    ];
+
+    return $map[$normalized] ?? null;
 }
 
-function processPartialInspection($db, $grnId, $userId, $input) {
-    // For partial inspection, we need item-level details
-    // This would typically involve updating individual GRN items with accepted/rejected quantities
-    // For now, we'll mark as partial but require manual processing
+function deriveInspectionStatus(int $totalReceived, int $totalAccepted): string {
+    if ($totalReceived <= 0) {
+        return 'pending';
+    }
 
-    // Log that partial inspection requires manual review
-    $logger = new Logger($userId);
-    $logger->log('grn_partial_inspection', 'grn', $grnId, [
-        'status' => 'requires_manual_review',
-        'notes' => $input['notes'] ?? 'Partial inspection completed, requires manual processing'
-    ]);
+    if ($totalAccepted <= 0) {
+        return 'failed';
+    }
+
+    if ($totalAccepted < $totalReceived) {
+        return 'partial';
+    }
+
+    return 'passed';
 }
 
-function updatePurchaseOrderStatus($db, $grnId) {
-    // Get PO ID from GRN
-    $poQuery = "SELECT po_id FROM goods_received_notes WHERE id = :grn_id";
-    $poStmt = $db->prepare($poQuery);
-    $poStmt->bindParam(':grn_id', $grnId, PDO::PARAM_INT);
-    $poStmt->execute();
-    $poResult = $poStmt->fetch(PDO::FETCH_ASSOC);
+function updatePurchaseOrderStatusForGrn(PDO $db, int $poId): string {
+    $poTotalsStmt = $db->prepare("
+        SELECT
+            COALESCE(SUM(quantity_ordered), 0) AS total_ordered,
+            COALESCE(SUM(quantity_received), 0) AS total_received
+        FROM purchase_order_items
+        WHERE po_id = :po_id
+    ");
+    $poTotalsStmt->execute([':po_id' => $poId]);
+    $poTotals = $poTotalsStmt->fetch(PDO::FETCH_ASSOC);
 
-    if (!$poResult) return;
+    $totalOrdered = (int)($poTotals['total_ordered'] ?? 0);
+    $totalReceived = (int)($poTotals['total_received'] ?? 0);
 
-    $poId = $poResult['po_id'];
-
-    // Check if all items are fully received
-    $checkQuery = "SELECT
-                   SUM(poi.quantity_ordered) as total_ordered,
-                   SUM(poi.quantity_received) as total_received
-                   FROM purchase_order_items poi
-                   WHERE poi.po_id = :po_id";
-
-    $checkStmt = $db->prepare($checkQuery);
-    $checkStmt->bindParam(':po_id', $poId, PDO::PARAM_INT);
-    $checkStmt->execute();
-    $checkResult = $checkStmt->fetch(PDO::FETCH_ASSOC);
-
-    $newStatus = 'partially_received';
-    if ($checkResult['total_received'] >= $checkResult['total_ordered']) {
+    $newStatus = 'approved';
+    if ($totalReceived >= $totalOrdered && $totalOrdered > 0) {
         $newStatus = 'received';
+    } elseif ($totalReceived > 0) {
+        $newStatus = 'partially_received';
     }
 
-    // Update PO status
-    $updatePoQuery = "UPDATE purchase_orders SET status = :status, updated_at = NOW() WHERE id = :po_id";
-    $updatePoStmt = $db->prepare($updatePoQuery);
-    $updatePoStmt->bindParam(':status', $newStatus);
-    $updatePoStmt->bindParam(':po_id', $poId, PDO::PARAM_INT);
-    $updatePoStmt->execute();
-}
+    $poUpdateStmt = $db->prepare("
+        UPDATE purchase_orders
+        SET status = :status,
+            updated_at = NOW()
+        WHERE id = :po_id
+    ");
+    $poUpdateStmt->execute([
+        ':status' => $newStatus,
+        ':po_id' => $poId
+    ]);
 
+    return $newStatus;
+}

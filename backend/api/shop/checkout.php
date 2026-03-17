@@ -118,7 +118,13 @@ function processCheckout($customerModel, $customerId, $sessionId) {
         }
 
         // Update order payment status
-        updateOrderPaymentStatus($db, $orderId, 'paid', $checkoutData['payment_method'], $paymentResult);
+        updateOrderPaymentStatus(
+            $db,
+            $orderId,
+            $paymentResult['payment_status'] ?? 'paid',
+            $checkoutData['payment_method'],
+            $paymentResult
+        );
 
         // Reserve stock for pending order (stock will be reduced when staff approves)
         // NOTE: Stock is NOT reduced here - only reserved until staff approval

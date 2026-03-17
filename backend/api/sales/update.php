@@ -18,8 +18,7 @@ require_once __DIR__ . '/../../middleware/CORS.php';
 
 CORS::handle();
 
-// Require authentication
-Auth::requireAuth();
+Auth::requireRole(['admin', 'inventory_manager', 'purchasing_officer', 'staff']);
 
 $method = $_SERVER['REQUEST_METHOD'];
 
@@ -47,7 +46,9 @@ function updateSale() {
     }
 
     $saleId = (int)$input['id'];
-    $db = Database::getInstance()->getConnection();
+    $dbInstance = Database::getInstance();
+    $db = $dbInstance->getConnection();
+    $hasStatusColumn = $dbInstance->columnExists('sales', 'status');
 
     // Verify sale exists
     $checkQuery = "SELECT * FROM sales WHERE id = :id";
@@ -62,12 +63,13 @@ function updateSale() {
     }
 
     // Check if sale is already voided
-    if ($sale['status'] === 'voided') {
+    if ($hasStatusColumn && ($sale['status'] ?? null) === 'voided') {
         Response::error('Cannot update a voided sale', 400);
     }
 
     // Build update query dynamically
     $updateFields = [];
+    $updatedFieldNames = [];
     $params = [':id' => $saleId];
 
     // Allowed fields to update (limited to non-critical fields)
@@ -77,6 +79,7 @@ function updateSale() {
         if (isset($input[$field])) {
             $updateFields[] = "$field = :$field";
             $params[":$field"] = $input[$field];
+            $updatedFieldNames[] = $field;
         }
     }
 
@@ -100,7 +103,7 @@ function updateSale() {
     $activityStmt = $db->prepare($activityQuery);
     $activityStmt->bindParam(':user_id', $user['id'], PDO::PARAM_INT);
     $activityStmt->bindParam(':sale_id', $saleId, PDO::PARAM_INT);
-    $description = 'Updated sale ' . $sale['invoice_number'] . ' - Fields: ' . implode(', ', array_keys($updateFields));
+    $description = 'Updated sale ' . $sale['invoice_number'] . ' - Fields: ' . implode(', ', $updatedFieldNames);
     $activityStmt->bindParam(':description', $description);
     $activityStmt->execute();
 

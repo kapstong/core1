@@ -470,10 +470,11 @@ function createOrder($customerId, $data) {
             ]);
         }
 
-        // Update inventory
+        // Reserve stock for pending orders.
+        // Stock only leaves quantity_on_hand after staff approval.
         $inventoryStmt = $db->prepare("
             UPDATE inventory
-            SET quantity_on_hand = quantity_on_hand - ?
+            SET quantity_reserved = quantity_reserved + ?
             WHERE product_id = ?
         ");
 
@@ -484,22 +485,6 @@ function createOrder($customerId, $data) {
         // Clear cart
         $clearCartStmt = $db->prepare("DELETE FROM shopping_cart WHERE customer_id = ?");
         $clearCartStmt->execute([$customerId]);
-
-        // Log stock movements
-        $movementStmt = $db->prepare("
-            INSERT INTO stock_movements (
-                product_id, movement_type, quantity, quantity_before, quantity_after,
-                reference_type, reference_id, performed_by, notes
-            ) VALUES (?, 'customer_order', ?, ?, ?, 'CUSTOMER_ORDER', ?, NULL, ?)
-        ");
-
-        foreach ($cartItems as $item) {
-            $movementStmt->execute([
-                $item['product_id'], $item['quantity'],
-                $item['quantity_available'], $item['quantity_available'] - $item['quantity'],
-                $orderId, "Order {$orderNumber}"
-            ]);
-        }
 
         $db->commit();
 
@@ -552,7 +537,8 @@ function cancelOrder($customerId, $data) {
 
     // Check if order exists and belongs to customer
     $checkStmt = $db->prepare("
-        SELECT id, status, order_number FROM customer_orders
+        SELECT id, status, order_number, payment_status, payment_method, total_amount
+        FROM customer_orders
         WHERE id = ? AND customer_id = ?
     ");
     $checkStmt->execute([$orderId, $customerId]);
@@ -575,40 +561,71 @@ function cancelOrder($customerId, $data) {
         $updateStmt = $db->prepare("UPDATE customer_orders SET status = 'cancelled' WHERE id = ?");
         $updateStmt->execute([$orderId]);
 
-        // Return items to inventory
+        // Release pending reservations or restore already-deducted stock.
         $itemsStmt = $db->prepare("SELECT product_id, quantity FROM customer_order_items WHERE order_id = ?");
         $itemsStmt->execute([$orderId]);
         $orderItems = $itemsStmt->fetchAll(PDO::FETCH_ASSOC);
 
-        $inventoryStmt = $db->prepare("
-            UPDATE inventory
-            SET quantity_on_hand = quantity_on_hand + ?
-            WHERE product_id = ?
-        ");
-
         foreach ($orderItems as $item) {
-            $inventoryStmt->execute([$item['quantity'], $item['product_id']]);
+            $inventoryStmt = $db->prepare("
+                SELECT quantity_on_hand, quantity_reserved
+                FROM inventory
+                WHERE product_id = ?
+                LIMIT 1
+            ");
+            $inventoryStmt->execute([$item['product_id']]);
+            $inventory = $inventoryStmt->fetch(PDO::FETCH_ASSOC) ?: [
+                'quantity_on_hand' => 0,
+                'quantity_reserved' => 0
+            ];
+
+            $quantity = (int)$item['quantity'];
+            $quantityOnHand = (int)$inventory['quantity_on_hand'];
+            $quantityReserved = (int)$inventory['quantity_reserved'];
+            $reservedRelease = min($quantityReserved, $quantity);
+            $onHandRestore = $quantity - $reservedRelease;
+            $quantityAfter = $quantityOnHand + $onHandRestore;
+
+            if ($inventory) {
+                $updateInventoryStmt = $db->prepare("
+                    INSERT INTO inventory (product_id, quantity_on_hand, quantity_reserved)
+                    VALUES (?, ?, 0)
+                    ON DUPLICATE KEY UPDATE
+                        quantity_on_hand = quantity_on_hand + VALUES(quantity_on_hand),
+                        quantity_reserved = GREATEST(0, quantity_reserved - ?)
+                ");
+                $updateInventoryStmt->execute([
+                    $item['product_id'],
+                    $onHandRestore,
+                    $reservedRelease
+                ]);
+            }
+
+            if ($onHandRestore > 0) {
+                $movementStmt = $db->prepare("
+                    INSERT INTO stock_movements (
+                        product_id, movement_type, quantity, quantity_before, quantity_after,
+                        reference_type, reference_id, performed_by, notes
+                    ) VALUES (?, 'return', ?, ?, ?, 'CUSTOMER_ORDER', ?, NULL, ?)
+                ");
+                $movementStmt->execute([
+                    $item['product_id'],
+                    $onHandRestore,
+                    $quantityOnHand,
+                    $quantityAfter,
+                    $orderId,
+                    "Order cancellation {$order['order_number']}"
+                ]);
+            }
         }
 
-        // Log stock movements
-        $movementStmt = $db->prepare("
-            INSERT INTO stock_movements (
-                product_id, movement_type, quantity, quantity_before, quantity_after,
-                reference_type, reference_id, performed_by, notes
-            ) VALUES (?, 'customer_order', ?, ?, ?, 'CUSTOMER_ORDER', ?, NULL, ?)
-        ");
-
-        foreach ($orderItems as $item) {
-            // Get current stock level
-            $stockStmt = $db->prepare("SELECT quantity_on_hand FROM inventory WHERE product_id = ?");
-            $stockStmt->execute([$item['product_id']]);
-            $currentStock = $stockStmt->fetch(PDO::FETCH_ASSOC)['quantity_on_hand'];
-
-            $movementStmt->execute([
-                $item['product_id'], $item['quantity'],
-                $currentStock - $item['quantity'], $currentStock,
-                $orderId, "Order cancellation {$order['order_number']}"
-            ]);
+        if (($order['payment_status'] ?? null) === 'paid') {
+            $refundStmt = $db->prepare("
+                UPDATE customer_orders
+                SET payment_status = 'refunded'
+                WHERE id = ?
+            ");
+            $refundStmt->execute([$orderId]);
         }
 
         $db->commit();

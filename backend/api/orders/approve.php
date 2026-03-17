@@ -180,6 +180,106 @@ function getOrderItems($db, $orderId) {
     return $stmt->fetchAll(PDO::FETCH_ASSOC);
 }
 
+function getInventoryState($db, $productId) {
+    $query = "SELECT quantity_on_hand, quantity_reserved FROM inventory WHERE product_id = :product_id LIMIT 1";
+    $stmt = $db->prepare($query);
+    $stmt->bindValue(':product_id', $productId, PDO::PARAM_INT);
+    $stmt->execute();
+
+    return $stmt->fetch(PDO::FETCH_ASSOC);
+}
+
+function finalizeApprovedInventory($db, $productId, $quantity, $orderId, $userId, $productLabel) {
+    $inventory = getInventoryState($db, $productId);
+    if (!$inventory) {
+        throw new Exception("Inventory record not found for product ID {$productId}");
+    }
+
+    $quantityOnHand = (int)$inventory['quantity_on_hand'];
+    $quantityReserved = (int)$inventory['quantity_reserved'];
+    $reservedToConvert = min($quantityReserved, $quantity);
+
+    if ($reservedToConvert > $quantityOnHand) {
+        throw new Exception("Insufficient on-hand stock for {$productLabel}. Available on hand: {$quantityOnHand}");
+    }
+
+    $updateInvQuery = "UPDATE inventory
+                      SET quantity_on_hand = quantity_on_hand - :quantity_on_hand,
+                          quantity_reserved = GREATEST(0, quantity_reserved - :quantity_reserved)
+                      WHERE product_id = :product_id";
+
+    $invUpdateStmt = $db->prepare($updateInvQuery);
+    $invUpdateStmt->bindValue(':quantity_on_hand', $reservedToConvert, PDO::PARAM_INT);
+    $invUpdateStmt->bindValue(':quantity_reserved', $reservedToConvert, PDO::PARAM_INT);
+    $invUpdateStmt->bindValue(':product_id', $productId, PDO::PARAM_INT);
+    $invUpdateStmt->execute();
+
+    if ($reservedToConvert > 0) {
+        $movementStmt = $db->prepare("
+            INSERT INTO stock_movements (
+                product_id, movement_type, quantity, quantity_before, quantity_after,
+                reference_type, reference_id, performed_by, notes
+            ) VALUES (
+                :product_id, 'sale', :quantity, :quantity_before, :quantity_after,
+                'CUSTOMER_ORDER', :reference_id, :performed_by, :notes
+            )
+        ");
+        $movementStmt->execute([
+            ':product_id' => $productId,
+            ':quantity' => -$reservedToConvert,
+            ':quantity_before' => $quantityOnHand,
+            ':quantity_after' => $quantityOnHand - $reservedToConvert,
+            ':reference_id' => $orderId,
+            ':performed_by' => $userId,
+            ':notes' => "Customer order approval - {$productLabel}"
+        ]);
+    }
+}
+
+function releaseOrderInventory($db, $productId, $quantity, $orderId, $userId, $productLabel, $reasonText) {
+    $inventory = getInventoryState($db, $productId);
+    $quantityOnHand = (int)($inventory['quantity_on_hand'] ?? 0);
+    $quantityReserved = (int)($inventory['quantity_reserved'] ?? 0);
+    $reservedRelease = min($quantityReserved, $quantity);
+    $onHandRestore = $quantity - $reservedRelease;
+
+    $updateInvQuery = "
+        INSERT INTO inventory (product_id, quantity_on_hand, quantity_reserved)
+        VALUES (:product_id, :quantity_on_hand, 0)
+        ON DUPLICATE KEY UPDATE
+            quantity_on_hand = quantity_on_hand + VALUES(quantity_on_hand),
+            quantity_reserved = GREATEST(0, quantity_reserved - :quantity_reserved)
+    ";
+
+    $invUpdateStmt = $db->prepare($updateInvQuery);
+    $invUpdateStmt->execute([
+        ':product_id' => $productId,
+        ':quantity_on_hand' => $onHandRestore,
+        ':quantity_reserved' => $reservedRelease
+    ]);
+
+    if ($onHandRestore > 0) {
+        $movementStmt = $db->prepare("
+            INSERT INTO stock_movements (
+                product_id, movement_type, quantity, quantity_before, quantity_after,
+                reference_type, reference_id, performed_by, notes
+            ) VALUES (
+                :product_id, 'return', :quantity, :quantity_before, :quantity_after,
+                'CUSTOMER_ORDER', :reference_id, :performed_by, :notes
+            )
+        ");
+        $movementStmt->execute([
+            ':product_id' => $productId,
+            ':quantity' => $onHandRestore,
+            ':quantity_before' => $quantityOnHand,
+            ':quantity_after' => $quantityOnHand + $onHandRestore,
+            ':reference_id' => $orderId,
+            ':performed_by' => $userId,
+            ':notes' => trim("{$reasonText} - {$productLabel}")
+        ]);
+    }
+}
+
 /**
  * Approve order - Reduce stock, update status to success, create sales entry
  */
@@ -194,29 +294,21 @@ function approveOrder($db, $orderId, $order, $orderItems, $currentUser) {
     $stmt->bindValue(':order_id', $orderId, PDO::PARAM_INT);
     $stmt->execute();
 
-    // 2. Reduce stock for each item
+    // 2. Finalize reserved stock for each item.
+    // Legacy orders may already have reduced quantity_on_hand, so only the
+    // still-reserved portion is converted to a completed sale here.
     foreach ($orderItems as $item) {
         $productId = (int)$item['product_id'];
         $quantity = (int)$item['quantity'];
+        $productLabel = $item['product_name'] ?? ('Product #' . $productId);
 
         error_log("Processing inventory update - Product ID: {$productId}, Quantity: {$quantity}");
 
-        // Update inventory: reduce quantity_on_hand and quantity_reserved
-        $updateInvQuery = "UPDATE inventory
-                          SET quantity_on_hand = quantity_on_hand - :quantity_hand,
-                              quantity_reserved = GREATEST(0, quantity_reserved - :quantity_reserved)
-                          WHERE product_id = :product_id";
-
         try {
-            $invUpdateStmt = $db->prepare($updateInvQuery);
-            $invUpdateStmt->bindValue(':quantity_hand', $quantity, PDO::PARAM_INT);
-            $invUpdateStmt->bindValue(':quantity_reserved', $quantity, PDO::PARAM_INT);
-            $invUpdateStmt->bindValue(':product_id', $productId, PDO::PARAM_INT);
-            $invUpdateResult = $invUpdateStmt->execute();
-            error_log("Inventory update executed successfully. Result: " . (int)$invUpdateResult);
+            finalizeApprovedInventory($db, $productId, $quantity, $orderId, $currentUser['id'], $productLabel);
+            error_log("Inventory update executed successfully.");
         } catch (PDOException $e) {
             error_log("Inventory update failed: " . $e->getMessage());
-            error_log("Query: " . $updateInvQuery);
             error_log("Params - Product ID: {$productId}, Quantity: {$quantity}");
             throw $e;
         }
@@ -244,20 +336,32 @@ function rejectOrder($db, $orderId, $order, $orderItems, $currentUser, $reason) 
     $stmt->bindValue(':reason', $reason ?: 'No reason provided');
     $stmt->execute();
 
-    // 2. Release reserved stock for each item
+    // 2. Release pending reservations or restore already-deducted stock
     foreach ($orderItems as $item) {
         $productId = (int)$item['product_id'];
         $quantity = (int)$item['quantity'];
+        $productLabel = $item['product_name'] ?? ('Product #' . $productId);
 
-        // Release reservation: decrease quantity_reserved
-        $updateInvQuery = "UPDATE inventory
-                          SET quantity_reserved = GREATEST(0, quantity_reserved - :quantity_reserved)
-                          WHERE product_id = :product_id";
+        releaseOrderInventory(
+            $db,
+            $productId,
+            $quantity,
+            $orderId,
+            $currentUser['id'],
+            $productLabel,
+            'Customer order rejected'
+        );
+    }
 
-        $invUpdateStmt = $db->prepare($updateInvQuery);
-        $invUpdateStmt->bindValue(':quantity_reserved', $quantity, PDO::PARAM_INT);
-        $invUpdateStmt->bindValue(':product_id', $productId, PDO::PARAM_INT);
-        $invUpdateStmt->execute();
+    if (($order['payment_status'] ?? null) === 'paid') {
+        $refundStmt = $db->prepare("
+            UPDATE customer_orders
+            SET payment_status = 'refunded',
+                updated_at = NOW()
+            WHERE id = :order_id
+        ");
+        $refundStmt->bindValue(':order_id', $orderId, PDO::PARAM_INT);
+        $refundStmt->execute();
     }
 
     // 3. Log activity - DISABLED for now
@@ -300,6 +404,9 @@ function createSalesEntry($db, $order, $orderItems, $currentUser) {
     ];
     $orderPaymentMethod = strtolower($order['payment_method'] ?? 'cash');
     $paymentMethod = $paymentMethodMap[$orderPaymentMethod] ?? 'cash';
+    $salePaymentStatus = in_array(($order['payment_status'] ?? 'paid'), ['pending', 'paid', 'failed', 'refunded'], true)
+        ? $order['payment_status']
+        : 'paid';
 
     // Customer info
     $customerName = trim(($order['first_name'] ?? '') . ' ' . ($order['last_name'] ?? ''));
@@ -321,7 +428,7 @@ function createSalesEntry($db, $order, $orderItems, $currentUser) {
         ':discount_amount' => 0,
         ':total_amount' => $totalAmount,
         ':payment_method' => $paymentMethod,
-        ':payment_status' => 'paid',
+        ':payment_status' => $salePaymentStatus,
         ':notes' => 'Customer Order #' . ($order['order_number'] ?? $order['id'])
     ];
 
@@ -341,7 +448,7 @@ function createSalesEntry($db, $order, $orderItems, $currentUser) {
         $stmt->bindValue(':discount_amount', 0);
         $stmt->bindValue(':total_amount', $totalAmount);
         $stmt->bindValue(':payment_method', $paymentMethod);
-        $stmt->bindValue(':payment_status', 'paid');
+        $stmt->bindValue(':payment_status', $salePaymentStatus);
         $stmt->bindValue(':notes', 'Customer Order #' . ($order['order_number'] ?? $order['id']));
 
         $stmt->execute();

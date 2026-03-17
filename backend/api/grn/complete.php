@@ -93,6 +93,9 @@ try {
             $totalRejected += (int)($item['quantity_rejected'] ?? 0);
         }
 
+        $currentStatus = normalizeGrnStatus($grn['inspection_status'] ?? null) ?? 'pending';
+        $finalStatus = deriveFinalGrnStatus($totalReceived, $totalAccepted);
+
         // Inventory and PO quantities are already applied during GRN creation.
         // Completion only finalizes the inspection state.
         $poTotalsStmt = $db->prepare("
@@ -125,23 +128,26 @@ try {
 
         $grnUpdateStmt = $db->prepare("
             UPDATE goods_received_notes
-            SET inspection_status = 'completed',
+            SET inspection_status = :inspection_status,
                 updated_at = NOW()
             WHERE id = :id
         ");
-        $grnUpdateStmt->execute([':id' => $grnId]);
+        $grnUpdateStmt->execute([
+            ':inspection_status' => $finalStatus,
+            ':id' => $grnId
+        ]);
 
         $db->commit();
 
         AuditLogger::logUpdate('grn', $grnId, "GRN {$grn['grn_number']} completed - Receipt finalized", [
             'old_status' => $grn['inspection_status'],
-            'new_status' => 'completed',
+            'new_status' => $finalStatus,
             'grn_number' => $grn['grn_number'],
             'po_number' => $grn['po_number'],
             'supplier_name' => $grn['supplier_name'],
             'completed_by' => $user['full_name']
         ], [
-            'inspection_status' => 'completed',
+            'inspection_status' => $finalStatus,
             'items_processed' => $processedItems,
             'total_accepted' => $totalAccepted,
             'total_rejected' => $totalRejected,
@@ -151,7 +157,7 @@ try {
 
         Response::success([
             'id' => $grnId,
-            'status' => 'completed',
+            'status' => $finalStatus,
             'grn_number' => $grn['grn_number'],
             'po_number' => $grn['po_number'],
             'supplier_name' => $grn['supplier_name'],
@@ -173,4 +179,39 @@ try {
 } catch (Exception $e) {
     error_log('GRN Complete Error: ' . $e->getMessage());
     Response::error('An error occurred while completing GRN: ' . $e->getMessage(), 500);
+}
+
+function normalizeGrnStatus($status): ?string {
+    if ($status === null) {
+        return null;
+    }
+
+    $normalized = strtolower(trim((string)$status));
+    $map = [
+        'pending' => 'pending',
+        'passed' => 'passed',
+        'partial' => 'partial',
+        'failed' => 'failed',
+        'completed' => 'passed',
+        'in_progress' => 'partial',
+        'rejected' => 'failed'
+    ];
+
+    return $map[$normalized] ?? null;
+}
+
+function deriveFinalGrnStatus(int $totalReceived, int $totalAccepted): string {
+    if ($totalReceived <= 0) {
+        return 'pending';
+    }
+
+    if ($totalAccepted <= 0) {
+        return 'failed';
+    }
+
+    if ($totalAccepted < $totalReceived) {
+        return 'partial';
+    }
+
+    return 'passed';
 }

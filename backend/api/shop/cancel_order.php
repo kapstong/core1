@@ -162,38 +162,60 @@ function getOrderItems($db, $orderId) {
 }
 
 function restoreInventory($db, $orderItems, $orderId, $customerId, $reason) {
-    // Restore inventory quantity
-    $updateQuery = "UPDATE inventory SET quantity_on_hand = quantity_on_hand + :quantity
-                    WHERE product_id = :product_id";
-    $updateStmt = $db->prepare($updateQuery);
-
     foreach ($orderItems as $item) {
-        // Restore stock
-        $updateStmt->bindParam(':quantity', $item['quantity'], PDO::PARAM_INT);
-        $updateStmt->bindParam(':product_id', $item['product_id'], PDO::PARAM_INT);
-        $updateStmt->execute();
+        $productId = (int)$item['product_id'];
+        $quantity = (int)$item['quantity'];
 
-        // Create stock movement record for audit trail
-        $movementQuery = "
-            INSERT INTO stock_movements (
-                product_id, movement_type, quantity, quantity_before, quantity_after,
-                reference_type, reference_id, performed_by, notes
-            )
-            SELECT
-                :product_id, 'return', :quantity, i.quantity_on_hand - :quantity,
-                i.quantity_on_hand, 'CUSTOMER_ORDER_CANCELLED', :order_id, :customer_id, :notes
-            FROM inventory i
-            WHERE i.product_id = :product_id
+        $inventoryQuery = "SELECT quantity_on_hand, quantity_reserved FROM inventory WHERE product_id = :product_id LIMIT 1";
+        $inventoryStmt = $db->prepare($inventoryQuery);
+        $inventoryStmt->bindValue(':product_id', $productId, PDO::PARAM_INT);
+        $inventoryStmt->execute();
+        $inventory = $inventoryStmt->fetch(PDO::FETCH_ASSOC) ?: [
+            'quantity_on_hand' => 0,
+            'quantity_reserved' => 0
+        ];
+
+        $quantityOnHand = (int)$inventory['quantity_on_hand'];
+        $quantityReserved = (int)$inventory['quantity_reserved'];
+        $reservedRelease = min($quantityReserved, $quantity);
+        $onHandRestore = $quantity - $reservedRelease;
+
+        $updateQuery = "
+            INSERT INTO inventory (product_id, quantity_on_hand, quantity_reserved)
+            VALUES (:product_id, :quantity_on_hand, 0)
+            ON DUPLICATE KEY UPDATE
+                quantity_on_hand = quantity_on_hand + VALUES(quantity_on_hand),
+                quantity_reserved = GREATEST(0, quantity_reserved - :quantity_reserved)
         ";
+        $updateStmt = $db->prepare($updateQuery);
+        $updateStmt->execute([
+            ':product_id' => $productId,
+            ':quantity_on_hand' => $onHandRestore,
+            ':quantity_reserved' => $reservedRelease
+        ]);
 
-        $movementStmt = $db->prepare($movementQuery);
-        $movementStmt->bindParam(':product_id', $item['product_id'], PDO::PARAM_INT);
-        $movementStmt->bindParam(':quantity', $item['quantity'], PDO::PARAM_INT);
-        $movementStmt->bindParam(':order_id', $orderId, PDO::PARAM_INT);
-        $movementStmt->bindParam(':customer_id', $customerId, PDO::PARAM_INT);
-        $notes = "Order Cancelled - {$item['product_name']} - Reason: {$reason}";
-        $movementStmt->bindParam(':notes', $notes);
-        $movementStmt->execute();
+        if ($onHandRestore > 0) {
+            $movementQuery = "
+                INSERT INTO stock_movements (
+                    product_id, movement_type, quantity, quantity_before, quantity_after,
+                    reference_type, reference_id, performed_by, notes
+                ) VALUES (
+                    :product_id, 'return', :quantity, :quantity_before, :quantity_after,
+                    'CUSTOMER_ORDER', :order_id, :customer_id, :notes
+                )
+            ";
+
+            $movementStmt = $db->prepare($movementQuery);
+            $movementStmt->bindValue(':product_id', $productId, PDO::PARAM_INT);
+            $movementStmt->bindValue(':quantity', $onHandRestore, PDO::PARAM_INT);
+            $movementStmt->bindValue(':quantity_before', $quantityOnHand, PDO::PARAM_INT);
+            $movementStmt->bindValue(':quantity_after', $quantityOnHand + $onHandRestore, PDO::PARAM_INT);
+            $movementStmt->bindValue(':order_id', $orderId, PDO::PARAM_INT);
+            $movementStmt->bindValue(':customer_id', $customerId, PDO::PARAM_INT);
+            $notes = "Order Cancelled - {$item['product_name']} - Reason: {$reason}";
+            $movementStmt->bindValue(':notes', $notes);
+            $movementStmt->execute();
+        }
     }
 }
 

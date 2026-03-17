@@ -7733,9 +7733,9 @@ async function loadGRNPage() {
                 <select id="grn-status-filter" class="form-select">
                     <option value="all">All Status</option>
                     <option value="pending">Pending Inspection</option>
-                    <option value="in_progress">In Progress</option>
-                    <option value="completed">Completed</option>
-                    <option value="rejected">Rejected</option>
+                    <option value="passed">Passed</option>
+                    <option value="partial">Partial</option>
+                    <option value="failed">Failed</option>
                 </select>
 
                 <select id="grn-po-filter" class="form-select">
@@ -7886,10 +7886,11 @@ async function loadGRNs() {
 
             // Update summary
             if (summary) {
-                const completed = allGRNs.filter(grn => grn.inspection_status === 'completed').length;
+                const completed = allGRNs.filter(grn => normalizeGRNStatus(grn.inspection_status) === 'passed').length;
                 const pending = allGRNs.filter(grn => grn.inspection_status === 'pending').length;
-                const inProgress = allGRNs.filter(grn => grn.inspection_status === 'in_progress').length;
-                summary.textContent = `${allGRNs.length} GRN${allGRNs.length === 1 ? '' : 's'} • ${completed} completed • ${inProgress} in progress • ${pending} pending`;
+                const partial = allGRNs.filter(grn => normalizeGRNStatus(grn.inspection_status) === 'partial').length;
+                const failed = allGRNs.filter(grn => normalizeGRNStatus(grn.inspection_status) === 'failed').length;
+                summary.textContent = `${allGRNs.length} GRN${allGRNs.length === 1 ? '' : 's'} | ${completed} passed | ${partial} partial | ${failed} failed | ${pending} pending`;
             }
         } else {
             noGRNMessage.classList.remove('d-none');
@@ -7938,7 +7939,7 @@ function displayGRNs(grns) {
                     <button onclick="editGRN(${grn.id})" class="btn btn-outline-primary" title="Edit GRN">
                         <i class="fas fa-edit"></i>
                     </button>
-                    ${grn.inspection_status !== 'completed' ?
+                    ${!['completed', 'passed', 'partial', 'failed', 'rejected'].includes(grn.inspection_status) ?
                         `<button onclick="finishGRN(${grn.id})" class="btn btn-outline-success" title="Mark Complete">
                             <i class="fas fa-check"></i>
                         </button>` : ''}
@@ -7951,14 +7952,29 @@ function displayGRNs(grns) {
     `).join('');
 }
 
+function normalizeGRNStatus(status) {
+    const statusMap = {
+        pending: 'pending',
+        passed: 'passed',
+        partial: 'partial',
+        failed: 'failed',
+        completed: 'passed',
+        in_progress: 'partial',
+        rejected: 'failed'
+    };
+
+    return statusMap[status] || status;
+}
+
 function getGRNStatusBadge(status) {
+    const normalizedStatus = normalizeGRNStatus(status);
     const badges = {
         'pending': '<span class="badge bg-warning"><i class="fas fa-clock me-1"></i>Pending</span>',
-        'in_progress': '<span class="badge bg-primary"><i class="fas fa-cog me-1"></i>In Progress</span>',
-        'completed': '<span class="badge bg-success"><i class="fas fa-check me-1"></i>Completed</span>',
-        'rejected': '<span class="badge bg-danger"><i class="fas fa-times me-1"></i>Rejected</span>'
+        'passed': '<span class="badge bg-success"><i class="fas fa-check me-1"></i>Passed</span>',
+        'partial': '<span class="badge bg-info"><i class="fas fa-adjust me-1"></i>Partial</span>',
+        'failed': '<span class="badge bg-danger"><i class="fas fa-times me-1"></i>Failed</span>'
     };
-    return badges[status] || '<span class="badge bg-secondary">Unknown</span>';
+    return badges[normalizedStatus] || '<span class="badge bg-secondary">Unknown</span>';
 }
 
 async function openGRNModal(grnId = null) {
@@ -7995,9 +8011,9 @@ async function openGRNModal(grnId = null) {
                                 <label class="form-label">Inspection Status</label>
                                 <select class="form-select" id="grn-status">
                                     <option value="pending">Pending Inspection</option>
-                                    <option value="in_progress">In Progress</option>
-                                    <option value="completed">Completed</option>
-                                    <option value="rejected">Rejected</option>
+                                    <option value="passed">Passed</option>
+                                    <option value="partial">Partial</option>
+                                    <option value="failed">Failed</option>
                                 </select>
                             </div>
                         </div>
@@ -8397,7 +8413,7 @@ async function loadGRNForEdit(id) {
             document.getElementById('grn-number').value = grn.grn_number;
             document.getElementById('grn-po').value = grn.po?.id || '';
             document.getElementById('grn-received-date').value = grn.received_date;
-            document.getElementById('grn-status').value = grn.inspection_status;
+            document.getElementById('grn-status').value = normalizeGRNStatus(grn.inspection_status);
             document.getElementById('grn-notes').value = grn.notes || '';
 
             // Load PO items will trigger when PO is selected
