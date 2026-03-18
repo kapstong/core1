@@ -15,6 +15,47 @@ require_once __DIR__ . '/../../utils/Validator.php';
 require_once __DIR__ . '/../../utils/Logger.php';
 require_once __DIR__ . '/../../models/User.php';
 
+function userTableRequiresExplicitId(PDO $conn) {
+    try {
+        $schemaStmt = $conn->query('SELECT DATABASE() AS db_name');
+        $schemaRow = $schemaStmt->fetch(PDO::FETCH_ASSOC);
+        $schemaName = $schemaRow['db_name'] ?? null;
+        if (!$schemaName) {
+            return false;
+        }
+
+        $stmt = $conn->prepare("
+            SELECT IS_NULLABLE, COLUMN_DEFAULT, EXTRA
+            FROM INFORMATION_SCHEMA.COLUMNS
+            WHERE TABLE_SCHEMA = :schema
+              AND TABLE_NAME = 'users'
+              AND COLUMN_NAME = 'id'
+            LIMIT 1
+        ");
+        $stmt->execute([':schema' => $schemaName]);
+        $row = $stmt->fetch(PDO::FETCH_ASSOC);
+
+        if (!$row) {
+            return false;
+        }
+
+        $extra = strtolower((string)($row['EXTRA'] ?? ''));
+        $isNullable = strtoupper((string)($row['IS_NULLABLE'] ?? 'YES')) === 'YES';
+        $hasDefault = array_key_exists('COLUMN_DEFAULT', $row) && $row['COLUMN_DEFAULT'] !== null;
+
+        return strpos($extra, 'auto_increment') === false && !$isNullable && !$hasDefault;
+    } catch (Throwable $e) {
+        return false;
+    }
+}
+
+function getNextUserId(PDO $conn) {
+    $stmt = $conn->query("SELECT COALESCE(MAX(id), 0) + 1 AS next_id FROM users");
+    $row = $stmt->fetch(PDO::FETCH_ASSOC);
+    $nextId = isset($row['next_id']) ? (int)$row['next_id'] : 1;
+    return $nextId > 0 ? $nextId : 1;
+}
+
 header('Access-Control-Allow-Origin: *');
 header('Access-Control-Allow-Methods: POST, OPTIONS');
 header('Access-Control-Allow-Headers: Content-Type');
@@ -109,6 +150,28 @@ try {
 
     $columns = ['username', 'email', 'password_hash', 'role', 'full_name', 'is_active'];
     $placeholders = [':username', ':email', ':password_hash', ':role', ':full_name', ':is_active'];
+    $params = [
+        ':username' => $username,
+        ':email' => $email,
+        ':password_hash' => $passwordHash,
+        ':role' => $role,
+        ':full_name' => $fullName,
+        ':is_active' => $isActive,
+    ];
+
+    $manualUserId = null;
+    if (userTableRequiresExplicitId($db)) {
+        $manualUserId = getNextUserId($db);
+        $columns[] = 'id';
+        $placeholders[] = ':id';
+        $params[':id'] = $manualUserId;
+    }
+
+    if ($database->columnExists('users', 'phone')) {
+        $columns[] = 'phone';
+        $placeholders[] = ':phone';
+        $params[':phone'] = null;
+    }
     if ($database->columnExists('users', 'created_at')) {
         $columns[] = 'created_at';
         $placeholders[] = 'NOW()';
@@ -123,18 +186,41 @@ try {
          VALUES (' . implode(', ', $placeholders) . ')'
     );
 
-    $params = [
-        ':username' => $username,
-        ':email' => $email,
-        ':password_hash' => $passwordHash,
-        ':role' => $role,
-        ':full_name' => $fullName,
-        ':is_active' => $isActive,
-    ];
+    try {
+        $stmt->execute($params);
+    } catch (PDOException $e) {
+        $dbCode = isset($e->errorInfo[1]) ? (int)$e->errorInfo[1] : null;
+        $message = strtolower($e->getMessage());
 
-    $stmt->execute($params);
+        if ($manualUserId === null && $dbCode === 1364 && strpos($message, "field 'id' doesn't have a default value") !== false) {
+            $manualUserId = getNextUserId($db);
+            $columns[] = 'id';
+            $placeholders[] = ':id';
+            $params[':id'] = $manualUserId;
 
-    $userId = (int)$db->lastInsertId();
+            $stmt = $db->prepare(
+                'INSERT INTO users (' . implode(', ', $columns) . ')
+                 VALUES (' . implode(', ', $placeholders) . ')'
+            );
+            $stmt->execute($params);
+        } else {
+            throw $e;
+        }
+    }
+
+    $userId = $manualUserId !== null ? $manualUserId : (int)$db->lastInsertId();
+    if ($userId <= 0) {
+        $lookup = $db->prepare("SELECT id FROM users WHERE username = :username AND email = :email LIMIT 1");
+        $lookup->execute([
+            ':username' => $username,
+            ':email' => $email,
+        ]);
+        $userRow = $lookup->fetch(PDO::FETCH_ASSOC);
+        $userId = isset($userRow['id']) ? (int)$userRow['id'] : 0;
+    }
+    if ($userId <= 0) {
+        throw new RuntimeException('Unable to determine new user ID after insert.');
+    }
     $createdUser = $userModel->findById($userId);
 
     $logger = new Logger($currentUser['id']);
