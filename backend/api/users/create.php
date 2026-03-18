@@ -4,15 +4,16 @@
  * POST /backend/api/users/create.php
  */
 
-
-// Suppress error display for clean JSON responses
 error_reporting(E_ALL);
 ini_set('display_errors', '0');
 ini_set('log_errors', '1');
+
 require_once __DIR__ . '/../../config/database.php';
-require_once __DIR__ . '/../../utils/AuditLogger.php';
 require_once __DIR__ . '/../../middleware/Auth.php';
 require_once __DIR__ . '/../../utils/Response.php';
+require_once __DIR__ . '/../../utils/Validator.php';
+require_once __DIR__ . '/../../utils/Logger.php';
+require_once __DIR__ . '/../../models/User.php';
 
 header('Access-Control-Allow-Origin: *');
 header('Access-Control-Allow-Methods: POST, OPTIONS');
@@ -24,70 +25,138 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
     exit();
 }
 
-Auth::requireAuth();
+if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+    Response::error('Method not allowed', 405);
+}
 
-$user = Auth::user();
-if ($user['role'] !== 'admin') {
-    Response::error('Access denied', 403);
+$currentUser = Auth::requireAuth();
+if (($currentUser['role'] ?? '') !== 'admin') {
+    Response::error('Access denied. Admin privileges required.', 403);
 }
 
 $data = json_decode(file_get_contents('php://input'), true);
-
-// Validate required fields
-$required = ['username', 'email', 'password', 'role'];
-foreach ($required as $field) {
-    if (empty($data[$field])) {
-        Response::error("Field '{$field}' is required", 400);
-    }
-}
-
-// Validate role - exclude supplier since they are managed separately
-$allowed_roles = ['admin', 'inventory_manager', 'purchasing_officer', 'staff'];
-if (!in_array($data['role'], $allowed_roles)) {
-    Response::error('Invalid role', 400);
+if (!$data) {
+    $data = $_POST;
 }
 
 try {
+    $userModel = new User();
     $db = Database::getInstance()->getConnection();
 
-    // Check if username already exists
-    $check = $db->prepare("SELECT id FROM users WHERE username = ?");
-    $check->execute([$data['username']]);
-    if ($check->fetch()) {
+    $requiredFields = ['username', 'full_name', 'email', 'password', 'role'];
+    foreach ($requiredFields as $field) {
+        if (!isset($data[$field]) || trim((string)$data[$field]) === '') {
+            Response::error("Field '{$field}' is required", 400);
+        }
+    }
+
+    $username = trim((string)$data['username']);
+    $fullName = trim((string)$data['full_name']);
+    $email = trim(strtolower((string)$data['email']));
+    $password = (string)$data['password'];
+    $role = (string)$data['role'];
+    $isActive = isset($data['is_active']) ? (int)((bool)$data['is_active']) : 1;
+
+    $errors = [];
+
+    if (!Validator::minLength($username, 3)) {
+        $errors[] = 'Username must be at least 3 characters';
+    } elseif (!Validator::maxLength($username, 50)) {
+        $errors[] = 'Username cannot exceed 50 characters';
+    } elseif (!preg_match('/^[a-zA-Z0-9_]+$/', $username)) {
+        $errors[] = 'Username can only contain letters, numbers, and underscores';
+    }
+
+    if (!Validator::minLength($fullName, 2)) {
+        $errors[] = 'Full name must be at least 2 characters';
+    } elseif (!Validator::maxLength($fullName, 100)) {
+        $errors[] = 'Full name cannot exceed 100 characters';
+    }
+
+    if (!Validator::email($email)) {
+        $errors[] = 'Invalid email format';
+    } elseif (!Validator::maxLength($email, 100)) {
+        $errors[] = 'Email cannot exceed 100 characters';
+    }
+
+    if (strlen($password) < 6) {
+        $errors[] = 'Password must be at least 6 characters long';
+    }
+
+    $allowedRoles = ['admin', 'inventory_manager', 'purchasing_officer', 'staff'];
+    if (!in_array($role, $allowedRoles, true)) {
+        $errors[] = 'Invalid role specified';
+    }
+
+    if (!in_array($isActive, [0, 1], true)) {
+        $errors[] = 'Active status must be 0 or 1';
+    }
+
+    if (!empty($errors)) {
+        Response::error('Validation failed: ' . implode(', ', $errors), 400);
+    }
+
+    if ($userModel->usernameExists($username)) {
         Response::error('Username already exists', 400);
     }
 
-    // Check if email already exists
-    $check = $db->prepare("SELECT id FROM users WHERE email = ?");
-    $check->execute([$data['email']]);
-    if ($check->fetch()) {
+    if ($userModel->emailExists($email)) {
         Response::error('Email already exists', 400);
     }
 
-    // Hash password
-    $password_hash = password_hash($data['password'], PASSWORD_BCRYPT);
+    $passwordHash = password_hash($password, PASSWORD_BCRYPT);
 
-    // Insert user
-    $query = "INSERT INTO users (username, password_hash, full_name, email, role, is_active, created_at)
-              VALUES (?, ?, ?, ?, ?, ?, NOW())";
+    $stmt = $db->prepare(
+        "INSERT INTO users (username, email, password_hash, role, full_name, is_active, created_at, updated_at)
+         VALUES (:username, :email, :password_hash, :role, :full_name, :is_active, NOW(), NOW())"
+    );
 
-    $stmt = $db->prepare($query);
     $stmt->execute([
-        $data['username'],
-        $password_hash,
-        $data['full_name'] ?? null,
-        $data['email'],
-        $data['role'],
-        $data['is_active'] ?? 1
+        ':username' => $username,
+        ':email' => $email,
+        ':password_hash' => $passwordHash,
+        ':role' => $role,
+        ':full_name' => $fullName,
+        ':is_active' => $isActive,
     ]);
 
-    $userId = $db->lastInsertId();
+    $userId = (int)$db->lastInsertId();
+    $createdUser = $userModel->findById($userId);
+
+    $logger = new Logger($currentUser['id']);
+    $logger->log('User created', 'user', $userId, [
+        'username' => $username,
+        'email' => $email,
+        'role' => $role,
+        'is_active' => $isActive,
+        'ip_address' => $_SERVER['REMOTE_ADDR'] ?? null,
+    ]);
 
     Response::success([
         'message' => 'User created successfully',
-        'user_id' => $userId
-    ], 201);
-} catch (PDOException $e) {
-    Response::error('Database error: ' . $e->getMessage(), 500);
-}
+        'user' => [
+            'id' => $createdUser['id'] ?? $userId,
+            'username' => $createdUser['username'] ?? $username,
+            'full_name' => $createdUser['full_name'] ?? $fullName,
+            'email' => $createdUser['email'] ?? $email,
+            'role' => $createdUser['role'] ?? $role,
+            'is_active' => isset($createdUser['is_active']) ? (bool)$createdUser['is_active'] : (bool)$isActive,
+            'last_login' => $createdUser['last_login'] ?? null,
+            'created_at' => $createdUser['created_at'] ?? null,
+        ],
+    ], 'User created successfully', 201);
+} catch (Throwable $e) {
+    Logger::logError('User create error', [
+        'error' => $e->getMessage(),
+        'file' => $e->getFile(),
+        'line' => $e->getLine(),
+        'data' => [
+            'username' => $data['username'] ?? null,
+            'email' => $data['email'] ?? null,
+            'role' => $data['role'] ?? null,
+            'is_active' => $data['is_active'] ?? null,
+        ],
+    ], $currentUser['id'] ?? null);
 
+    Response::error('An error occurred while creating the user', 500);
+}

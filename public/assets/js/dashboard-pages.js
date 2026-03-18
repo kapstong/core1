@@ -3925,7 +3925,7 @@ function displayProducts(products) {
             // Handle absolute URLs from ImageUpload class and fix relative paths
             const assetsBase = window.ASSETS_BASE || '/public/assets';
             const basePath = window.BASE_PATH || '';
-            let imageUrl = assetsBase + '/img/no-image.png';
+            let imageUrl = assetsBase + '/img/no-image.svg';
             if (product.image_url) {
                 imageUrl = product.image_url;
                 // Remove double assets/img prefixes
@@ -4478,7 +4478,7 @@ async function viewProduct(id) {
             const product = data.data;
 
             // Handle both absolute paths (new uploads) and relative paths (old products)
-            let imageUrl = '/public/assets/img/no-image.png';
+            let imageUrl = '/public/assets/img/no-image.svg';
             if (product.image_url) {
                 if (product.image_url.startsWith('/')) {
                     imageUrl = product.image_url;
