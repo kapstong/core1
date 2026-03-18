@@ -10399,13 +10399,24 @@ async function saveUser(userId) {
             body: JSON.stringify(formData)
         });
 
-        const result = await response.json();
-        if (result.success) {
+        const rawResponse = await response.text();
+        let result = null;
+
+        try {
+            result = rawResponse ? JSON.parse(rawResponse) : null;
+        } catch (parseError) {
+            result = {
+                success: false,
+                message: rawResponse || `HTTP ${response.status} ${response.statusText}`
+            };
+        }
+
+        if (response.ok && result?.success) {
             showSuccess(`User ${isEdit ? 'updated' : 'created'} successfully`);
             bootstrap.Modal.getInstance(document.getElementById('userModal')).hide();
             await loadUsers();
         } else {
-            showError(result.message || `Failed to ${isEdit ? 'update' : 'create'} user`);
+            showError(result?.message || `Failed to ${isEdit ? 'update' : 'create'} user`);
         }
     } catch (error) {
         devLog('Error saving user:', error);

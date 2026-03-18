@@ -40,8 +40,9 @@ if (!$data) {
 }
 
 try {
+    $database = Database::getInstance();
     $userModel = new User();
-    $db = Database::getInstance()->getConnection();
+    $db = $database->getConnection();
 
     $requiredFields = ['username', 'full_name', 'email', 'password', 'role'];
     foreach ($requiredFields as $field) {
@@ -106,19 +107,32 @@ try {
 
     $passwordHash = password_hash($password, PASSWORD_BCRYPT);
 
+    $columns = ['username', 'email', 'password_hash', 'role', 'full_name', 'is_active'];
+    $placeholders = [':username', ':email', ':password_hash', ':role', ':full_name', ':is_active'];
+    if ($database->columnExists('users', 'created_at')) {
+        $columns[] = 'created_at';
+        $placeholders[] = 'NOW()';
+    }
+    if ($database->columnExists('users', 'updated_at')) {
+        $columns[] = 'updated_at';
+        $placeholders[] = 'NOW()';
+    }
+
     $stmt = $db->prepare(
-        "INSERT INTO users (username, email, password_hash, role, full_name, is_active, created_at, updated_at)
-         VALUES (:username, :email, :password_hash, :role, :full_name, :is_active, NOW(), NOW())"
+        'INSERT INTO users (' . implode(', ', $columns) . ')
+         VALUES (' . implode(', ', $placeholders) . ')'
     );
 
-    $stmt->execute([
+    $params = [
         ':username' => $username,
         ':email' => $email,
         ':password_hash' => $passwordHash,
         ':role' => $role,
         ':full_name' => $fullName,
         ':is_active' => $isActive,
-    ]);
+    ];
+
+    $stmt->execute($params);
 
     $userId = (int)$db->lastInsertId();
     $createdUser = $userModel->findById($userId);
@@ -146,17 +160,6 @@ try {
         ],
     ], 'User created successfully', 201);
 } catch (Throwable $e) {
-    Logger::logError('User create error', [
-        'error' => $e->getMessage(),
-        'file' => $e->getFile(),
-        'line' => $e->getLine(),
-        'data' => [
-            'username' => $data['username'] ?? null,
-            'email' => $data['email'] ?? null,
-            'role' => $data['role'] ?? null,
-            'is_active' => $data['is_active'] ?? null,
-        ],
-    ], $currentUser['id'] ?? null);
-
-    Response::error('An error occurred while creating the user', 500);
+    error_log('User create error: ' . $e->getMessage() . ' | File: ' . $e->getFile() . ' | Line: ' . $e->getLine());
+    Response::error('Failed to create user: ' . $e->getMessage(), 500);
 }
