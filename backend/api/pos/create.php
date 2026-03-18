@@ -240,8 +240,7 @@ try {
     $inventoryStmt = $db->prepare("
         UPDATE inventory
         SET quantity_on_hand = :quantity_on_hand,
-            quantity_reserved = :quantity_reserved,
-            quantity_available = :quantity_available
+            quantity_reserved = :quantity_reserved
         WHERE product_id = :product_id
     ");
     $movementStmt = $db->prepare("
@@ -279,11 +278,9 @@ try {
 
         $newOnHand = max(0, (int)$resolvedItem['quantity_before'] - (int)$resolvedItem['quantity']);
         $newReserved = max(0, (int)$resolvedItem['quantity_reserved_before'] - (int)$resolvedItem['reserved_release']);
-        $newAvailable = max(0, $newOnHand - $newReserved);
 
         $inventoryStmt->bindValue(':quantity_on_hand', $newOnHand, PDO::PARAM_INT);
         $inventoryStmt->bindValue(':quantity_reserved', $newReserved, PDO::PARAM_INT);
-        $inventoryStmt->bindValue(':quantity_available', $newAvailable, PDO::PARAM_INT);
         $inventoryStmt->bindValue(':product_id', $resolvedItem['product_id'], PDO::PARAM_INT);
         $inventoryStmt->execute();
 

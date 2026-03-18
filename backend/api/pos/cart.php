@@ -178,20 +178,16 @@ function setReservedQuantity(Database $database, PDO $conn, $sessionId, $product
 
     upsertCartRow($conn, $sessionId, $productId, $newQuantity);
 
-    $quantityOnHand = (int)($product['quantity_on_hand'] ?? 0);
     $totalReserved = (int)($product['quantity_reserved'] ?? 0);
     $newReservedTotal = max(0, $totalReserved + $delta);
-    $newAvailable = max(0, $quantityOnHand - $newReservedTotal);
 
     $inventoryStmt = $conn->prepare("
         UPDATE inventory
-        SET quantity_reserved = :quantity_reserved,
-            quantity_available = :quantity_available
+        SET quantity_reserved = :quantity_reserved
         WHERE product_id = :product_id
     ");
     $inventoryStmt->execute([
         ':quantity_reserved' => $newReservedTotal,
-        ':quantity_available' => $newAvailable,
         ':product_id' => $productId,
     ]);
 }
@@ -281,21 +277,17 @@ function clearReservationCart(PDO $conn, $sessionId) {
     if (!empty($rows)) {
         $inventoryStmt = $conn->prepare("
             UPDATE inventory
-            SET quantity_reserved = :quantity_reserved,
-                quantity_available = :quantity_available
+            SET quantity_reserved = :quantity_reserved
             WHERE product_id = :product_id
         ");
 
         foreach ($rows as $row) {
-            $quantityOnHand = (int)($row['quantity_on_hand'] ?? 0);
             $quantityReserved = (int)($row['quantity_reserved'] ?? 0);
             $released = (int)($row['quantity'] ?? 0);
             $newReserved = max(0, $quantityReserved - $released);
-            $newAvailable = max(0, $quantityOnHand - $newReserved);
 
             $inventoryStmt->execute([
                 ':quantity_reserved' => $newReserved,
-                ':quantity_available' => $newAvailable,
                 ':product_id' => (int)$row['product_id'],
             ]);
         }
