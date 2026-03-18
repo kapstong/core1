@@ -653,7 +653,7 @@
     <script src="assets/js/face-auth-core.js?v=1.1"></script>
 
     <!-- Include all page loaders -->
-    <script src="assets/js/dashboard-pages.js?v=6.7"></script>
+    <script src="assets/js/dashboard-pages.js?v=6.8"></script>
     <script src="assets/js/admin-ai-copilot.js?v=<?= urlencode((string)@filemtime(__DIR__ . '/assets/js/admin-ai-copilot.js')) ?>"></script>
 
     <!-- NEW: Complete GRN Management System -->
@@ -668,6 +668,7 @@
     <script>
         let currentUser = null;
         let currentPage = 'home';
+        let currentPageRequestId = 0;
 
         // Get URL parameter
         function getUrlParameter(name) {
@@ -1285,6 +1286,8 @@
                 pageName = 'home';
             }
 
+            const requestId = ++currentPageRequestId;
+
             if (typeof window.cleanupProfileFaceEnrollment === 'function' && pageName !== 'profile') {
                 window.cleanupProfileFaceEnrollment();
             }
@@ -1385,22 +1388,34 @@
                             </div>
                         `;
                 }
+
+                if (requestId !== currentPageRequestId || currentPage !== pageName) {
+                    return;
+                }
                 
                 // Apply money masking after page loads
                 if (typeof moneyMasking !== 'undefined') {
                     // Try immediately and then with delays - more aggressive timing
                     moneyMasking.maskAllMoneyElements();
                     setTimeout(() => {
-                        moneyMasking.maskAllMoneyElements();
+                        if (requestId === currentPageRequestId && currentPage === pageName) {
+                            moneyMasking.maskAllMoneyElements();
+                        }
                     }, 25);
                     setTimeout(() => {
-                        moneyMasking.maskAllMoneyElements();
+                        if (requestId === currentPageRequestId && currentPage === pageName) {
+                            moneyMasking.maskAllMoneyElements();
+                        }
                     }, 75);
                     setTimeout(() => {
-                        moneyMasking.maskAllMoneyElements();
+                        if (requestId === currentPageRequestId && currentPage === pageName) {
+                            moneyMasking.maskAllMoneyElements();
+                        }
                     }, 150);
                     setTimeout(() => {
-                        moneyMasking.maskAllMoneyElements();
+                        if (requestId === currentPageRequestId && currentPage === pageName) {
+                            moneyMasking.maskAllMoneyElements();
+                        }
                     }, 300);
                 }
 
@@ -1408,6 +1423,11 @@
                     window.startLivePageAutoRefresh(pageName);
                 }
             } catch (error) {
+                if (requestId !== currentPageRequestId || currentPage !== pageName) {
+                    return;
+                }
+
+                console.error('Page load failed:', pageName, error);
                 content.innerHTML = `
                     <div class="alert alert-danger">
                         <i class="fas fa-exclamation-circle me-2"></i>
@@ -1417,7 +1437,9 @@
             }
 
             // Close mobile menu
-            document.getElementById('sidebar').classList.remove('show');
+            if (requestId === currentPageRequestId) {
+                document.getElementById('sidebar').classList.remove('show');
+            }
         }
 
         // Logout

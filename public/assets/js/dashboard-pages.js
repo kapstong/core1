@@ -2795,15 +2795,18 @@ async function loadSupplierPendingOrdersPage() {
     await loadPendingOrders();
 }
 
-async function loadPendingOrders() {
+async function loadPendingOrders(options = {}) {
+    const { silent = false } = options;
     const loadingIndicator = document.getElementById('loading-indicator');
     const ordersContent = document.getElementById('orders-content');
     const noOrdersMessage = document.getElementById('no-orders-message');
     const tbody = document.getElementById('pending-orders-tbody');
 
     try {
-        loadingIndicator.classList.remove('d-none');
-        ordersContent.classList.add('d-none');
+        if (!silent) {
+            loadingIndicator.classList.remove('d-none');
+            ordersContent.classList.add('d-none');
+        }
         noOrdersMessage.classList.add('d-none');
 
         const response = await fetch(`${API_BASE}/purchase_orders/pending.php`, {
@@ -2860,6 +2863,7 @@ async function loadPendingOrders() {
 
             ordersContent.classList.remove('d-none');
         } else {
+            ordersContent.classList.add('d-none');
             noOrdersMessage.classList.remove('d-none');
         }
     } catch (error) {
@@ -2939,15 +2943,18 @@ async function loadSupplierOrderHistoryPage() {
     });
 }
 
-async function loadOrderHistory(statusFilter = 'all') {
+async function loadOrderHistory(statusFilter = 'all', options = {}) {
+    const { silent = false } = options;
     const loadingIndicator = document.getElementById('loading-indicator');
     const ordersContent = document.getElementById('orders-content');
     const noOrdersMessage = document.getElementById('no-orders-message');
     const tbody = document.getElementById('order-history-tbody');
 
     try {
-        loadingIndicator.classList.remove('d-none');
-        ordersContent.classList.add('d-none');
+        if (!silent) {
+            loadingIndicator.classList.remove('d-none');
+            ordersContent.classList.add('d-none');
+        }
         noOrdersMessage.classList.add('d-none');
 
         const url = statusFilter === 'all'
@@ -3024,6 +3031,7 @@ async function loadOrderHistory(statusFilter = 'all') {
 
             ordersContent.classList.remove('d-none');
         } else {
+            ordersContent.classList.add('d-none');
             noOrdersMessage.classList.remove('d-none');
         }
     } catch (error) {
@@ -3650,11 +3658,18 @@ async function loadAnalyticsData() {
     }
 }
 
+let salesTrendChartInstance = null;
+let categorySalesChartInstance = null;
+
 function initSalesTrendChart(salesData) {
     const ctx = document.getElementById('sales-trend-chart');
     if (!ctx) return;
 
-    new Chart(ctx, {
+    if (salesTrendChartInstance) {
+        salesTrendChartInstance.destroy();
+    }
+
+    salesTrendChartInstance = new Chart(ctx, {
         type: 'line',
         data: {
             labels: salesData.map(item => new Date(item.date).toLocaleDateString()),
@@ -3691,7 +3706,11 @@ function initCategorySalesChart(categoryData) {
     const ctx = document.getElementById('category-sales-chart');
     if (!ctx) return;
 
-    new Chart(ctx, {
+    if (categorySalesChartInstance) {
+        categorySalesChartInstance.destroy();
+    }
+
+    categorySalesChartInstance = new Chart(ctx, {
         type: 'doughnut',
         data: {
             labels: categoryData.map(item => item.category),
@@ -3861,7 +3880,8 @@ async function loadCategoriesForFilter() {
 
 let allProducts = [];
 
-async function loadProducts() {
+async function loadProducts(options = {}) {
+    const { silent = false } = options;
     const loadingIndicator = document.getElementById('products-loading');
     const content = document.getElementById('products-content');
     const noProductsMessage = document.getElementById('no-products-message');
@@ -3871,8 +3891,10 @@ async function loadProducts() {
     const statusFilter = document.getElementById('product-status-filter').value;
 
     try {
-        loadingIndicator.classList.remove('d-none');
-        content.classList.add('d-none');
+        if (!silent) {
+            loadingIndicator.classList.remove('d-none');
+            content.classList.add('d-none');
+        }
         noProductsMessage.classList.add('d-none');
 
         let url = `${API_BASE}/products/index.php`;
@@ -3907,6 +3929,7 @@ async function loadProducts() {
                 showError(`Failed to render products: ${renderError.message || renderError}`);
             }
         } else {
+            content.classList.add('d-none');
             noProductsMessage.classList.remove('d-none');
         }
     } catch (error) {
@@ -4786,7 +4809,8 @@ async function loadCategoriesPage() {
 
 let allCategories = [];
 
-async function loadCategories() {
+async function loadCategories(options = {}) {
+    const { silent = false } = options;
     const loadingIndicator = document.getElementById('categories-loading');
     const content = document.getElementById('categories-content');
     const noCategoriesMessage = document.getElementById('no-categories-message');
@@ -4795,8 +4819,10 @@ async function loadCategories() {
     const showInactive = document.getElementById('show-inactive-categories')?.checked || false;
 
     try {
-        loadingIndicator.classList.remove('d-none');
-        content.classList.add('d-none');
+        if (!silent) {
+            loadingIndicator.classList.remove('d-none');
+            content.classList.add('d-none');
+        }
         noCategoriesMessage.classList.add('d-none');
 
         const response = await fetch(`${API_BASE}/categories/index.php?active_only=${!showInactive}`);
@@ -4809,6 +4835,7 @@ async function loadCategories() {
             displayCategories(allCategories);
             content.classList.remove('d-none');
         } else {
+            content.classList.add('d-none');
             noCategoriesMessage.classList.remove('d-none');
         }
     } catch (error) {
@@ -5213,7 +5240,8 @@ async function loadProductsForAdjustments() {
     }
 }
 
-async function loadStockAdjustments(page = 1) {
+async function loadStockAdjustments(page = 1, options = {}) {
+    const { silent = false } = options;
     page = Math.max(1, Number(page) || Number(window.stockAdjustmentsCurrentPage) || 1);
     window.stockAdjustmentsCurrentPage = page;
 
@@ -5230,8 +5258,10 @@ async function loadStockAdjustments(page = 1) {
     const search = document.getElementById('adjustment-search').value.trim();
 
     try {
-        loadingIndicator.classList.remove('d-none');
-        content.classList.add('d-none');
+        if (!silent) {
+            loadingIndicator.classList.remove('d-none');
+            content.classList.add('d-none');
+        }
         noAdjustmentsMessage.classList.add('d-none');
 
         let url = `${API_BASE}/inventory/adjust.php?limit=${itemsPerPage}&offset=${(page - 1) * itemsPerPage}`;
@@ -5265,6 +5295,7 @@ async function loadStockAdjustments(page = 1) {
                 pagination.style.display = 'none';
             }
         } else {
+            content.classList.add('d-none');
             noAdjustmentsMessage.classList.remove('d-none');
             if (summary) summary.textContent = 'No adjustments found';
         }
@@ -5917,13 +5948,35 @@ function debounce(func, wait) {
     };
 }
 
-const SUPPLIERS_AUTO_REFRESH_INTERVAL_MS = 15000;
+const SUPPLIERS_AUTO_REFRESH_INTERVAL_MS = 20000;
 let suppliersAutoRefreshIntervalId = null;
 let suppliersAutoRefreshInFlight = false;
-const LIVE_PAGE_REFRESH_INTERVAL_MS = 15000;
+const LIVE_PAGE_REFRESH_INTERVAL_MS = 20000;
+const LIVE_PAGE_REFRESH_INTERVALS_MS = {
+    home: 30000,
+    categories: 30000,
+    analytics: 45000
+};
 let livePageRefreshIntervalId = null;
 let livePageRefreshInFlight = false;
 let livePageRefreshTargetPage = null;
+
+function getLivePageRefreshInterval(pageName) {
+    return LIVE_PAGE_REFRESH_INTERVALS_MS[pageName] || LIVE_PAGE_REFRESH_INTERVAL_MS;
+}
+
+function isUserInteractingWithRefreshableContent() {
+    const activeElement = document.activeElement;
+    if (!activeElement) {
+        return false;
+    }
+
+    if (activeElement.matches('input, textarea, select') || activeElement.isContentEditable) {
+        return true;
+    }
+
+    return false;
+}
 
 function stopSuppliersAutoRefresh() {
     if (suppliersAutoRefreshIntervalId !== null) {
@@ -5946,15 +5999,15 @@ function startSuppliersAutoRefresh() {
             return;
         }
 
-        if (document.hidden || suppliersAutoRefreshInFlight) {
+        if (document.hidden || suppliersAutoRefreshInFlight || isUserInteractingWithRefreshableContent()) {
             return;
         }
 
         suppliersAutoRefreshInFlight = true;
         try {
             await Promise.all([
-                loadSuppliers(),
-                loadPendingSuppliers()
+                loadSuppliers({ silent: true }),
+                loadPendingSuppliers({ silent: true })
             ]);
         } catch (error) {
             devLog('Suppliers auto-refresh error:', error);
@@ -5987,57 +6040,51 @@ async function refreshPageData(pageName) {
             return;
         case 'products':
             if (document.getElementById('products-table-body')) {
-                await loadProducts();
+                await loadProducts({ silent: true });
             }
             return;
         case 'categories':
             if (document.getElementById('categories-table-body')) {
-                await loadCategories();
+                await loadCategories({ silent: true });
             }
             return;
         case 'adjustments':
             if (document.getElementById('adjustments-table-body')) {
-                await loadStockAdjustments(getCurrentAdjustmentsPage());
+                await loadStockAdjustments(getCurrentAdjustmentsPage(), { silent: true });
             }
             return;
         case 'purchase-orders':
             if (currentUser && currentUser.role === 'supplier') {
                 if (document.getElementById('pending-orders-tbody')) {
-                    await loadPendingOrders();
+                    await loadPendingOrders({ silent: true });
                 }
             } else if (document.getElementById('po-table-body')) {
-                await Promise.all([
-                    loadPurchaseOrders(),
-                    loadSuppliersForPOFilter()
-                ]);
+                await loadPurchaseOrders({ silent: true });
             }
             return;
         case 'po-history':
             if (currentUser && currentUser.role === 'supplier' && document.getElementById('order-history-tbody')) {
                 const statusFilter = document.getElementById('status-filter')?.value || 'all';
-                await loadOrderHistory(statusFilter);
+                await loadOrderHistory(statusFilter, { silent: true });
             }
             return;
         case 'grn':
             if (document.getElementById('grn-table-body')) {
-                await Promise.all([
-                    loadGRNs(),
-                    loadPOsForGRNFilter()
-                ]);
+                await loadGRNs({ silent: true });
             }
             return;
         case 'sales':
             if (document.getElementById('sales-table-body')) {
-                await loadSalesHistory();
+                await loadSalesHistory({ silent: true });
             }
             return;
         case 'users':
             if (document.getElementById('users-table-body')) {
-                await loadUsers();
+                await loadUsers({ silent: true });
             }
             return;
         case 'analytics':
-            if (document.getElementById('salesChart') || document.getElementById('categoryChart')) {
+            if (document.getElementById('sales-trend-chart') || document.getElementById('category-sales-chart')) {
                 await loadAnalyticsData();
             }
             return;
@@ -6073,8 +6120,9 @@ function startLivePageAutoRefresh(pageName) {
 
     livePageRefreshTargetPage = pageName;
     livePageRefreshIntervalId = setInterval(async () => {
-        // Do not refresh while hidden, while a modal is open, or when a cycle is still running.
-        if (document.hidden || document.querySelector('.modal.show') || livePageRefreshInFlight) {
+        // Do not refresh while hidden, while a modal is open, while the user is editing filters,
+        // or when a cycle is still running.
+        if (document.hidden || document.querySelector('.modal.show') || livePageRefreshInFlight || isUserInteractingWithRefreshableContent()) {
             return;
         }
 
@@ -6086,7 +6134,7 @@ function startLivePageAutoRefresh(pageName) {
         } finally {
             livePageRefreshInFlight = false;
         }
-    }, LIVE_PAGE_REFRESH_INTERVAL_MS);
+    }, getLivePageRefreshInterval(pageName));
 }
 
 window.startLivePageAutoRefresh = startLivePageAutoRefresh;
@@ -6219,7 +6267,8 @@ async function loadSuppliersPage() {
 
 let allSuppliers = [];
 
-async function loadSuppliers() {
+async function loadSuppliers(options = {}) {
+    const { silent = false } = options;
     const loadingIndicator = document.getElementById('suppliers-loading');
     const content = document.getElementById('suppliers-content');
     const noSuppliersMessage = document.getElementById('no-suppliers-message');
@@ -6230,8 +6279,10 @@ async function loadSuppliers() {
     const includePerformance = false;
 
     try {
-        loadingIndicator.classList.remove('d-none');
-        content.classList.add('d-none');
+        if (!silent) {
+            loadingIndicator.classList.remove('d-none');
+            content.classList.add('d-none');
+        }
         noSuppliersMessage.classList.add('d-none');
 
         // Build URL with parameters - fetch all suppliers if not filtering by active only
@@ -6275,6 +6326,7 @@ async function loadSuppliers() {
                 summary.textContent = `${filteredCount} supplier${filteredCount === 1 ? '' : 's'}`;
             }
         } else {
+            content.classList.add('d-none');
             noSuppliersMessage.classList.remove('d-none');
             if (summary) summary.textContent = 'No suppliers found';
         }
@@ -6616,6 +6668,8 @@ async function loadSuppliersForPOFilter() {
         if (data.success && suppliers.length > 0) {
             allSuppliersForPO = suppliers;
             const select = document.getElementById('po-supplier-filter');
+            if (!select) return;
+            const selectedValue = select.value || 'all';
             select.innerHTML = '<option value="all">All Suppliers</option>';
 
             allSuppliersForPO.forEach(supplier => {
@@ -6624,13 +6678,18 @@ async function loadSuppliersForPOFilter() {
                 option.textContent = supplier.name;
                 select.appendChild(option);
             });
+
+            if ([...select.options].some(option => option.value === selectedValue)) {
+                select.value = selectedValue;
+            }
         }
     } catch (error) {
         devLog('Error loading suppliers for PO filter:', error);
     }
 }
 
-async function loadPurchaseOrders() {
+async function loadPurchaseOrders(options = {}) {
+    const { silent = false } = options;
     const loadingIndicator = document.getElementById('po-loading');
     const content = document.getElementById('po-content');
     const noPOMessage = document.getElementById('no-po-message');
@@ -6642,8 +6701,10 @@ async function loadPurchaseOrders() {
     const searchFilter = document.getElementById('po-search').value.trim();
 
     try {
-        loadingIndicator.classList.remove('d-none');
-        content.classList.add('d-none');
+        if (!silent) {
+            loadingIndicator.classList.remove('d-none');
+            content.classList.add('d-none');
+        }
         noPOMessage.classList.add('d-none');
 
         let url = `${API_BASE}/purchase_orders/index.php`;
@@ -6684,6 +6745,7 @@ async function loadPurchaseOrders() {
                 summary.textContent = `${allPurchaseOrders.length} PO${allPurchaseOrders.length === 1 ? '' : 's'} | ${approved} approved | ${pending} pending | ${completed} completed`;
             }
         } else {
+            content.classList.add('d-none');
             noPOMessage.classList.remove('d-none');
             if (summary) summary.textContent = 'No purchase orders found';
         }
@@ -7910,6 +7972,7 @@ async function loadPOsForGRNFilter() {
             allPOsForGRN = purchaseOrders;
             const select = document.getElementById('grn-po-filter');
             if (!select) return;
+            const selectedValue = select.value || 'all';
             select.innerHTML = '<option value="all">All Purchase Orders</option>';
 
             allPOsForGRN.forEach(po => {
@@ -7918,13 +7981,18 @@ async function loadPOsForGRNFilter() {
                 option.textContent = po.po_number;
                 select.appendChild(option);
             });
+
+            if ([...select.options].some(option => option.value === selectedValue)) {
+                select.value = selectedValue;
+            }
         }
     } catch (error) {
         devLog('Error loading POs for GRN filter:', error);
     }
 }
 
-async function loadGRNs() {
+async function loadGRNs(options = {}) {
+    const { silent = false } = options;
     const loadingIndicator = document.getElementById('grn-loading');
     const content = document.getElementById('grn-content');
     const noGRNMessage = document.getElementById('no-grn-message');
@@ -7936,8 +8004,10 @@ async function loadGRNs() {
     const searchFilter = document.getElementById('grn-search').value.trim();
 
     try {
-        loadingIndicator.classList.remove('d-none');
-        content.classList.add('d-none');
+        if (!silent) {
+            loadingIndicator.classList.remove('d-none');
+            content.classList.add('d-none');
+        }
         noGRNMessage.classList.add('d-none');
 
         let url = `${API_BASE}/grn/index.php`;
@@ -7977,6 +8047,7 @@ async function loadGRNs() {
                 summary.textContent = `${allGRNs.length} GRN${allGRNs.length === 1 ? '' : 's'} | ${completed} passed | ${partial} partial | ${failed} failed | ${pending} pending`;
             }
         } else {
+            content.classList.add('d-none');
             noGRNMessage.classList.remove('d-none');
             if (summary) summary.textContent = 'No goods received notes found';
         }
@@ -9658,14 +9729,17 @@ async function loadSalesPage() {
     await loadSalesHistory();
 }
 
-async function loadSalesHistory() {
+async function loadSalesHistory(options = {}) {
+    const { silent = false } = options;
     const loadingIndicator = document.getElementById('sales-loading');
     const content = document.getElementById('sales-content');
     const noSalesMessage = document.getElementById('no-sales-message');
 
     try {
-        loadingIndicator.classList.remove('d-none');
-        content.classList.add('d-none');
+        if (!silent) {
+            loadingIndicator.classList.remove('d-none');
+            content.classList.add('d-none');
+        }
         noSalesMessage.classList.add('d-none');
 
         // Get filter values
@@ -9697,6 +9771,7 @@ async function loadSalesHistory() {
             updateSalesStats(data.data);
             content.classList.remove('d-none');
         } else {
+            content.classList.add('d-none');
             noSalesMessage.classList.remove('d-none');
         }
     } catch (error) {
@@ -10106,7 +10181,8 @@ async function loadUsersPage() {
 
 let allUsers = [];
 
-async function loadUsers() {
+async function loadUsers(options = {}) {
+    const { silent = false } = options;
     const loadingIndicator = document.getElementById('users-loading');
     const content = document.getElementById('users-content');
     const noUsersMessage = document.getElementById('no-users-message');
@@ -10117,8 +10193,10 @@ async function loadUsers() {
     const searchFilter = document.getElementById('user-search').value.trim();
 
     try {
-        loadingIndicator.classList.remove('d-none');
-        content.classList.add('d-none');
+        if (!silent) {
+            loadingIndicator.classList.remove('d-none');
+            content.classList.add('d-none');
+        }
         noUsersMessage.classList.add('d-none');
 
         let url = `${API_BASE}/users/index.php`;
@@ -10159,6 +10237,7 @@ async function loadUsers() {
             content.classList.remove('d-none');
             updateUserStats(allUsers);
         } else {
+            content.classList.add('d-none');
             noUsersMessage.classList.remove('d-none');
             updateUserStats([]);
         }
@@ -10238,7 +10317,8 @@ function updateUserStats(users) {
     document.getElementById('admin-users').textContent = adminUsers;
 }
 
-async function loadPendingSuppliers() {
+async function loadPendingSuppliers(options = {}) {
+    const { silent = false } = options;
     const loadingIndicator = document.getElementById('pending-suppliers-loading');
     const content = document.getElementById('pending-suppliers-content');
     const noPendingMessage = document.getElementById('no-pending-suppliers-message');
@@ -10249,8 +10329,10 @@ async function loadPendingSuppliers() {
     }
 
     try {
-        loadingIndicator.classList.remove('d-none');
-        content.classList.add('d-none');
+        if (!silent) {
+            loadingIndicator.classList.remove('d-none');
+            content.classList.add('d-none');
+        }
         noPendingMessage.classList.add('d-none');
 
         const response = await fetch(`${API_BASE}/users/pending-suppliers.php`);
@@ -10285,6 +10367,7 @@ async function loadPendingSuppliers() {
             `).join('');
             content.classList.remove('d-none');
         } else {
+            content.classList.add('d-none');
             noPendingMessage.classList.remove('d-none');
         }
     } catch (error) {
