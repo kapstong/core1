@@ -4114,11 +4114,11 @@ async function openProductModal(productId = null) {
                             <div class="row">
                                 <div class="col-md-8">
                                     <div class="row">
-                                        <div class="col-md-6 mb-3">
+                                        <div class="col-md-6 mb-3" id="product-name-group">
                                             <label class="form-label">Product Name *</label>
                                             <input type="text" class="form-control" id="product-name" required>
                                         </div>
-                                        <div class="col-md-6 mb-3">
+                                        <div class="col-md-6 mb-3" id="product-sku-group">
                                             <label class="form-label">SKU</label>
                                             <input type="text" class="form-control" id="product-sku" readonly>
                                             <div class="form-text" id="product-sku-help">Auto-generated from product name when creating.</div>
@@ -4294,10 +4294,15 @@ function generateProductSkuPreview(name) {
 }
 
 function setProductSkuMode(isEdit) {
+    const skuGroup = document.getElementById('product-sku-group');
+    const nameGroup = document.getElementById('product-name-group');
     const skuInput = document.getElementById('product-sku');
     const skuHelp = document.getElementById('product-sku-help');
-    if (!skuInput || !skuHelp) return;
+    if (!skuGroup || !nameGroup || !skuInput || !skuHelp) return;
 
+    skuGroup.classList.toggle('d-none', !isEdit);
+    nameGroup.classList.toggle('col-md-6', isEdit);
+    nameGroup.classList.toggle('col-md-12', !isEdit);
     skuInput.readOnly = !isEdit;
     skuInput.required = isEdit;
     skuInput.placeholder = isEdit ? '' : 'Auto-generated from product name';
