@@ -6842,8 +6842,8 @@ async function openPurchaseOrderModal(poId = null) {
                                     <input type="date" class="form-control" id="po-order-date" required>
                                 </div>
                                 <div class="col-md-6 mb-3">
-                                    <label class="form-label">Expected Delivery Date</label>
-                                    <input type="date" class="form-control" id="po-expected-delivery">
+                                    <label class="form-label">Expected Delivery Date <span class="text-danger">*</span></label>
+                                    <input type="date" class="form-control" id="po-expected-delivery" required>
                                 </div>
                             </div>
 
@@ -7354,9 +7354,17 @@ async function savePurchaseOrder(poId) {
         const poNumber = document.getElementById('po-number').value;
         const supplierId = document.getElementById('po-supplier').value;
         const orderDate = document.getElementById('po-order-date').value;
+        const expectedDeliveryDate = document.getElementById('po-expected-delivery').value;
 
-        if (!poNumber || !supplierId || !orderDate) {
+        if (!poNumber || !supplierId || !orderDate || !expectedDeliveryDate) {
             showError('Please fill in all required fields');
+            saveBtn.disabled = false;
+            saveBtn.innerHTML = originalBtnText;
+            return;
+        }
+
+        if (expectedDeliveryDate < orderDate) {
+            showError('Expected delivery date cannot be earlier than the order date');
             saveBtn.disabled = false;
             saveBtn.innerHTML = originalBtnText;
             return;
@@ -7409,7 +7417,7 @@ async function savePurchaseOrder(poId) {
             po_number: poNumber,
             supplier_id: supplierId,
             order_date: orderDate,
-            expected_delivery_date: document.getElementById('po-expected-delivery').value || null,
+            expected_delivery_date: expectedDeliveryDate,
             total_amount: document.getElementById('total-amount').textContent.replace('₱', '').replace(/,/g, ''),
             notes: document.getElementById('po-notes').value,
             items: items

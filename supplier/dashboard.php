@@ -1235,7 +1235,7 @@
                         </div>
                         <div class="col-md-3">
                             <small class="text-muted">Expected Delivery</small>
-                            <div style="font-weight: 600;">${getExpectedDeliveryDate(po) ? formatDate(getExpectedDeliveryDate(po)) : 'Not specified'}</div>
+                            <div style="font-weight: 600;">${getExpectedDeliveryDisplay(po)}</div>
                         </div>
                         <div class="col-md-3">
                             <small class="text-muted">Items</small>
@@ -1317,7 +1317,7 @@
                         </tr>
                         <tr>
                             <td><strong>Expected Delivery:</strong></td>
-                            <td>${getExpectedDeliveryDate(po) ? formatDate(getExpectedDeliveryDate(po)) : '<span class="text-warning">Not specified</span>'}</td>
+                            <td>${getExpectedDeliveryDisplay(po, true)}</td>
                         </tr>
                         <tr>
                             <td><strong>Created By:</strong></td>
@@ -1538,6 +1538,20 @@
             return po?.expected_delivery_date || po?.expected_delivery || null;
         }
 
+        function getExpectedDeliveryDisplay(po, allowHtml = false) {
+            const expectedDeliveryDate = getExpectedDeliveryDate(po);
+            if (expectedDeliveryDate) {
+                return formatDate(expectedDeliveryDate);
+            }
+
+            if (po?.order_date) {
+                const fallbackText = `${formatDate(po.order_date)} (order date fallback)`;
+                return allowHtml ? `<span class="text-warning">${fallbackText}</span>` : fallbackText;
+            }
+
+            return allowHtml ? '<span class="text-warning">Not specified</span>' : 'Not specified';
+        }
+
         // Create PO Card HTML
         function createPOCard(po, isHistory = false) {
             return `
@@ -1565,7 +1579,7 @@
                             </div>
                             <div class="col-md-4">
                                 <p class="text-muted mb-1"><i class="fas fa-calendar-check me-2"></i>Required Date</p>
-                                <p class="fw-bold">${getExpectedDeliveryDate(po) ? formatDate(getExpectedDeliveryDate(po)) : 'Not specified'}</p>
+                                <p class="fw-bold">${getExpectedDeliveryDisplay(po, true)}</p>
                             </div>
                         </div>
                         <div class="mb-3">

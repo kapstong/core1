@@ -52,9 +52,19 @@ try {
 
     // Validate required fields
     $errors = Validator::required($input, ['supplier_id', 'order_date', 'items']);
+    $expectedDeliveryDate = trim((string)($input['expected_delivery_date'] ?? $input['expected_delivery'] ?? ''));
+
+    if ($expectedDeliveryDate === '') {
+        $errors = $errors ?? [];
+        $errors['expected_delivery_date'] = 'Expected delivery date is required';
+    }
 
     if ($errors) {
         Response::validationError($errors);
+    }
+
+    if ($expectedDeliveryDate < $input['order_date']) {
+        Response::error('Expected delivery date cannot be earlier than the order date', 422);
     }
 
     if (!is_array($input['items']) || empty($input['items'])) {
@@ -143,7 +153,7 @@ try {
         // Newly created POs are sent to supplier for approval
         ':status' => 'pending_supplier',
         ':order_date' => $input['order_date'],
-        ':expected_delivery_date' => $input['expected_delivery_date'] ?? null,
+        ':expected_delivery_date' => $expectedDeliveryDate,
         ':total_amount' => $totalAmount,
         ':notes' => $input['notes'] ?? null
     ]);

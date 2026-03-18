@@ -69,6 +69,21 @@ try {
         Response::error('Purchase order not found', 404);
     }
 
+    $hasExpectedDeliveryDate = array_key_exists('expected_delivery_date', $input) || array_key_exists('expected_delivery', $input);
+    if ($hasExpectedDeliveryDate) {
+        $input['expected_delivery_date'] = trim((string)($input['expected_delivery_date'] ?? $input['expected_delivery'] ?? ''));
+
+        if ($input['expected_delivery_date'] === '') {
+            Response::validationError([
+                'expected_delivery_date' => 'Expected delivery date is required'
+            ]);
+        }
+
+        if ($input['expected_delivery_date'] < $po['order_date']) {
+            Response::error('Expected delivery date cannot be earlier than the order date', 422);
+        }
+    }
+
     // Start transaction
     $conn->beginTransaction();
 
