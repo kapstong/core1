@@ -7036,7 +7036,7 @@ function addPOItem(item = null) {
                             <i class="fas fa-minus"></i>
                         </button>
     <input type="number" class="form-control quantity-input text-center" min="1" value="1" required
-                               style="border-left: 0; border-right: 0; font-weight: bold; font-size: 1.1rem;" readonly>
+                               style="border-left: 0; border-right: 0; font-weight: bold; font-size: 1.1rem;" inputmode="numeric">
                         <button type="button" class="btn btn-outline-secondary qty-plus" style="z-index: 0;">
                             <i class="fas fa-plus"></i>
                         </button>
@@ -7167,7 +7167,13 @@ function addPOItem(item = null) {
         updateItemTotal(itemRow);
     });
 
+    quantityInput.addEventListener('focus', () => quantityInput.select());
     quantityInput.addEventListener('input', () => updateItemTotal(itemRow));
+    quantityInput.addEventListener('blur', () => {
+        const sanitizedValue = Math.max(1, parseInt(quantityInput.value, 10) || 1);
+        quantityInput.value = sanitizedValue;
+        updateItemTotal(itemRow);
+    });
     itemRow.querySelector('.unit-cost-input').addEventListener('input', () => updateItemTotal(itemRow));
 
     // Auto-focus on product select for first item
