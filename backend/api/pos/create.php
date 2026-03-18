@@ -21,6 +21,15 @@ if ($method !== 'POST') {
     Response::error('Method not allowed', 405);
 }
 
+function buildPosReservationSessionId($userId, $reservationId) {
+    $reservationId = preg_replace('/[^a-zA-Z0-9_-]/', '', (string)$reservationId);
+    $reservationId = substr($reservationId, 0, 48);
+    if ($reservationId === '') {
+        return null;
+    }
+    return 'pos_' . $userId . '_' . $reservationId;
+}
+
 try {
     $rawInput = file_get_contents('php://input');
     $data = json_decode($rawInput, true);
@@ -50,6 +59,19 @@ try {
 
     $db = Database::getInstance()->getConnection();
     $db->beginTransaction();
+    $posReservationSessionId = buildPosReservationSessionId((int)$user['id'], $data['pos_reservation_id'] ?? null);
+    $reservationQuantities = [];
+    if ($posReservationSessionId !== null) {
+        $reservationStmt = $db->prepare("
+            SELECT product_id, quantity
+            FROM shopping_cart
+            WHERE session_id = :session_id
+        ");
+        $reservationStmt->execute([':session_id' => $posReservationSessionId]);
+        foreach ($reservationStmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
+            $reservationQuantities[(int)$row['product_id']] = (int)$row['quantity'];
+        }
+    }
 
     $customerName = trim((string)($data['customer_name'] ?? ''));
     if ($customerName === '') {
@@ -117,9 +139,11 @@ try {
         }
 
         $available = (int)($product['quantity_available'] ?? 0);
-        if ($available < $quantity) {
+        $ownReserved = (int)($reservationQuantities[$productId] ?? 0);
+        $effectiveAvailable = $available + $ownReserved;
+        if ($effectiveAvailable < $quantity) {
             throw new Exception(
-                "Insufficient stock for {$product['name']}. Available: {$available}, requested: {$quantity}"
+                "Insufficient stock for {$product['name']}. Available: {$effectiveAvailable}, requested: {$quantity}"
             );
         }
 
@@ -134,7 +158,9 @@ try {
             'unit_price' => $unitPrice,
             'line_total' => $lineTotal,
             'quantity_before' => (int)$product['quantity_on_hand'],
-            'quantity_after' => (int)$product['quantity_on_hand'] - $quantity
+            'quantity_after' => (int)$product['quantity_on_hand'] - $quantity,
+            'quantity_reserved_before' => (int)$product['quantity_reserved'],
+            'reserved_release' => min($ownReserved, $quantity),
         ];
     }
 
@@ -213,7 +239,9 @@ try {
     ");
     $inventoryStmt = $db->prepare("
         UPDATE inventory
-        SET quantity_on_hand = quantity_on_hand - :quantity
+        SET quantity_on_hand = :quantity_on_hand,
+            quantity_reserved = :quantity_reserved,
+            quantity_available = :quantity_available
         WHERE product_id = :product_id
     ");
     $movementStmt = $db->prepare("
@@ -249,7 +277,13 @@ try {
         $itemStmt->bindValue(':unit_price', $resolvedItem['unit_price']);
         $itemStmt->execute();
 
-        $inventoryStmt->bindValue(':quantity', $resolvedItem['quantity'], PDO::PARAM_INT);
+        $newOnHand = max(0, (int)$resolvedItem['quantity_before'] - (int)$resolvedItem['quantity']);
+        $newReserved = max(0, (int)$resolvedItem['quantity_reserved_before'] - (int)$resolvedItem['reserved_release']);
+        $newAvailable = max(0, $newOnHand - $newReserved);
+
+        $inventoryStmt->bindValue(':quantity_on_hand', $newOnHand, PDO::PARAM_INT);
+        $inventoryStmt->bindValue(':quantity_reserved', $newReserved, PDO::PARAM_INT);
+        $inventoryStmt->bindValue(':quantity_available', $newAvailable, PDO::PARAM_INT);
         $inventoryStmt->bindValue(':product_id', $resolvedItem['product_id'], PDO::PARAM_INT);
         $inventoryStmt->execute();
 
@@ -261,6 +295,11 @@ try {
         $movementStmt->bindValue(':performed_by', (int)$user['id'], PDO::PARAM_INT);
         $movementStmt->bindValue(':notes', 'POS transaction ' . $transactionNumber);
         $movementStmt->execute();
+    }
+
+    if ($posReservationSessionId !== null) {
+        $clearReservationStmt = $db->prepare("DELETE FROM shopping_cart WHERE session_id = :session_id");
+        $clearReservationStmt->execute([':session_id' => $posReservationSessionId]);
     }
 
     $db->commit();
@@ -305,4 +344,3 @@ function generateUniqueTransactionNumber(PDO $db) {
 
     return $number;
 }
-

@@ -597,27 +597,168 @@ if (!in_array($user['role'], $allowedRoles)) {
     <script>
         const API_BASE = '../backend/api';
         const currentUser = <?php echo json_encode($user, JSON_HEX_TAG|JSON_HEX_AMP|JSON_HEX_APOS|JSON_HEX_QUOT); ?>;
+        const POS_RESERVATION_KEY = 'posReservationId';
 
         let cart = [];
         let heldSales = [];
         let lastOrder = null;
         let currentOrderId = null;
+        let posReservationId = null;
+        let cartMutationInFlight = false;
+
+        function createReservationId() {
+            if (window.crypto && typeof window.crypto.randomUUID === 'function') {
+                return window.crypto.randomUUID();
+            }
+            return `pos-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+        }
+
+        function ensureReservationId() {
+            let reservationId = sessionStorage.getItem(POS_RESERVATION_KEY);
+            if (!reservationId) {
+                reservationId = createReservationId();
+                sessionStorage.setItem(POS_RESERVATION_KEY, reservationId);
+            }
+            posReservationId = reservationId;
+            return reservationId;
+        }
+
+        function getProductSearchTerm() {
+            return document.getElementById('search-input')?.value.trim() || '';
+        }
+
+        function getSelectedCategory() {
+            return document.getElementById('category-filter')?.value || '';
+        }
+
+        function normalizeServerCart(items = []) {
+            return items.map(item => ({
+                id: Number(item.product_id ?? item.id),
+                name: item.name,
+                sku: item.sku || '',
+                price: Number(item.price || 0),
+                qty: Number(item.qty || 0),
+                max: Number((item.quantity_available ?? 0) + (item.qty ?? 0))
+            }));
+        }
+
+        function applyServerCart(items = []) {
+            cart = normalizeServerCart(items);
+            updateCart();
+        }
+
+        async function reservationRequest(method, payload = {}) {
+            const reservationId = ensureReservationId();
+            const options = {
+                method,
+                headers: { 'Content-Type': 'application/json' },
+                keepalive: method === 'DELETE'
+            };
+
+            let url = `${API_BASE}/pos/cart.php`;
+            if (method === 'GET') {
+                url += `?reservation_id=${encodeURIComponent(reservationId)}`;
+            } else {
+                options.body = JSON.stringify({
+                    reservation_id: reservationId,
+                    ...payload
+                });
+            }
+
+            const response = await fetch(url, options);
+
+            const result = await response.json();
+            if (!result.success) {
+                throw new Error(result.message || 'POS cart request failed');
+            }
+
+            return result.data || {};
+        }
+
+        async function refreshProducts() {
+            await loadProducts(getProductSearchTerm(), getSelectedCategory());
+        }
+
+        async function loadReservationCart() {
+            try {
+                const result = await reservationRequest('GET');
+                applyServerCart(result.items || []);
+            } catch (error) {
+                console.error('Failed to load POS reservation cart:', error);
+                applyServerCart([]);
+            }
+        }
+
+        async function setReservedQuantity(productId, quantity) {
+            const result = await reservationRequest('PUT', {
+                product_id: productId,
+                quantity
+            });
+            applyServerCart(result.items || []);
+            await refreshProducts();
+        }
+
+        async function clearReservedCart(silent = false) {
+            const result = await reservationRequest('DELETE', { clear: true });
+            applyServerCart(result.items || []);
+            await refreshProducts();
+            if (!silent) {
+                showToast('Cart cleared', 'success');
+            }
+        }
+
+        async function syncCurrentCartSnapshot() {
+            const snapshot = cart.map(item => ({ ...item }));
+            await clearReservedCart();
+
+            for (const item of snapshot) {
+                await reservationRequest('PUT', {
+                    product_id: item.id,
+                    quantity: item.qty
+                });
+            }
+
+            await loadReservationCart();
+            await refreshProducts();
+        }
+
+        function queueCartMutation(task) {
+            if (cartMutationInFlight) {
+                return;
+            }
+
+            cartMutationInFlight = true;
+            task()
+                .catch((error) => {
+                    console.error(error);
+                    showToast(error.message || 'Unable to update live stock', 'error');
+                })
+                .finally(() => {
+                    cartMutationInFlight = false;
+                });
+        }
 
         // Initialize
-        document.addEventListener('DOMContentLoaded', function() {
-            loadCategories();
-            loadProducts();
-            loadPendingOrders();
+        document.addEventListener('DOMContentLoaded', async function() {
+            ensureReservationId();
+            heldSales = JSON.parse(localStorage.getItem('heldSales') || '[]');
+
             setupEventListeners();
             updateClock();
+
+            await loadCategories();
+            await loadReservationCart();
+            await refreshProducts();
+            await loadPendingOrders();
+
             setInterval(updateClock, 1000);
-            setInterval(loadPendingOrders, 30000); // Refresh pending orders every 30 seconds
-            heldSales = JSON.parse(localStorage.getItem('heldSales') || '[]');
+            setInterval(loadPendingOrders, 30000);
+            setInterval(refreshProducts, 5000);
         });
 
         function setupEventListeners() {
-            document.getElementById('search-input').addEventListener('input', (e) => loadProducts(e.target.value));
-            document.getElementById('category-filter').addEventListener('change', (e) => loadProducts('', e.target.value));
+            document.getElementById('search-input').addEventListener('input', refreshProducts);
+            document.getElementById('category-filter').addEventListener('change', refreshProducts);
             document.getElementById('barcode-input').addEventListener('keypress', (e) => {
                 if (e.key === 'Enter') {
                     scanBarcode(e.target.value.trim());
@@ -638,6 +779,22 @@ if (!in_array($user['role'], $allowedRoles)) {
                 if (e.target.id === 'barcode-input') return;
                 if (e.key === 'F11') { e.preventDefault(); toggleFullscreen(); }
                 if (e.key === 'F12') { e.preventDefault(); completeSale(); }
+            });
+
+            window.addEventListener('pagehide', () => {
+                if (cart.length === 0 || !posReservationId) {
+                    return;
+                }
+
+                fetch(`${API_BASE}/pos/cart.php`, {
+                    method: 'DELETE',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        reservation_id: posReservationId,
+                        clear: true
+                    }),
+                    keepalive: true
+                }).catch(() => {});
             });
         }
 
@@ -679,13 +836,15 @@ if (!in_array($user['role'], $allowedRoles)) {
 
                 if (data.success && data.data.products?.length > 0) {
                     data.data.products.forEach(p => {
+                        const available = Number(p.quantity_available || 0);
+                        const disabledClass = available <= 0 ? ' opacity-50' : '';
                         const html = `
-                            <div class="product-card" onclick="addToCart({id: ${p.id}, name: '${p.name.replace(/'/g, "\\'")}', sku: '${p.sku}', price: ${p.selling_price}, max: ${p.quantity_available || 0}})">
+                            <div class="product-card${disabledClass}" onclick="addToCart({id: ${p.id}, name: '${p.name.replace(/'/g, "\\'")}', sku: '${p.sku}', price: ${p.selling_price}, max: ${available}})">
                                 ${p.image_url ? `<img src="${p.image_url}" class="product-card-img">` : `<div class="product-card-img bg-secondary"></div>`}
                                 <div class="product-card-body">
                                     <div class="product-card-title">${p.name}</div>
                                     <div class="product-card-price">₱${parseFloat(p.selling_price).toLocaleString()}</div>
-                                    <div class="product-card-stock">${p.quantity_available || 0} stock</div>
+                                    <div class="product-card-stock">${available} stock</div>
                                 </div>
                             </div>
                         `;
@@ -707,31 +866,32 @@ if (!in_array($user['role'], $allowedRoles)) {
             }
 
             const existing = cart.find(i => i.id === product.id);
-            if (existing) {
-                if (existing.qty >= product.max) {
-                    showToast('Cannot exceed stock', 'warning');
-                    return;
-                }
-                existing.qty++;
-            } else {
-                cart.push({ ...product, qty: 1 });
-            }
+            const nextQty = existing ? existing.qty + 1 : 1;
 
-            updateCart();
-            showToast(`Added ${product.name}`, 'success');
+            queueCartMutation(async () => {
+                await setReservedQuantity(product.id, nextQty);
+                showToast(`Added ${product.name}`, 'success');
+            });
         }
 
         function removeFromCart(id) {
-            cart = cart.filter(i => i.id !== id);
-            updateCart();
+            const existing = cart.find(i => i.id === id);
+            if (!existing) return;
+
+            queueCartMutation(async () => {
+                await setReservedQuantity(id, 0);
+                showToast(`${existing.name} removed`, 'info');
+            });
         }
 
         function updateQuantity(id, delta) {
             const item = cart.find(i => i.id === id);
             if (!item) return;
-            item.qty += delta;
-            if (item.qty <= 0) removeFromCart(id);
-            else updateCart();
+            const nextQty = Math.max(0, item.qty + delta);
+
+            queueCartMutation(async () => {
+                await setReservedQuantity(id, nextQty);
+            });
         }
 
         function updateCart() {
@@ -783,15 +943,16 @@ if (!in_array($user['role'], $allowedRoles)) {
 
         async function scanBarcode(barcode) {
             try {
-                const res = await fetch(`${API_BASE}/products/index.php?sku=${barcode}`);
+                const res = await fetch(`${API_BASE}/products/index.php?search=${encodeURIComponent(barcode)}&is_active=1&limit=10`);
                 const data = await res.json();
-                if (data.success && data.data.products?.[0]) {
+                const product = (data.data.products || []).find(p => (p.sku || '').toLowerCase() === barcode.toLowerCase()) || data.data.products?.[0];
+                if (data.success && product) {
                     addToCart({
-                        id: data.data.products[0].id,
-                        name: data.data.products[0].name,
-                        sku: data.data.products[0].sku,
-                        price: data.data.products[0].selling_price,
-                        max: data.data.products[0].quantity_available || 0
+                        id: product.id,
+                        name: product.name,
+                        sku: product.sku,
+                        price: product.selling_price,
+                        max: product.quantity_available || 0
                     });
                 } else {
                     showToast('Product not found', 'warning');
@@ -990,6 +1151,7 @@ if (!in_array($user['role'], $allowedRoles)) {
                 items: cart.map(i => ({ product_id: i.id, quantity: i.qty, unit_price: i.price })),
                 subtotal, tax_amount: tax, total_amount: total,
                 payment_method: payment,
+                pos_reservation_id: ensureReservationId(),
                 payment_details: payment === 'cash' ? {
                     cash_received: parseFloat(document.getElementById('cash-received').value),
                     change_given: parseFloat(document.getElementById('change').textContent.replace(/[^0-9.]/g, ''))
@@ -1010,8 +1172,7 @@ if (!in_array($user['role'], $allowedRoles)) {
 
                 if (data.success) {
                     lastOrder = { ...saleData, id: data.data.sale_id, date: new Date().toLocaleString() };
-                    cart = [];
-                    updateCart();
+                    applyServerCart([]);
                     document.getElementById('customer-name').value = '';
                     document.getElementById('cash-received').value = '';
                     document.getElementById('change').textContent = '₱0.00';
@@ -1019,7 +1180,7 @@ if (!in_array($user['role'], $allowedRoles)) {
                     document.getElementById('print-btn').disabled = false;
                     document.getElementById('email-btn').disabled = false;
                     showToast('Sale completed!', 'success');
-                    loadProducts();
+                    await refreshProducts();
                 } else {
                     showToast('Error: ' + data.message, 'error');
                 }
@@ -1039,11 +1200,10 @@ if (!in_array($user['role'], $allowedRoles)) {
                 confirmClass: 'btn-danger'
             });
             if (!clearConfirmed) return;
-            cart = [];
-            updateCart();
+            await clearReservedCart(true);
         }
 
-        function holdSale() {
+        async function holdSale() {
             if (cart.length === 0) {
                 showToast('Nothing to hold', 'warning');
                 return;
@@ -1059,13 +1219,12 @@ if (!in_array($user['role'], $allowedRoles)) {
             });
 
             localStorage.setItem('heldSales', JSON.stringify(heldSales));
-            cart = [];
-            updateCart();
+            await clearReservedCart(true);
             document.getElementById('customer-name').value = '';
             showToast('Sale held', 'success');
         }
 
-        function recallSale() {
+        async function recallSale() {
             if (heldSales.length === 0) {
                 showToast('No held sales', 'info');
                 return;
@@ -1075,8 +1234,13 @@ if (!in_array($user['role'], $allowedRoles)) {
             localStorage.setItem('heldSales', JSON.stringify(heldSales));
             cart = [...sale.items];
             document.getElementById('customer-name').value = sale.customer;
-            updateCart();
-            showToast('Sale recalled', 'success');
+            try {
+                await syncCurrentCartSnapshot();
+                showToast('Sale recalled', 'success');
+            } catch (error) {
+                console.error(error);
+                showToast(error.message || 'Failed to recall held sale', 'error');
+            }
         }
 
         function quickAddProduct() {
