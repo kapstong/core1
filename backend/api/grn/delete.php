@@ -147,6 +147,8 @@ function deleteGRN(array $user): void {
             ]);
         }
 
+        deletePurchaseReceivedAdjustments($db, $grnId, $grn['grn_number']);
+
         $newPOStatus = updatePurchaseOrderStatusAfterDelete($db, (int)$grn['po_id']);
 
         if ($hasDeletedAt) {
@@ -234,4 +236,22 @@ function updatePurchaseOrderStatusAfterDelete(PDO $db, int $poId): string {
     ]);
 
     return $newPOStatus;
+}
+
+function deletePurchaseReceivedAdjustments(PDO $db, int $grnId, string $grnNumber): void {
+    $legacyNotesPattern = 'Auto-generated from GRN ' . $grnNumber . '%';
+    $tagPattern = '%[GRN_ID:' . $grnId . ']%';
+
+    $stmt = $db->prepare("
+        DELETE FROM stock_adjustments
+        WHERE reason = 'purchase_received'
+          AND (
+              notes LIKE :legacy_notes
+              OR notes LIKE :tag_pattern
+          )
+    ");
+    $stmt->execute([
+        ':legacy_notes' => $legacyNotesPattern,
+        ':tag_pattern' => $tagPattern
+    ]);
 }

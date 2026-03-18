@@ -441,7 +441,7 @@ function createPurchaseReceivedAdjustment(
     $quantityAdjusted = (int)$item['quantity_accepted'];
     $quantityAfter = $currentStock + $quantityAdjusted;
     $reason = 'purchase_received';
-    $notes = 'Auto-generated from GRN ' . $grnNumber . ' for PO ' . $poNumber;
+    $notes = 'Auto-generated from GRN ' . $grnNumber . ' for PO ' . $poNumber . ' [GRN_ID:' . $grnId . ']';
 
     $stmt = $conn->prepare("
         INSERT INTO stock_adjustments (
