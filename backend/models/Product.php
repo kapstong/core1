@@ -20,6 +20,18 @@ class Product {
         return $this->db->columnExists($this->table, 'deleted_at');
     }
 
+    private function buildSkuBase($name) {
+        $name = strtoupper((string)$name);
+        $skuBase = preg_replace('/[^A-Z0-9]+/', '-', $name);
+        $skuBase = trim((string)$skuBase, '-');
+
+        if ($skuBase === '') {
+            $skuBase = 'PRODUCT';
+        }
+
+        return substr($skuBase, 0, 100);
+    }
+
     /**
      * Get all products with optional filters
      */
@@ -331,13 +343,10 @@ class Product {
     }
 
     /**
-     * Check if SKU exists (only for active products)
+     * Check if SKU exists
      */
     public function skuExists($sku, $excludeId = null) {
-        $query = "SELECT COUNT(*) as count FROM {$this->table} WHERE sku = :sku AND is_active = 1";
-        if ($this->hasDeletedAt()) {
-            $query .= " AND deleted_at IS NULL";
-        }
+        $query = "SELECT COUNT(*) as count FROM {$this->table} WHERE sku = :sku";
 
         if ($excludeId) {
             $query .= " AND id != :id";
@@ -354,6 +363,23 @@ class Product {
         $result = $stmt->fetch();
 
         return $result['count'] > 0;
+    }
+
+    /**
+     * Generate a unique SKU from the product name.
+     */
+    public function generateUniqueSKU($name, $excludeId = null) {
+        $baseSku = $this->buildSkuBase($name);
+        $sku = $baseSku;
+        $counter = 2;
+
+        while ($this->skuExists($sku, $excludeId)) {
+            $suffix = '-' . $counter;
+            $sku = substr($baseSku, 0, 100 - strlen($suffix)) . $suffix;
+            $counter++;
+        }
+
+        return $sku;
     }
 
     /**

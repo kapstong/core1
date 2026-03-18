@@ -63,6 +63,15 @@ try {
     }
 
     // If SKU is being updated, check for duplicates
+    if (isset($input['sku'])) {
+        $input['sku'] = trim((string)$input['sku']);
+        if ($input['sku'] === '') {
+            Response::validationError([
+                'sku' => 'SKU is required'
+            ]);
+        }
+    }
+
     if (isset($input['sku']) && $input['sku'] !== $existing['sku']) {
         if ($productModel->skuExists($input['sku'], $productId)) {
             Response::error('SKU already exists', 409);

@@ -4119,8 +4119,9 @@ async function openProductModal(productId = null) {
                                             <input type="text" class="form-control" id="product-name" required>
                                         </div>
                                         <div class="col-md-6 mb-3">
-                                            <label class="form-label">SKU *</label>
-                                            <input type="text" class="form-control" id="product-sku" required>
+                                            <label class="form-label">SKU</label>
+                                            <input type="text" class="form-control" id="product-sku" readonly>
+                                            <div class="form-text" id="product-sku-help">Auto-generated from product name when creating.</div>
                                         </div>
                                     </div>
                                     <div class="row">
@@ -4221,12 +4222,15 @@ async function openProductModal(productId = null) {
     if (productId) {
         document.getElementById('product-modal-title').textContent = 'Edit Product';
         document.getElementById('saveProductBtn').textContent = 'Update Product';
+        setProductSkuMode(true);
         await loadProductForEdit(productId);
     } else {
         resetProductForm();
+        setProductSkuMode(false);
     }
 
     // Add event listeners for real-time calculations
+    document.getElementById('product-name').addEventListener('input', updateProductSkuPreview);
     document.getElementById('product-cost-price').addEventListener('input', calculateProductSummary);
     document.getElementById('product-selling-price').addEventListener('input', calculateProductSummary);
     document.getElementById('product-tax-rate').addEventListener('input', calculateProductSummary);
@@ -4279,6 +4283,41 @@ async function loadCategoriesForProduct() {
     }
 }
 
+function generateProductSkuPreview(name) {
+    const skuBase = (name || '')
+        .toUpperCase()
+        .replace(/[^A-Z0-9]+/g, '-')
+        .replace(/^-+|-+$/g, '')
+        .slice(0, 100);
+
+    return skuBase || 'AUTO-GENERATED-ON-SAVE';
+}
+
+function setProductSkuMode(isEdit) {
+    const skuInput = document.getElementById('product-sku');
+    const skuHelp = document.getElementById('product-sku-help');
+    if (!skuInput || !skuHelp) return;
+
+    skuInput.readOnly = !isEdit;
+    skuInput.required = isEdit;
+    skuInput.placeholder = isEdit ? '' : 'Auto-generated from product name';
+    skuHelp.textContent = isEdit
+        ? 'You can edit the SKU for an existing product.'
+        : 'Auto-generated from product name when creating.';
+}
+
+function updateProductSkuPreview() {
+    const productId = document.getElementById('product-id')?.value || '';
+    const skuInput = document.getElementById('product-sku');
+    const nameInput = document.getElementById('product-name');
+
+    if (!skuInput || !nameInput || productId) {
+        return;
+    }
+
+    skuInput.value = generateProductSkuPreview(nameInput.value);
+}
+
 function resetProductForm() {
     // Helper function to safely set element values
     const setElementValue = (id, value, isChecked = false) => {
@@ -4319,6 +4358,8 @@ function resetProductForm() {
     manipulateElement('current-image-preview', (el) => el.classList.add('d-none'));
     manipulateElement('product-message', (el) => el.innerHTML = '');
 
+    setProductSkuMode(false);
+    updateProductSkuPreview();
     calculateProductSummary();
     updateStockStatus();
 }
@@ -4398,6 +4439,7 @@ function updateStockStatus() {
 async function saveProduct() {
     const productId = document.getElementById('product-id').value || '';
     const isEdit = productId !== '';
+    const skuValue = document.getElementById('product-sku').value.trim();
 
     try {
         // Step 1: Upload image first if selected
@@ -4425,7 +4467,6 @@ async function saveProduct() {
         // Step 2: Prepare product data
         const productData = {
             name: document.getElementById('product-name').value,
-            sku: document.getElementById('product-sku').value,
             category_id: document.getElementById('product-category').value,
             description: document.getElementById('product-description').value,
             cost_price: document.getElementById('product-cost-price').value,
@@ -4435,6 +4476,11 @@ async function saveProduct() {
             is_active: document.getElementById('product-active').checked ? 1 : 0
         };
 
+        if (isEdit && !skuValue) {
+            showError('SKU is required when editing a product');
+            return;
+        }
+
         // Add image URL if uploaded
         if (imageUrl) {
             productData.image_url = imageUrl;
@@ -4443,6 +4489,7 @@ async function saveProduct() {
         // Add ID for edit
         if (isEdit) {
             productData.id = productId;
+            productData.sku = skuValue;
         }
 
         // Step 3: Create/Update product

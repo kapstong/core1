@@ -45,7 +45,7 @@ try {
     }
 
     // Validate required fields
-    $required = ['sku', 'name', 'category_id', 'cost_price', 'selling_price'];
+    $required = ['name', 'category_id', 'cost_price', 'selling_price'];
     $errors = Validator::required($input, $required);
 
     if ($errors) {
@@ -76,10 +76,7 @@ try {
 
     $productModel = new Product();
 
-    // Check if SKU already exists
-    if ($productModel->skuExists($input['sku'])) {
-        Response::error('SKU already exists', 409);
-    }
+    $input['sku'] = $productModel->generateUniqueSKU($input['name']);
 
     // Check if product name already exists in the same category
     $existingProduct = $productModel->findByName($input['name'], $input['category_id']);
