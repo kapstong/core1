@@ -101,8 +101,8 @@ class PurchaseOrder {
         
         if ($notes) {
             $sql .= ", notes = CASE 
-                        WHEN notes IS NULL OR notes = '' THEN :notes 
-                        ELSE CONCAT(notes, '\n', :notes) 
+                        WHEN notes IS NULL OR notes = '' THEN :notes_new 
+                        ELSE CONCAT(notes, '\n', :notes_append) 
                       END";
         }
         
@@ -118,7 +118,8 @@ class PurchaseOrder {
         }
 
         if ($notes) {
-            $params[':notes'] = $notes;
+            $params[':notes_new'] = $notes;
+            $params[':notes_append'] = $notes;
         }
 
         return $this->db->execute($sql, $params);

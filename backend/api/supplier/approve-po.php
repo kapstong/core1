@@ -95,8 +95,8 @@ try {
             status = 'approved',
             approved_by = :approved_by,
             notes = CASE
-                WHEN notes IS NULL OR TRIM(notes) = '' THEN :approval_note
-                ELSE CONCAT(notes, '\n', :approval_note)
+                WHEN notes IS NULL OR TRIM(notes) = '' THEN :approval_note_new
+                ELSE CONCAT(notes, '\n', :approval_note_append)
             END,
             updated_at = NOW()" . ($hasSupplierApprovedAt ? ",
             supplier_approved_at = NOW()" : "") . "
@@ -107,7 +107,8 @@ try {
     $updateStmt->execute([
         ':po_id' => $poId,
         ':approved_by' => $user['id'],
-        ':approval_note' => $approvalNote
+        ':approval_note_new' => $approvalNote,
+        ':approval_note_append' => $approvalNote
     ]);
 
     $conn->commit();
