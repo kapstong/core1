@@ -1235,7 +1235,7 @@
                         </div>
                         <div class="col-md-3">
                             <small class="text-muted">Expected Delivery</small>
-                            <div style="font-weight: 600;">${po.expected_delivery_date ? formatDate(po.expected_delivery_date) : 'Not specified'}</div>
+                            <div style="font-weight: 600;">${getExpectedDeliveryDate(po) ? formatDate(getExpectedDeliveryDate(po)) : 'Not specified'}</div>
                         </div>
                         <div class="col-md-3">
                             <small class="text-muted">Items</small>
@@ -1317,7 +1317,7 @@
                         </tr>
                         <tr>
                             <td><strong>Expected Delivery:</strong></td>
-                            <td>${po.expected_delivery_date ? formatDate(po.expected_delivery_date) : '<span class="text-warning">Not specified</span>'}</td>
+                            <td>${getExpectedDeliveryDate(po) ? formatDate(getExpectedDeliveryDate(po)) : '<span class="text-warning">Not specified</span>'}</td>
                         </tr>
                         <tr>
                             <td><strong>Created By:</strong></td>
@@ -1534,6 +1534,10 @@
             return date.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
         }
 
+        function getExpectedDeliveryDate(po) {
+            return po?.expected_delivery_date || po?.expected_delivery || null;
+        }
+
         // Create PO Card HTML
         function createPOCard(po, isHistory = false) {
             return `
@@ -1561,7 +1565,7 @@
                             </div>
                             <div class="col-md-4">
                                 <p class="text-muted mb-1"><i class="fas fa-calendar-check me-2"></i>Required Date</p>
-                                <p class="fw-bold">${po.expected_delivery_date ? formatDate(po.expected_delivery_date) : 'Not specified'}</p>
+                                <p class="fw-bold">${getExpectedDeliveryDate(po) ? formatDate(getExpectedDeliveryDate(po)) : 'Not specified'}</p>
                             </div>
                         </div>
                         <div class="mb-3">
@@ -1749,12 +1753,13 @@
             content.innerHTML = '<div class="text-center py-5"><div class="spinner-border text-primary"></div><p class="mt-3">Loading purchase orders...</p></div>';
 
             try {
-                const user = await checkAuth();
-                const response = await fetch(`${API_BASE}/purchase_orders/pending.php?supplier_id=${user.id}`);
+                const response = await fetch(`${API_BASE}/supplier/purchase-orders.php`);
                 const data = await response.json();
+                const orders = (data.data?.purchase_orders || [])
+                    .filter(po => po.status === 'pending_supplier' || po.status === 'pending');
 
-                if (data.success && data.data && data.data.length > 0) {
-                    content.innerHTML = data.data.map(po => createPOCard(po)).join('');
+                if (data.success && orders.length > 0) {
+                    content.innerHTML = orders.map(po => createPOCard(po)).join('');
                 } else {
                     content.innerHTML = '<div class="empty-state text-center py-5"><i class="fas fa-inbox fa-4x text-muted mb-3"></i><h5>No pending purchase orders</h5><p class="text-muted">You don\'t have any pending orders to review.</p></div>';
                 }
@@ -1770,14 +1775,12 @@
             content.innerHTML = '<div class="text-center py-5"><div class="spinner-border text-primary"></div><p class="mt-3">Loading order history...</p></div>';
 
             try {
-                const user = await checkAuth();
-                // Fetch all POs for this supplier (approved, rejected, received, etc.)
-                const response = await fetch(`${API_BASE}/purchase_orders/index.php?supplier_id=${user.id}`);
+                const response = await fetch(`${API_BASE}/supplier/purchase-orders.php`);
                 const data = await response.json();
 
                 // Filter to show approved, rejected, received, partially_received, ordered POs
                 const historyStatuses = ['approved', 'rejected', 'ordered', 'partially_received', 'received', 'cancelled'];
-                const orders = (data.data?.purchase_orders || data.purchase_orders || [])
+                const orders = (data.data?.purchase_orders || [])
                     .filter(po => historyStatuses.includes(po.status));
 
                 if (orders.length > 0) {
