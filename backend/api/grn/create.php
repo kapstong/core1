@@ -121,7 +121,7 @@ try {
 
         // Get PO item details
         $stmt = $conn->prepare("
-            SELECT poi.*, p.name as product_name, p.id as product_id
+            SELECT poi.*, p.name as product_name, p.id as product_id, p.sku as product_sku
             FROM purchase_order_items poi
             LEFT JOIN products p ON poi.product_id = p.id
             WHERE poi.id = :po_item_id AND poi.po_id = :po_id
@@ -155,6 +155,8 @@ try {
         $processedItems[] = [
             'po_item_id' => $poItemId,
             'product_id' => $poItem['product_id'],
+            'product_name' => $poItem['product_name'],
+            'product_sku' => $poItem['product_sku'],
             'quantity_received' => $quantityReceived,
             'quantity_accepted' => $quantityAccepted,
             // quantity_rejected is auto-calculated by database
@@ -245,6 +247,16 @@ try {
                 ':product_id' => $item['product_id']
             ]);
 
+            $adjustmentId = createPurchaseReceivedAdjustment(
+                $conn,
+                $item,
+                (int)$currentStock,
+                (int)$user['id'],
+                (int)$grnId,
+                (string)$grnNumber,
+                (string)$po['po_number']
+            );
+
             // Create stock movement record
             $stmt = $conn->prepare("
                 INSERT INTO stock_movements (
@@ -262,7 +274,7 @@ try {
                 ':quantity_after' => $currentStock + $item['quantity_accepted'],
                 ':grn_id' => $grnId,
                 ':user_id' => $user['id'],
-                ':notes' => 'GRN: ' . $grnNumber
+                ':notes' => 'GRN: ' . $grnNumber . ' | Adjustment ID: ' . $adjustmentId
             ]);
         }
     }
@@ -414,5 +426,87 @@ function generateGrnNumber(PDO $conn): string {
     }
 
     return $prefix . str_pad((string)$nextNumber, 5, '0', STR_PAD_LEFT);
+}
+
+function createPurchaseReceivedAdjustment(
+    PDO $conn,
+    array $item,
+    int $currentStock,
+    int $userId,
+    int $grnId,
+    string $grnNumber,
+    string $poNumber
+): int {
+    $adjustmentNumber = generateStockAdjustmentNumber($conn);
+    $quantityAdjusted = (int)$item['quantity_accepted'];
+    $quantityAfter = $currentStock + $quantityAdjusted;
+    $reason = 'purchase_received';
+    $notes = 'Auto-generated from GRN ' . $grnNumber . ' for PO ' . $poNumber;
+
+    $stmt = $conn->prepare("
+        INSERT INTO stock_adjustments (
+            adjustment_number, product_id, adjustment_type, quantity_before,
+            quantity_adjusted, quantity_after, reason, performed_by, notes
+        ) VALUES (
+            :adjustment_number, :product_id, 'add', :quantity_before,
+            :quantity_adjusted, :quantity_after, :reason, :performed_by, :notes
+        )
+    ");
+    $stmt->execute([
+        ':adjustment_number' => $adjustmentNumber,
+        ':product_id' => $item['product_id'],
+        ':quantity_before' => $currentStock,
+        ':quantity_adjusted' => $quantityAdjusted,
+        ':quantity_after' => $quantityAfter,
+        ':reason' => $reason,
+        ':performed_by' => $userId,
+        ':notes' => $notes
+    ]);
+
+    $adjustmentId = (int)$conn->lastInsertId();
+
+    AuditLogger::logCreate(
+        'stock_adjustment',
+        $adjustmentId,
+        "Stock adjustment {$adjustmentNumber} auto-created from GRN {$grnNumber}",
+        [
+            'adjustment_number' => $adjustmentNumber,
+            'product_id' => $item['product_id'],
+            'product_name' => $item['product_name'] ?? null,
+            'product_sku' => $item['product_sku'] ?? null,
+            'adjustment_type' => 'add',
+            'quantity_before' => $currentStock,
+            'quantity_adjusted' => $quantityAdjusted,
+            'quantity_after' => $quantityAfter,
+            'reason' => $reason,
+            'grn_id' => $grnId,
+            'grn_number' => $grnNumber,
+            'po_number' => $poNumber,
+            'auto_generated' => true
+        ]
+    );
+
+    return $adjustmentId;
+}
+
+function generateStockAdjustmentNumber(PDO $conn): string {
+    $prefix = 'ADJ-' . date('Ymd') . '-';
+
+    $stmt = $conn->prepare("
+        SELECT adjustment_number
+        FROM stock_adjustments
+        WHERE adjustment_number LIKE :prefix
+        ORDER BY id DESC
+        LIMIT 1
+    ");
+    $stmt->execute([':prefix' => $prefix . '%']);
+    $lastAdjustmentNumber = $stmt->fetchColumn();
+
+    $nextNumber = 1;
+    if (is_string($lastAdjustmentNumber) && preg_match('/(\d+)\s*$/', $lastAdjustmentNumber, $matches)) {
+        $nextNumber = ((int)$matches[1]) + 1;
+    }
+
+    return $prefix . str_pad((string)$nextNumber, 3, '0', STR_PAD_LEFT);
 }
 

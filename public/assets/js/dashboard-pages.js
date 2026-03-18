@@ -4419,26 +4419,44 @@ async function loadProductForEdit(id) {
 }
 
 function calculateProductSummary() {
-    const costPrice = parseFloat(document.getElementById('product-cost-price').value) || 0;
-    const sellingPrice = parseFloat(document.getElementById('product-selling-price').value) || 0;
-    const taxRate = parseFloat(document.getElementById('product-tax-rate').value) || 0;
+    const costPriceInput = document.getElementById('product-cost-price');
+    const sellingPriceInput = document.getElementById('product-selling-price');
+    const taxRateInput = document.getElementById('product-tax-rate');
+    const marginEl = document.getElementById('product-margin');
+    const finalPriceEl = document.getElementById('product-final-price');
+
+    if (!costPriceInput || !sellingPriceInput || !taxRateInput || !marginEl || !finalPriceEl) {
+        return;
+    }
+
+    const costPrice = parseFloat(costPriceInput.value) || 0;
+    const sellingPrice = parseFloat(sellingPriceInput.value) || 0;
+    const taxRate = parseFloat(taxRateInput.value) || 0;
 
     const margin = costPrice > 0 ? ((sellingPrice - costPrice) / costPrice * 100) : 0;
     const finalPrice = sellingPrice * (1 + taxRate / 100);
 
-    document.getElementById('product-margin').textContent = margin.toFixed(1) + '%';
-    document.getElementById('product-final-price').textContent = formatCurrency(finalPrice);
+    marginEl.textContent = margin.toFixed(1) + '%';
+    finalPriceEl.textContent = formatCurrency(finalPrice);
 }
 
 function updateStockStatus() {
-    const stockQuantity = parseInt(document.getElementById('product-stock-quantity').value) || 0;
-    const lowStockThreshold = parseInt(document.getElementById('product-low-stock-threshold').value) || 5;
+    const stockQuantityInput = document.getElementById('product-stock-quantity');
+    const lowStockThresholdInput = document.getElementById('product-low-stock-threshold');
+    const stockStatusEl = document.getElementById('product-stock-status');
+
+    if (!stockQuantityInput || !lowStockThresholdInput || !stockStatusEl) {
+        return;
+    }
+
+    const stockQuantity = parseInt(stockQuantityInput.value) || 0;
+    const lowStockThreshold = parseInt(lowStockThresholdInput.value) || 5;
 
     let status = 'In Stock';
     if (stockQuantity === 0) status = 'Out of Stock';
     else if (stockQuantity <= lowStockThreshold) status = 'Low Stock';
 
-    document.getElementById('product-stock-status').textContent = status;
+    stockStatusEl.textContent = status;
 }
 
 async function saveProduct() {
