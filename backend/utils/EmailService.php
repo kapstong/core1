@@ -5,6 +5,7 @@
  */
 
 require_once __DIR__ . '/../config/database.php';
+require_once __DIR__ . '/../config/env.php';
 
 class EmailService {
     private $smtp_host;
@@ -20,6 +21,7 @@ class EmailService {
     }
 
     private function loadConfig() {
+        Env::load();
         $db = Database::getInstance();
         $conn = $db->getConnection();
         
@@ -27,12 +29,16 @@ class EmailService {
         $stmt->execute();
         $settings = $stmt->fetchAll(PDO::FETCH_KEY_PAIR);
 
-        $this->smtp_host = $settings['email_smtp_host'] ?? '';
-        $this->smtp_port = $settings['email_smtp_port'] ?? '587';
-        $this->smtp_user = $settings['email_smtp_user'] ?? '';
-        $this->smtp_pass = $settings['email_smtp_pass'] ?? '';
-        $this->from_email = $settings['email_from_address'] ?? 'noreply@core1.com';
-        $this->from_name = $settings['email_from_name'] ?? 'PC Parts Core1';
+        $this->smtp_host = trim((string)($settings['email_smtp_host'] ?? Env::get('SMTP_HOST', '') ?? ''));
+        $this->smtp_port = (string)($settings['email_smtp_port'] ?? Env::get('SMTP_PORT', '587') ?? '587');
+        $this->smtp_user = trim((string)($settings['email_smtp_user'] ?? Env::get('SMTP_USERNAME', '') ?? ''));
+        $this->smtp_pass = (string)($settings['email_smtp_pass'] ?? Env::get('SMTP_PASSWORD', '') ?? '');
+        $this->from_email = trim((string)($settings['email_from_address'] ?? Env::get('SMTP_FROM_EMAIL', $this->smtp_user) ?? $this->smtp_user));
+        $this->from_name = trim((string)($settings['email_from_name'] ?? Env::get('SMTP_FROM_NAME', 'PC Parts Central') ?? 'PC Parts Central'));
+
+        if ($this->from_email === '' && $this->smtp_user !== '') {
+            $this->from_email = $this->smtp_user;
+        }
     }
 
     public function sendOrderConfirmation($orderId) {

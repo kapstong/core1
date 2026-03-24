@@ -47,217 +47,86 @@ try {
         Response::error('Username and password required', 400);
     }
 
-    $matchesLoginIdentifier = static function (array $candidateUser, string $identifier): bool {
-        $normalizedIdentifier = strtolower(trim($identifier));
-        if ($normalizedIdentifier === '') {
-            return false;
-        }
+    $database = Database::getInstance()->getConnection();
+    $stmt = $database->prepare("SHOW TABLES LIKE 'users'");
+    $stmt->execute();
+    $tableExists = $stmt->fetch(PDO::FETCH_ASSOC);
 
-        $candidateUsername = strtolower(trim((string)($candidateUser['username'] ?? '')));
-        $candidateEmail = strtolower(trim((string)($candidateUser['email'] ?? '')));
-
-        return $normalizedIdentifier === $candidateUsername
-            || ($candidateEmail !== '' && $normalizedIdentifier === $candidateEmail);
-    };
-
-    // Test if database is available, if not use test authentication
-    $useTestAuth = false;
-    try {
-        $database = Database::getInstance()->getConnection();
-        // Test if users table exists
-        $stmt = $database->prepare("SHOW TABLES LIKE 'users'");
-        $stmt->execute();
-        $tableExists = $stmt->fetch(PDO::FETCH_ASSOC);
-
-        if (!$tableExists) {
-            $useTestAuth = true;
-        }
-    } catch (Exception $e) {
-        $useTestAuth = true;
+    if (!$tableExists) {
+        Response::serverError('Authentication database is not ready');
     }
 
-    if ($useTestAuth) {
-        // Test authentication (schema not deployed yet)
-        // Check if we have admin user in database
-        try {
-            $database = Database::getInstance()->getConnection();
-            $stmt = $database->prepare("SELECT * FROM users WHERE (username = ? OR email = ?) AND role = 'admin' LIMIT 1");
-            $stmt->execute([$username, $username]);
-            $dbUser = $stmt->fetch(PDO::FETCH_ASSOC);
+    // Full authentication with database only.
+    $userModel = new User();
+    $knownUser = $userModel->findByUsername($username);
+    if (!$knownUser && filter_var($username, FILTER_VALIDATE_EMAIL)) {
+        $knownUser = $userModel->findByEmail($username);
+    }
 
-            if ($dbUser && password_verify($password, $dbUser['password_hash'])) {
-                // Real admin user from database - use Auth::login()
-                Auth::login($dbUser);
-
-                Response::success([
-                    'user' => [
-                        'id' => $dbUser['id'],
-                        'username' => $dbUser['username'],
-                        'role' => $dbUser['role'],
-                        'full_name' => $dbUser['full_name'],
-                        'email' => $dbUser['email']
-                    ],
-                    'session_id' => session_id(),
-                    'message' => 'Login successful'
-                ], 'Login successful');
-            } else {
-                // Fallback test users
-                $testUsers = [
-                    ['id' => 1, 'username' => 'admin', 'email' => 'admin@core1.com', 'role' => 'admin', 'full_name' => 'System Administrator'],
-                    ['id' => 5, 'username' => 'staff1', 'email' => 'staff@core1.com', 'role' => 'staff', 'full_name' => 'Jane Staff'],
-                    ['id' => 2, 'username' => 'inventory_mgr', 'email' => 'inventory@core1.com', 'role' => 'inventory_manager', 'full_name' => 'John Inventory'],
-                    ['id' => 3, 'username' => 'supplier1', 'email' => 'supplier@core1.com', 'role' => 'supplier', 'full_name' => 'Mike Supplier']
-                ];
-
-                $authenticatedUser = null;
-                foreach ($testUsers as $user) {
-                    if ($matchesLoginIdentifier($user, $username) && $password === 'password') {
-                        $authenticatedUser = $user;
-                        break;
-                    }
-                }
-
-                if (!$authenticatedUser) {
-                    Response::error('Invalid username or password', 401);
-                }
-
-                // Store user in session using Auth::login() method
-                Auth::login($authenticatedUser);
-
-                // Ensure session variables are set correctly for Auth::check()
-                $_SESSION['user_role'] = $authenticatedUser['role'];
-
-                Response::success([
-                    'user' => $authenticatedUser,
-                    'session_id' => session_id(),
-                    'message' => 'Login successful'
-                ], 'Login successful');
+    // Differentiate inactive/pending accounts from invalid credentials
+    if ($knownUser && isset($knownUser['password_hash']) && password_verify($password, $knownUser['password_hash'])) {
+        if (!(bool)$knownUser['is_active']) {
+            if (($knownUser['role'] ?? '') === 'supplier') {
+                Response::error('Your supplier account is pending approval. Please wait for an administrator to activate your account.', 403);
             }
-        } catch (Exception $e) {
-            // Fallback to simple test users if database not available
-            $testUsers = [
-                ['id' => 1, 'username' => 'admin', 'email' => 'admin@core1.com', 'role' => 'admin', 'full_name' => 'System Administrator'],
-                ['id' => 5, 'username' => 'staff1', 'email' => 'staff@core1.com', 'role' => 'staff', 'full_name' => 'Jane Staff'],
-                ['id' => 2, 'username' => 'inventory_mgr', 'email' => 'inventory@core1.com', 'role' => 'inventory_manager', 'full_name' => 'John Inventory'],
-                ['id' => 3, 'username' => 'supplier1', 'email' => 'supplier@core1.com', 'role' => 'supplier', 'full_name' => 'Mike Supplier']
-            ];
-
-            $authenticatedUser = null;
-            foreach ($testUsers as $user) {
-                if ($matchesLoginIdentifier($user, $username) && $password === 'password') {
-                    $authenticatedUser = $user;
-                    break;
-                }
-            }
-
-            if (!$authenticatedUser) {
-                Response::error('Invalid username or password', 401);
-            }
-
-            // Store user in session using Auth::login() method
-            Auth::login($authenticatedUser);
-
-            Response::success([
-                'user' => $authenticatedUser,
-                'session_id' => session_id(),
-                'message' => 'Login successful'
-            ], 'Login successful');
+            Response::error('Your account is inactive. Please contact the administrator.', 403);
         }
+    }
 
-    } else {
-        // Full authentication with database
-        $userModel = new User();
-        $knownUser = $userModel->findByUsername($username);
-        if (!$knownUser && filter_var($username, FILTER_VALIDATE_EMAIL)) {
-            $knownUser = $userModel->findByEmail($username);
-        }
-
-        // Differentiate inactive/pending accounts from invalid credentials
-        if ($knownUser && isset($knownUser['password_hash']) && password_verify($password, $knownUser['password_hash'])) {
-            if (!(bool)$knownUser['is_active']) {
-                if (($knownUser['role'] ?? '') === 'supplier') {
-                    Response::error('Your supplier account is pending approval. Please wait for an administrator to activate your account.', 403);
-                }
-                Response::error('Your account is inactive. Please contact the administrator.', 403);
+    $user = $userModel->authenticate($username, $password);
+    if (!$user && filter_var($username, FILTER_VALIDATE_EMAIL)) {
+        $emailUser = $userModel->findByEmail($username);
+        if (
+            $emailUser
+            && (bool)($emailUser['is_active'] ?? false)
+            && isset($emailUser['password_hash'])
+            && password_verify($password, $emailUser['password_hash'])
+        ) {
+            $user = $emailUser;
+            try {
+                $stmt = $database->prepare("UPDATE users SET last_login = NOW() WHERE id = ?");
+                $stmt->execute([$user['id']]);
+            } catch (Exception $e) {
+                // Non-blocking; authentication already succeeded.
             }
         }
+    }
 
-        $user = $userModel->authenticate($username, $password);
-        if (!$user && filter_var($username, FILTER_VALIDATE_EMAIL)) {
-            $emailUser = $userModel->findByEmail($username);
-            if (
-                $emailUser
-                && (bool)($emailUser['is_active'] ?? false)
-                && isset($emailUser['password_hash'])
-                && password_verify($password, $emailUser['password_hash'])
-            ) {
-                $user = $emailUser;
-                try {
-                    $stmt = $database->prepare("UPDATE users SET last_login = NOW() WHERE id = ?");
-                    $stmt->execute([$user['id']]);
-                } catch (Exception $e) {
-                    // Non-blocking; authentication already succeeded.
-                }
-            }
-        }
+    // Check if supplier is inactive
+    if ($user && $user['role'] === 'supplier' && !$user['is_active']) {
+        Response::error('Your supplier account has been deactivated. Please contact the administrator to reactivate your account.', 403);
+    }
 
-        // Check if supplier is inactive
-        if ($user && $user['role'] === 'supplier' && !$user['is_active']) {
-            Response::error('Your supplier account has been deactivated. Please contact the administrator to reactivate your account.', 403);
-        }
+    if (!$user) {
+        AuditLogger::log('login_failed', 'user', null, "Failed login attempt for identifier: {$username}");
+        Response::error('Invalid username or password', 401);
+    }
 
-        if (!$user) {
-            // Fallback to test users for development/testing
-            $testUsers = [
-                ['id' => 1, 'username' => 'admin', 'email' => 'admin@core1.com', 'role' => 'admin', 'full_name' => 'System Administrator'],
-                ['id' => 5, 'username' => 'staff1', 'email' => 'staff@core1.com', 'role' => 'staff', 'full_name' => 'Jane Staff'],
-                ['id' => 2, 'username' => 'inventory_mgr', 'email' => 'inventory@core1.com', 'role' => 'inventory_manager', 'full_name' => 'John Inventory'],
-                ['id' => 3, 'username' => 'supplier1', 'email' => 'supplier@core1.com', 'role' => 'supplier', 'full_name' => 'Mike Supplier']
-            ];
+    $rememberLogin = isset($input['remember']) && $input['remember'] === true;
 
-            $authenticatedUser = null;
-            foreach ($testUsers as $testUser) {
-                if ($matchesLoginIdentifier($testUser, $username) && $password === 'password') {
-                    $authenticatedUser = $testUser;
-                    break;
-                }
-            }
+    $clientInfo = null;
 
-            if (!$authenticatedUser) {
-                // Log failed login attempt
-                AuditLogger::log('login_failed', 'user', null, "Failed login attempt for identifier: {$username}");
-                Response::error('Invalid username or password', 401);
-            }
+    // Security features - determine whether OTP is required
+    try {
+        require_once __DIR__ . '/../../utils/Email.php';
+        $clientInfo = getClientInfo();
+        $securityCheckSessionInfo = [
+            'user_id' => $user['id'],
+            'ip_address' => $clientInfo['ip'],
+            'user_agent' => $clientInfo['user_agent'],
+            'device_fingerprint' => generateDeviceFingerprint($clientInfo),
+            'country' => $clientInfo['country'],
+            'city' => $clientInfo['city'],
+            'login_time' => date('Y-m-d H:i:s'),
+            'session_id' => session_id()
+        ];
 
-            // Continue with test user and unified login flow below.
-            $user = $authenticatedUser;
-        }
+        // Detect new device/location for security
+        $isNewDevice = isNewDeviceLocation($user['id'], $securityCheckSessionInfo);
 
-        $rememberLogin = isset($input['remember']) && $input['remember'] === true;
-
-        $clientInfo = null;
-
-        // Security features - determine whether OTP is required
-        try {
-            require_once __DIR__ . '/../../utils/Email.php';
-            $clientInfo = getClientInfo();
-            $securityCheckSessionInfo = [
-                'user_id' => $user['id'],
-                'ip_address' => $clientInfo['ip'],
-                'user_agent' => $clientInfo['user_agent'],
-                'device_fingerprint' => generateDeviceFingerprint($clientInfo),
-                'country' => $clientInfo['country'],
-                'city' => $clientInfo['city'],
-                'login_time' => date('Y-m-d H:i:s'),
-                'session_id' => session_id()
-            ];
-
-            // Detect new device/location for security
-            $isNewDevice = isNewDeviceLocation($user['id'], $securityCheckSessionInfo);
-
-            if ($isNewDevice && !empty($user['email'])) {
-                // Generate 6-digit code
-                $code = str_pad(random_int(0, 999999), 6, '0', STR_PAD_LEFT);
+        if ($isNewDevice && !empty($user['email'])) {
+            // Generate 6-digit code
+            $code = str_pad(random_int(0, 999999), 6, '0', STR_PAD_LEFT);
 
                 // Store in session for simple verification
                 $_SESSION['2fa_code'] = $code;
@@ -283,20 +152,20 @@ try {
                     Response::error('Unable to send 2FA email. Please check SMTP settings and try again.', 500, $errorDetails);
                 }
 
-                Response::success([
-                    'requires_two_factor' => true,
-                    'message' => 'Please check your email for a verification code.',
-                    'user' => array_intersect_key($user, array_flip(['id', 'username', 'email', 'role', 'full_name']))
-                ], '2FA Required');
-                exit;
-            }
-
-        } catch (Exception $e) {
-            error_log('Security features failed: ' . $e->getMessage());
+            Response::success([
+                'requires_two_factor' => true,
+                'message' => 'Please check your email for a verification code.',
+                'user' => array_intersect_key($user, array_flip(['id', 'username', 'email', 'role', 'full_name']))
+            ], '2FA Required');
+            exit;
         }
 
-        // Login successful with full features
-        Auth::loginWithRemember($user, $rememberLogin);
+    } catch (Exception $e) {
+        error_log('Security features failed: ' . $e->getMessage());
+    }
+
+    // Login successful with full features
+    Auth::loginWithRemember($user, $rememberLogin);
 
         // Log successful login (both old logger and new audit logger)
         try {
@@ -307,17 +176,17 @@ try {
         // Audit log
         AuditLogger::logLogin($user['id'], $user['username'], true);
 
-        if ($clientInfo !== null) {
-            $loginSessionInfo = [
-                'user_id' => $user['id'],
-                'ip_address' => $clientInfo['ip'],
-                'user_agent' => $clientInfo['user_agent'],
-                'device_fingerprint' => generateDeviceFingerprint($clientInfo),
-                'country' => $clientInfo['country'],
-                'city' => $clientInfo['city'],
-                'login_time' => date('Y-m-d H:i:s'),
-                'session_id' => session_id()
-            ];
+    if ($clientInfo !== null) {
+        $loginSessionInfo = [
+            'user_id' => $user['id'],
+            'ip_address' => $clientInfo['ip'],
+            'user_agent' => $clientInfo['user_agent'],
+            'device_fingerprint' => generateDeviceFingerprint($clientInfo),
+            'country' => $clientInfo['country'],
+            'city' => $clientInfo['city'],
+            'login_time' => date('Y-m-d H:i:s'),
+            'session_id' => session_id()
+        ];
 
             try {
                 recordLoginSession($loginSessionInfo);
@@ -332,14 +201,13 @@ try {
                     $email->sendStaffLoginNotification($user, $loginSessionInfo);
                 } catch (Exception $e) {}
             }
-        }
-
-        Response::success([
-            'user' => array_intersect_key($user, array_flip(['id', 'username', 'email', 'role', 'full_name'])),
-            'session_id' => session_id(),
-            'message' => 'Login successful'
-        ], 'Login successful');
     }
+
+    Response::success([
+        'user' => array_intersect_key($user, array_flip(['id', 'username', 'email', 'role', 'full_name'])),
+        'session_id' => session_id(),
+        'message' => 'Login successful'
+    ], 'Login successful');
 
 } catch (Exception $e) {
     Logger::logError($e->getMessage(), ['file' => __FILE__]);
