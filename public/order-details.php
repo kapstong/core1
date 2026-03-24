@@ -661,7 +661,7 @@ if (!$orderId) {
         function formatStatus(status) {
             const statusMap = {
                 'pending': 'Pending',
-                'confirmed': 'Confirmed',
+                'confirmed': 'To Ship',
                 'processing': 'Processing',
                 'shipped': 'Shipped',
                 'delivered': 'Delivered',

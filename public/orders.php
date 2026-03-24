@@ -453,6 +453,21 @@ if (!isset($_SESSION['customer_id'])) {
             }
         }
 
+        function formatCustomerStatus(status) {
+            const statusMap = {
+                pending: 'Pending',
+                confirmed: 'To Ship',
+                processing: 'Processing',
+                shipped: 'Shipped',
+                delivered: 'Delivered',
+                completed: 'Completed',
+                cancelled: 'Cancelled',
+                returned: 'Returned'
+            };
+
+            return statusMap[(status || '').toLowerCase()] || status;
+        }
+
         // Render orders
         function renderOrders(orders) {
             const content = orders.map(order => {
@@ -474,7 +489,7 @@ if (!isset($_SESSION['customer_id'])) {
                                 </div>
                             </div>
                             <div class="order-status ${statusClass}">
-                                ${order.status}
+                                ${formatCustomerStatus(order.status)}
                             </div>
                         </div>
 

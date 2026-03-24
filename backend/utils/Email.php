@@ -531,7 +531,7 @@ class Email {
      * Send order status update email
      */
     public function sendOrderStatusUpdate($order, $customer, $oldStatus, $newStatus) {
-        $subject = 'Order Status Update - ' . $order['order_number'];
+        $subject = 'Order Update: ' . $this->formatCustomerOrderStatus($newStatus) . ' - ' . $order['order_number'];
 
         $message = $this->buildOrderStatusUpdateHTML($order, $customer, $oldStatus, $newStatus);
 
@@ -576,6 +576,8 @@ class Email {
     }
 
     private function buildOrderConfirmationHTML($order, $customer) {
+        $displayStatus = $this->formatCustomerOrderStatus($order['status'] ?? 'pending');
+
         $itemsHTML = '';
         foreach ($order['items'] as $item) {
             $itemsHTML .= "
@@ -606,7 +608,7 @@ class Email {
                 <div style='background: #f8f9fa; padding: 15px; margin: 20px 0; border-radius: 5px;'>
                     <strong>Order Number:</strong> {$order['order_number']}<br>
                     <strong>Order Date:</strong> " . date('F j, Y \a\t g:i A', strtotime($order['order_date'])) . "<br>
-                    <strong>Status:</strong> " . ucfirst($order['status']) . "
+                    <strong>Status:</strong> {$displayStatus}
                 </div>
 
                 <h3>Order Items</h3>
@@ -652,34 +654,150 @@ class Email {
     }
 
     private function buildOrderStatusUpdateHTML($order, $customer, $oldStatus, $newStatus) {
+        $orderNumber = $order['order_number'] ?? $order['id'] ?? 'N/A';
+        $formattedOldStatus = $this->formatCustomerOrderStatus($oldStatus);
+        $formattedNewStatus = $this->formatCustomerOrderStatus($newStatus);
+        $statusTheme = $this->getCustomerOrderStatusTheme($newStatus);
+        $headline = $newStatus === 'confirmed'
+            ? 'Your order is now ready to ship'
+            : 'Your order status has been updated';
+        $summaryText = $newStatus === 'confirmed'
+            ? 'Great news. Your order has been approved and is now in our To Ship queue. Our team is preparing it for dispatch.'
+            : "We've updated your order progress. Please see the latest status below.";
+        $nextSteps = $newStatus === 'confirmed'
+            ? "
+                            <li>Our team is preparing your package for dispatch</li>
+                            <li>You'll receive another email once the parcel has shipped</li>
+                            <li>You can monitor progress anytime in your Orders page</li>
+                            <li>If you need changes, contact support as soon as possible</li>
+                        "
+            : "
+                            <li>Check your account for the latest order progress</li>
+                            <li>Watch your inbox for the next order update</li>
+                            <li>Contact support if you need help with this order</li>
+                        ";
+
         return "
         <!DOCTYPE html>
-        <html>
+        <html lang='en'>
         <head>
             <meta charset='UTF-8'>
-            <title>Order Status Update</title>
+            <meta name='viewport' content='width=device-width, initial-scale=1.0'>
+            <title>Order Status Update - PC Parts Central</title>
+            <style>
+                * { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
+                body { margin: 0; padding: 0; background: #020617; }
+                .container { max-width: 640px; margin: 0 auto; padding: 24px; background: radial-gradient(circle at top, rgba(37, 99, 235, 0.35), rgba(15, 23, 42, 1) 55%); }
+                .card { background: rgba(15, 23, 42, 0.94); border: 1px solid rgba(0, 245, 255, 0.18); border-radius: 20px; padding: 32px; box-shadow: 0 18px 45px rgba(2, 6, 23, 0.45); color: #e2e8f0; }
+                .logo { margin: 0; font-size: 28px; font-weight: 900; color: #f8fafc; letter-spacing: 0.3px; }
+                .eyebrow { margin: 10px 0 0; color: #67e8f9; font-size: 14px; font-weight: 600; text-transform: uppercase; letter-spacing: 1.4px; }
+                .hero { margin: 28px 0 24px; padding: 24px; border-radius: 18px; background: linear-gradient(135deg, {$statusTheme['bg_start']} 0%, {$statusTheme['bg_end']} 100%); color: #f8fafc; }
+                .hero h2 { margin: 0 0 8px; font-size: 28px; line-height: 1.2; }
+                .hero p { margin: 0; color: rgba(248, 250, 252, 0.9); font-size: 15px; line-height: 1.65; }
+                .pill { display: inline-block; margin-top: 16px; padding: 8px 16px; border-radius: 999px; background: rgba(255, 255, 255, 0.18); color: #fff; font-size: 12px; font-weight: 700; letter-spacing: 0.8px; text-transform: uppercase; }
+                .grid { margin: 24px 0; display: grid; gap: 14px; }
+                .panel { background: rgba(15, 23, 42, 0.6); border: 1px solid rgba(148, 163, 184, 0.16); border-radius: 16px; padding: 18px 20px; }
+                .panel-title { margin: 0 0 12px; font-size: 14px; font-weight: 700; color: #67e8f9; text-transform: uppercase; letter-spacing: 1px; }
+                .detail-row { margin: 6px 0; color: #cbd5e1; font-size: 14px; }
+                .detail-row strong { color: #f8fafc; }
+                .status-line { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: 10px 0 0; }
+                .status-chip { display: inline-block; padding: 7px 14px; border-radius: 999px; font-size: 12px; font-weight: 700; letter-spacing: 0.7px; text-transform: uppercase; }
+                .status-chip.old { background: rgba(148, 163, 184, 0.18); color: #cbd5e1; }
+                .status-chip.new { background: linear-gradient(135deg, {$statusTheme['bg_start']} 0%, {$statusTheme['bg_end']} 100%); color: #fff; }
+                .arrow { color: #67e8f9; font-weight: 700; }
+                .cta-wrap { text-align: center; margin: 28px 0; }
+                .cta-button { display: inline-block; padding: 14px 30px; border-radius: 999px; text-decoration: none; font-weight: 700; color: #03111f; background: linear-gradient(135deg, #00f5ff 0%, #38bdf8 100%); }
+                .next-steps { margin: 0; padding-left: 20px; color: #cbd5e1; line-height: 1.7; }
+                .footer { text-align: center; color: rgba(148, 163, 184, 0.9); font-size: 13px; margin-top: 24px; line-height: 1.7; }
+            </style>
         </head>
-        <body style='font-family: Arial, sans-serif; line-height: 1.6; color: #333;'>
-            <div style='max-width: 600px; margin: 0 auto; padding: 20px;'>
-                <h1 style='color: #2c3e50;'>Order Status Update</h1>
+        <body>
+            <div class='container'>
+                <div class='card'>
+                    <h1 class='logo'>PC Parts Central</h1>
+                    <p class='eyebrow'>Order Update</p>
 
-                <p>Dear {$customer['first_name']} {$customer['last_name']},</p>
+                    <div class='hero'>
+                        <h2>{$headline}</h2>
+                        <p>{$summaryText}</p>
+                        <div class='pill'>Order #{$orderNumber}</div>
+                    </div>
 
-                <p>Your order status has been updated:</p>
+                    <p style='margin: 0 0 18px; color: #cbd5e1; line-height: 1.7;'>
+                        Hello <strong style='color: #f8fafc;'>{$customer['first_name']}</strong>, here is the latest update for your order.
+                    </p>
 
-                <div style='background: #f8f9fa; padding: 15px; margin: 20px 0; border-radius: 5px;'>
-                    <strong>Order Number:</strong> {$order['order_number']}<br>
-                    <strong>Previous Status:</strong> " . ucfirst($oldStatus) . "<br>
-                    <strong>New Status:</strong> " . ucfirst($newStatus) . "
+                    <div class='grid'>
+                        <div class='panel'>
+                            <p class='panel-title'>Status Progress</p>
+                            <div class='status-line'>
+                                <span class='status-chip old'>{$formattedOldStatus}</span>
+                                <span class='arrow'>&rarr;</span>
+                                <span class='status-chip new'>{$formattedNewStatus}</span>
+                            </div>
+                        </div>
+
+                        <div class='panel'>
+                            <p class='panel-title'>Order Details</p>
+                            <p class='detail-row'><strong>Order Number:</strong> {$orderNumber}</p>
+                            <p class='detail-row'><strong>Updated:</strong> " . date('F j, Y \a\t g:i A') . "</p>
+                            " . (!empty($order['tracking_number']) ? "<p class='detail-row'><strong>Tracking Number:</strong> {$order['tracking_number']}</p>" : "") . "
+                        </div>
+
+                        <div class='panel'>
+                            <p class='panel-title'>What Happens Next</p>
+                            <ul class='next-steps'>
+                                {$nextSteps}
+                            </ul>
+                        </div>
+                    </div>
+
+                    <div class='cta-wrap'>
+                        <a href='{$this->baseUrl}/public/orders.php' class='cta-button'>View My Orders</a>
+                    </div>
+
+                    <div class='footer'>
+                        <p style='margin: 0;'>Need help? Reply to this email or contact our support team.</p>
+                        <p style='margin: 8px 0 0;'>PC Parts Central • Real-time order updates for your account</p>
+                    </div>
                 </div>
-
-                <p>You can track your order status by logging into your account.</p>
-
-                <p>Best regards,<br>PC Parts Store Team</p>
             </div>
         </body>
         </html>
         ";
+    }
+
+    private function formatCustomerOrderStatus($status) {
+        $statusMap = [
+            'pending' => 'Pending',
+            'confirmed' => 'To Ship',
+            'processing' => 'Processing',
+            'shipped' => 'Shipped',
+            'delivered' => 'Delivered',
+            'completed' => 'Completed',
+            'cancelled' => 'Cancelled',
+            'returned' => 'Returned'
+        ];
+
+        $normalized = strtolower((string) $status);
+        return $statusMap[$normalized] ?? ucfirst($normalized);
+    }
+
+    private function getCustomerOrderStatusTheme($status) {
+        $normalized = strtolower((string) $status);
+
+        $themes = [
+            'pending' => ['bg_start' => '#f59e0b', 'bg_end' => '#f97316'],
+            'confirmed' => ['bg_start' => '#06b6d4', 'bg_end' => '#2563eb'],
+            'processing' => ['bg_start' => '#3b82f6', 'bg_end' => '#1d4ed8'],
+            'shipped' => ['bg_start' => '#0ea5e9', 'bg_end' => '#0284c7'],
+            'delivered' => ['bg_start' => '#10b981', 'bg_end' => '#059669'],
+            'completed' => ['bg_start' => '#22c55e', 'bg_end' => '#16a34a'],
+            'cancelled' => ['bg_start' => '#ef4444', 'bg_end' => '#dc2626'],
+            'returned' => ['bg_start' => '#f97316', 'bg_end' => '#ea580c']
+        ];
+
+        return $themes[$normalized] ?? ['bg_start' => '#06b6d4', 'bg_end' => '#2563eb'];
     }
 
     private function buildPasswordResetHTML($customer, $resetToken) {
