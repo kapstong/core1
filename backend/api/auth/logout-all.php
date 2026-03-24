@@ -46,7 +46,7 @@ try {
 
     // Invalidate 2FA bypass records
     try {
-        $stmt = $db->prepare("DELETE FROM 2fa_bypass_records WHERE user_id = ?");
+        $stmt = $db->prepare("DELETE FROM `2fa_bypass_records` WHERE user_id = ?");
         $stmt->execute([$userId]);
     } catch (Exception $e) {
         // Ignore if table doesn't exist

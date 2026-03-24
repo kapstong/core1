@@ -3854,6 +3854,11 @@ async function loadProductsPage() {
 
 async function loadCategoriesForFilter() {
     try {
+        const select = document.getElementById('product-category-filter');
+        if (!select) {
+            return;
+        }
+
         const response = await fetch(`${API_BASE}/categories/index.php`);
         if (!response.ok) {
             throw new Error(`HTTP error! status: ${response.status}`);
@@ -3861,7 +3866,9 @@ async function loadCategoriesForFilter() {
         const data = await response.json();
 
         if (data.success) {
-            const select = document.getElementById('product-category-filter');
+            if (!document.getElementById('product-category-filter')) {
+                return;
+            }
             select.innerHTML = '<option value="all">All Categories</option>';
 
             const categories = data.data && data.data.categories ? data.data.categories : [];
@@ -3886,9 +3893,15 @@ async function loadProducts(options = {}) {
     const content = document.getElementById('products-content');
     const noProductsMessage = document.getElementById('no-products-message');
     const tbody = document.getElementById('products-table-body');
+    const categoryFilterElement = document.getElementById('product-category-filter');
+    const statusFilterElement = document.getElementById('product-status-filter');
 
-    const categoryFilter = document.getElementById('product-category-filter').value;
-    const statusFilter = document.getElementById('product-status-filter').value;
+    if (!loadingIndicator || !content || !noProductsMessage || !tbody || !categoryFilterElement || !statusFilterElement) {
+        return;
+    }
+
+    const categoryFilter = categoryFilterElement.value;
+    const statusFilter = statusFilterElement.value;
 
     try {
         if (!silent) {
@@ -3917,6 +3930,10 @@ async function loadProducts(options = {}) {
         });
         const data = await response.json();
 
+        if (!document.getElementById('products-table-body')) {
+            return;
+        }
+
         loadingIndicator.classList.add('d-none');
 
         if (data.success && data.data && data.data.products && data.data.products.length > 0) {
@@ -3941,6 +3958,9 @@ async function loadProducts(options = {}) {
 
 function displayProducts(products) {
     const tbody = document.getElementById('products-table-body');
+    if (!tbody) {
+        return;
+    }
     const isStaff = currentUser.role === 'staff';
     const canDirectAdjust = ['admin', 'inventory_manager', 'purchasing_officer', 'staff'].includes(currentUser.role);
 

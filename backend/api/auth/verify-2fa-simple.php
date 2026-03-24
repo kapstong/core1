@@ -50,6 +50,7 @@ try {
         unset($_SESSION['2fa_code']);
         unset($_SESSION['2fa_expires']);
         unset($_SESSION['2fa_user_id']);
+        unset($_SESSION['2fa_remember']);
 
         Response::error('Verification code has expired. Please login again.', 400);
     }
@@ -79,30 +80,37 @@ try {
         Response::error('User not found or inactive', 404);
     }
 
-    // Complete the login
-    Auth::login($user);
+    $rememberLogin = !empty($_SESSION['2fa_remember']);
+
+    // Complete the login only after OTP succeeds.
+    Auth::loginWithRemember($user, $rememberLogin);
+
+    $clientInfo = get2FAClientInfo();
+    $deviceFingerprint = generate2FADeviceFingerprint($clientInfo);
+    $sessionInfo = [
+        'user_id' => $userId,
+        'ip_address' => $clientInfo['ip'],
+        'user_agent' => $clientInfo['user_agent'],
+        'device_fingerprint' => $deviceFingerprint,
+        'country' => 'Philippines',
+        'city' => 'Unknown',
+        'login_time' => date('Y-m-d H:i:s'),
+        'session_id' => session_id()
+    ];
+
+    try {
+        record2FALoginSession($db, $sessionInfo);
+    } catch (Exception $e) {
+        error_log('Failed to record OTP login session: ' . $e->getMessage());
+    }
 
     // If user chose to trust this device, create a bypass record
     if ($trustDevice) {
-        // Generate device fingerprint (same as login.php)
-        $clientInfo = [
-            'ip' => $_SERVER['HTTP_X_FORWARDED_FOR'] ?? $_SERVER['HTTP_CLIENT_IP'] ?? $_SERVER['REMOTE_ADDR'] ?? '0.0.0.0',
-            'user_agent' => $_SERVER['HTTP_USER_AGENT'] ?? 'Unknown'
-        ];
-
-        $deviceFingerprint = hash('sha256', implode('|', [
-            $clientInfo['ip'],
-            substr($clientInfo['user_agent'], 0, 50),
-            $_SERVER['HTTP_ACCEPT'] ?? '',
-            $_SERVER['HTTP_ACCEPT_LANGUAGE'] ?? ''
-        ]));
-
-        // Calculate expiry (30 days from now)
         $expiresAt = date('Y-m-d H:i:s', strtotime('+30 days'));
 
         // Insert or update bypass record
         $bypassQuery = "
-            INSERT INTO 2fa_bypass_records
+            INSERT INTO `2fa_bypass_records`
             (user_id, device_fingerprint, ip_address, user_agent, expires_at)
             VALUES (?, ?, ?, ?, ?)
             ON DUPLICATE KEY UPDATE
@@ -134,6 +142,7 @@ try {
     unset($_SESSION['2fa_code']);
     unset($_SESSION['2fa_expires']);
     unset($_SESSION['2fa_user_id']);
+    unset($_SESSION['2fa_remember']);
 
     // Log successful 2FA verification
     AuditLogger::log(
@@ -158,5 +167,46 @@ try {
 } catch (Exception $e) {
     error_log("2FA verification error: " . $e->getMessage());
     Response::serverError('An error occurred during verification');
+}
+
+function get2FAClientInfo() {
+    $ip = $_SERVER['HTTP_X_FORWARDED_FOR'] ?? $_SERVER['HTTP_CLIENT_IP'] ?? $_SERVER['REMOTE_ADDR'] ?? '0.0.0.0';
+    if (strpos($ip, ',') !== false) {
+        $ip = trim(explode(',', $ip)[0]);
+    }
+
+    return [
+        'ip' => $ip,
+        'user_agent' => $_SERVER['HTTP_USER_AGENT'] ?? 'Unknown'
+    ];
+}
+
+function generate2FADeviceFingerprint(array $clientInfo) {
+    return hash('sha256', implode('|', [
+        $clientInfo['ip'],
+        substr($clientInfo['user_agent'], 0, 50),
+        $_SERVER['HTTP_ACCEPT'] ?? '',
+        $_SERVER['HTTP_ACCEPT_LANGUAGE'] ?? ''
+    ]));
+}
+
+function record2FALoginSession(PDO $db, array $sessionInfo) {
+    $query = "
+        INSERT INTO login_sessions
+        (user_id, ip_address, user_agent, device_fingerprint, country, city, login_time, session_id)
+        VALUES
+        (:user_id, :ip_address, :user_agent, :device_fingerprint, :country, :city, :login_time, :session_id)
+    ";
+
+    $stmt = $db->prepare($query);
+    $stmt->bindValue(':user_id', $sessionInfo['user_id'], PDO::PARAM_INT);
+    $stmt->bindValue(':ip_address', $sessionInfo['ip_address']);
+    $stmt->bindValue(':user_agent', $sessionInfo['user_agent']);
+    $stmt->bindValue(':device_fingerprint', $sessionInfo['device_fingerprint']);
+    $stmt->bindValue(':country', $sessionInfo['country']);
+    $stmt->bindValue(':city', $sessionInfo['city']);
+    $stmt->bindValue(':login_time', $sessionInfo['login_time']);
+    $stmt->bindValue(':session_id', $sessionInfo['session_id']);
+    $stmt->execute();
 }
 

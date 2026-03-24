@@ -233,23 +233,15 @@ try {
             $user = $authenticatedUser;
         }
 
-        // Login successful with full features
-        Auth::loginWithRemember($user, isset($input['remember']) && $input['remember'] === true);
+        $rememberLogin = isset($input['remember']) && $input['remember'] === true;
 
-        // Log successful login (both old logger and new audit logger)
-        try {
-            $logger = new Logger($user['id']);
-            $logger->log('login', 'user', $user['id'], ['success' => true]);
-        } catch (Exception $e) {}
+        $clientInfo = null;
 
-        // Audit log
-        AuditLogger::logLogin($user['id'], $user['username'], true);
-
-        // Security features - attempt to send login notifications
+        // Security features - determine whether OTP is required
         try {
             require_once __DIR__ . '/../../utils/Email.php';
             $clientInfo = getClientInfo();
-            $sessionInfo = [
+            $securityCheckSessionInfo = [
                 'user_id' => $user['id'],
                 'ip_address' => $clientInfo['ip'],
                 'user_agent' => $clientInfo['user_agent'],
@@ -261,7 +253,7 @@ try {
             ];
 
             // Detect new device/location for security
-            $isNewDevice = isNewDeviceLocation($user['id'], $sessionInfo);
+            $isNewDevice = isNewDeviceLocation($user['id'], $securityCheckSessionInfo);
 
             if ($isNewDevice && !empty($user['email'])) {
                 // Generate 6-digit code
@@ -271,11 +263,12 @@ try {
                 $_SESSION['2fa_code'] = $code;
                 $_SESSION['2fa_user_id'] = $user['id'];
                 $_SESSION['2fa_expires'] = time() + 600; // 10 minutes
+                $_SESSION['2fa_remember'] = $rememberLogin;
 
                 // Try to send email
                 try {
                     $email = new Email();
-                    $sent = $email->sendTwoFactorAuthCode($user, $code, $sessionInfo);
+                    $sent = $email->sendTwoFactorAuthCode($user, $code, $securityCheckSessionInfo);
                     if (!$sent) {
                         throw new Exception('2FA email send returned false');
                     }
@@ -283,7 +276,7 @@ try {
                     error_log("Failed to send 2FA email: " . $e->getMessage());
 
                     // Prevent users from getting stuck in 2FA flow when email cannot be delivered.
-                    unset($_SESSION['2fa_code'], $_SESSION['2fa_user_id'], $_SESSION['2fa_expires']);
+                    unset($_SESSION['2fa_code'], $_SESSION['2fa_user_id'], $_SESSION['2fa_expires'], $_SESSION['2fa_remember']);
 
                     $isDebug = (bool)Env::get('APP_DEBUG', false) || strtolower((string)Env::get('APP_ENV', '')) === 'development';
                     $errorDetails = $isDebug ? ['debug_code' => $code, 'reason' => $e->getMessage()] : null;
@@ -298,19 +291,47 @@ try {
                 exit;
             }
 
-            // Record login session
-            recordLoginSession($sessionInfo);
-
-            // Send standard login notifications
-            if (in_array($user['role'], ['admin', 'inventory_manager', 'staff', 'purchasing_officer'])) {
-                try {
-                    $email = new Email();
-                    $email->sendStaffLoginNotification($user, $sessionInfo);
-                } catch (Exception $e) {}
-            }
-
         } catch (Exception $e) {
             error_log('Security features failed: ' . $e->getMessage());
+        }
+
+        // Login successful with full features
+        Auth::loginWithRemember($user, $rememberLogin);
+
+        // Log successful login (both old logger and new audit logger)
+        try {
+            $logger = new Logger($user['id']);
+            $logger->log('login', 'user', $user['id'], ['success' => true]);
+        } catch (Exception $e) {}
+
+        // Audit log
+        AuditLogger::logLogin($user['id'], $user['username'], true);
+
+        if ($clientInfo !== null) {
+            $loginSessionInfo = [
+                'user_id' => $user['id'],
+                'ip_address' => $clientInfo['ip'],
+                'user_agent' => $clientInfo['user_agent'],
+                'device_fingerprint' => generateDeviceFingerprint($clientInfo),
+                'country' => $clientInfo['country'],
+                'city' => $clientInfo['city'],
+                'login_time' => date('Y-m-d H:i:s'),
+                'session_id' => session_id()
+            ];
+
+            try {
+                recordLoginSession($loginSessionInfo);
+            } catch (Exception $e) {
+                error_log('Failed to record login session: ' . $e->getMessage());
+            }
+
+            if (in_array($user['role'], ['admin', 'inventory_manager', 'staff', 'purchasing_officer'])) {
+                try {
+                    require_once __DIR__ . '/../../utils/Email.php';
+                    $email = new Email();
+                    $email->sendStaffLoginNotification($user, $loginSessionInfo);
+                } catch (Exception $e) {}
+            }
         }
 
         Response::success([
@@ -399,7 +420,7 @@ function isNewDeviceLocation($userId, $sessionInfo) {
 
     // First, check if this device has active 2FA bypass
     $bypassQuery = "
-        SELECT id FROM 2fa_bypass_records
+        SELECT id FROM `2fa_bypass_records`
         WHERE user_id = :user_id
             AND device_fingerprint = :device_fingerprint
             AND expires_at > NOW()
