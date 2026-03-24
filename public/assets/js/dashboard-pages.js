@@ -1040,9 +1040,10 @@ async function loadProfilePage() {
         };
 
         try {
-            const response = await fetch(`${API_BASE}/users/update.php`, {
-                method: 'POST',
+            const response = await fetch(`${API_BASE}/users/profile.php`, {
+                method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
+                credentials: 'same-origin',
                 body: JSON.stringify(formData)
             });
 
@@ -1050,7 +1051,7 @@ async function loadProfilePage() {
             if (result.success) {
                 showSuccess('Profile updated successfully');
                 // Update current user data
-                currentUser = { ...currentUser, ...formData };
+                currentUser = { ...currentUser, ...(result.data?.user || formData) };
                 updateUserUI();
             } else {
                 showError(result.message || 'Failed to update profile');
@@ -2688,9 +2689,10 @@ async function saveSupplierSettings() {
     };
 
     try {
-        const response = await fetch(`${API_BASE}/suppliers/update.php`, {
+        const response = await fetch(`${API_BASE}/suppliers/update.php?id=${currentUser.id}`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
+            credentials: 'same-origin',
             body: JSON.stringify(formData)
         });
 

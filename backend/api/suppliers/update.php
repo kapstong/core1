@@ -40,6 +40,10 @@ try {
     // Accept ID from either query parameter or request body
     $supplierId = isset($_GET['id']) ? intval($_GET['id']) : (isset($input['id']) ? intval($input['id']) : null);
 
+    if (!$supplierId && $user['role'] === 'supplier') {
+        $supplierId = (int)$user['id'];
+    }
+
     if (!$supplierId) {
         Response::error('Supplier ID is required', 400);
     }

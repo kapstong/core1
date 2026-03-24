@@ -653,7 +653,7 @@
     <script src="assets/js/face-auth-core.js?v=1.1"></script>
 
     <!-- Include all page loaders -->
-    <script src="assets/js/dashboard-pages.js?v=6.9"></script>
+    <script src="assets/js/dashboard-pages.js?v=7.0"></script>
     <script src="assets/js/admin-ai-copilot.js?v=<?= urlencode((string)@filemtime(__DIR__ . '/assets/js/admin-ai-copilot.js')) ?>"></script>
 
     <!-- NEW: Complete GRN Management System -->
