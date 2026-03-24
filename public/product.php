@@ -477,7 +477,7 @@ if (MaintenanceMode::handle()) {
                             <button class="quantity-btn" id="decrease-qty">
                                 <i class="fas fa-minus"></i>
                             </button>
-                            <input type="number" class="quantity-input" id="quantity" value="1" min="1" max="99">
+                            <input type="number" class="quantity-input" id="quantity" value="1" min="1" max="1">
                             <button class="quantity-btn" id="increase-qty">
                                 <i class="fas fa-plus"></i>
                             </button>
@@ -607,6 +607,7 @@ if (MaintenanceMode::handle()) {
         // Authentication
         let isAuthenticated = false;
         let currentUser = null;
+        let currentProductStock = 1;
 
         // Cart functionality
         const Cart = {
@@ -618,6 +619,16 @@ if (MaintenanceMode::handle()) {
                     setTimeout(() => {
                         window.location.href = 'login.php';
                     }, 1500);
+                    return;
+                }
+
+                if ((product.quantity_available || 0) <= 0) {
+                    showNotification('This product is out of stock.', 'warning');
+                    return;
+                }
+
+                if (quantity > (product.quantity_available || 0)) {
+                    showNotification(`Only ${product.quantity_available} item(s) are available right now.`, 'warning');
                     return;
                 }
 
@@ -762,15 +773,25 @@ if (MaintenanceMode::handle()) {
 
             // Stock status
             const stockStatus = document.getElementById('stock-status');
-            const quantityAvailable = product.quantity_available || 0;
+            const quantityInput = document.getElementById('quantity');
+            const addToCartBtn = document.getElementById('add-to-cart-btn');
+            const quantityAvailable = Math.max(parseInt(product.quantity_available, 10) || 0, 0);
+            currentProductStock = quantityAvailable;
+
             if (quantityAvailable > 0) {
                 stockStatus.className = 'stock-status in-stock';
                 stockStatus.innerHTML = `<i class="fas fa-check-circle"></i> In Stock (${quantityAvailable} available)`;
+                quantityInput.disabled = false;
+                addToCartBtn.disabled = false;
+                quantityInput.max = quantityAvailable;
+                quantityInput.value = Math.min(Math.max(parseInt(quantityInput.value, 10) || 1, 1), quantityAvailable);
             } else {
                 stockStatus.className = 'stock-status out-of-stock';
                 stockStatus.innerHTML = `<i class="fas fa-times-circle"></i> Out of Stock`;
-                document.getElementById('add-to-cart-btn').disabled = true;
-                document.getElementById('quantity').disabled = true;
+                addToCartBtn.disabled = true;
+                quantityInput.disabled = true;
+                quantityInput.value = 1;
+                quantityInput.max = 1;
             }
 
             // Breadcrumb
@@ -927,10 +948,30 @@ if (MaintenanceMode::handle()) {
             }
         }
 
+        function clampQuantityInput(showLimitMessage = false) {
+            const input = document.getElementById('quantity');
+            const maxQuantity = Math.max(currentProductStock || 0, 0);
+            let value = parseInt(input.value, 10);
+
+            if (isNaN(value) || value < 1) {
+                value = 1;
+            }
+
+            if (maxQuantity > 0 && value > maxQuantity) {
+                value = maxQuantity;
+                if (showLimitMessage) {
+                    showNotification(`Maximum order for this item is ${maxQuantity} based on live stock.`, 'warning');
+                }
+            }
+
+            input.value = value;
+            return value;
+        }
+
         // Quantity controls
         document.getElementById('decrease-qty').addEventListener('click', () => {
             const input = document.getElementById('quantity');
-            const currentValue = parseInt(input.value);
+            const currentValue = parseInt(input.value, 10);
             if (currentValue > 1) {
                 input.value = currentValue - 1;
             }
@@ -938,28 +979,45 @@ if (MaintenanceMode::handle()) {
 
         document.getElementById('increase-qty').addEventListener('click', () => {
             const input = document.getElementById('quantity');
-            const currentValue = parseInt(input.value);
-            if (currentValue < 99) {
+            const currentValue = parseInt(input.value, 10) || 1;
+            const maxQuantity = Math.max(currentProductStock || 0, 0);
+
+            if (maxQuantity > 0 && currentValue < maxQuantity) {
                 input.value = currentValue + 1;
+            } else if (maxQuantity > 0) {
+                showNotification(`Maximum order for this item is ${maxQuantity} based on live stock.`, 'warning');
             }
         });
 
         document.getElementById('quantity').addEventListener('input', (e) => {
-            let value = parseInt(e.target.value);
-            if (isNaN(value) || value < 1) value = 1;
-            if (value > 99) value = 99;
-            e.target.value = value;
+            clampQuantityInput(true);
         });
 
         // Add to cart
         document.getElementById('add-to-cart-btn').addEventListener('click', async () => {
-            const quantity = parseInt(document.getElementById('quantity').value);
+            const quantity = clampQuantityInput(true);
+
+            if (currentProductStock <= 0) {
+                showNotification('This product is currently out of stock.', 'warning');
+                return;
+            }
 
             try {
                 const response = await fetch(`${API_BASE}/products/show.php?id=${productId}`);
                 const data = await response.json();
 
                 if (data.success && data.data) {
+                    const availableStock = Math.max(parseInt(data.data.quantity_available, 10) || 0, 0);
+
+                    if (quantity > availableStock) {
+                        currentProductStock = availableStock;
+                        document.getElementById('quantity').max = Math.max(availableStock, 1);
+                        document.getElementById('quantity').value = Math.max(Math.min(quantity, Math.max(availableStock, 1)), 1);
+                        showNotification(`Only ${availableStock} item(s) are available right now.`, 'warning');
+                        displayProduct(data.data);
+                        return;
+                    }
+
                     Cart.add(data.data, quantity);
                 }
             } catch (error) {

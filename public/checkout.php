@@ -508,8 +508,9 @@ if (!isset($_SESSION['customer_id'])) {
                         <i class="fas fa-check fa-2x text-white"></i>
                     </div>
                     <h3 style="color: var(--text-primary); margin-bottom: 1rem;">Order Placed Successfully!</h3>
+                    <div id="success-order-number" style="color: var(--accent); font-weight: 700; margin-bottom: 0.75rem;"></div>
                     <p style="color: var(--text-secondary); margin-bottom: 2rem;">
-                        Thank you for your purchase. Your order has been placed and you'll receive a confirmation email shortly.
+                        <span id="success-message-text">Thank you for your purchase. Your order has been placed and you'll receive a confirmation email shortly.</span>
                     </p>
                     <button type="button" class="btn-place-order" onclick="window.location.href='index.php'" style="margin-bottom: 1rem;">
                         <i class="fas fa-shopping-bag me-2"></i>Continue Shopping
@@ -1006,6 +1007,30 @@ if (!isset($_SESSION['customer_id'])) {
                 const data = await response.json();
 
                 if (data.success) {
+                    const orderNumber = data.data?.order?.order_number || data.order?.order_number || '';
+                    const successOrderNumber = document.getElementById('success-order-number');
+                    const successMessageText = document.getElementById('success-message-text');
+
+                    loading.style.display = 'none';
+                    checkoutContent.style.display = 'block';
+
+                    if (successOrderNumber) {
+                        successOrderNumber.textContent = orderNumber ? `Order No. ${orderNumber}` : '';
+                    }
+
+                    if (successMessageText) {
+                        successMessageText.textContent = orderNumber
+                            ? `Your order ${orderNumber} has been placed successfully. You can also check it anytime in your Orders page.`
+                            : 'Thank you for your purchase. Your order has been placed successfully.';
+                    }
+
+                    showAlert(
+                        orderNumber
+                            ? `Order ${orderNumber} placed successfully. Please check your Orders page for live status updates.`
+                            : 'Your order has been placed successfully.',
+                        'success'
+                    );
+
                     // Show success modal
                     const successModal = new bootstrap.Modal(document.getElementById('successModal'));
                     successModal.show();

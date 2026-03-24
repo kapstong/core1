@@ -122,10 +122,6 @@ function addToCart($customerModel, $customerId, $sessionId) {
         Response::error('Quantity must be greater than 0', 400);
     }
 
-    if ($quantity > 99) {
-        Response::error('Maximum quantity per item is 99', 400);
-    }
-
     // Check if product exists and is active
     $db = Database::getInstance()->getConnection();
     $productQuery = "SELECT p.id, p.name, p.selling_price, i.quantity_available
@@ -214,10 +210,6 @@ function updateCartItem($customerModel, $customerId, $sessionId) {
     // Validate quantity
     if ($quantity < 0) {
         Response::error('Quantity cannot be negative', 400);
-    }
-
-    if ($quantity > 99) {
-        Response::error('Maximum quantity per item is 99', 400);
     }
 
     // If quantity is 0, remove the item

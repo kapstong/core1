@@ -536,7 +536,7 @@ if (MaintenanceMode::handle()) {
             const alertDiv = document.createElement('div');
             alertDiv.className = `alert alert-${type}`;
             alertDiv.innerHTML = `
-                <i class="fas fa-${type === 'success' ? 'check-circle' : type === 'danger' ? 'exclamation-circle' : 'info-circle'} me-2"></i>
+                <i class="fas fa-${type === 'success' ? 'check-circle' : type === 'danger' ? 'exclamation-circle' : type === 'warning' ? 'exclamation-triangle' : 'info-circle'} me-2"></i>
                 ${message}
             `;
             alertContainer.appendChild(alertDiv);
@@ -664,7 +664,7 @@ if (MaintenanceMode::handle()) {
 
             // Render cart items
             cartItems.innerHTML = cartData.items.map(item => `
-                <div class="cart-item" data-product-id="${item.product_id}">
+                <div class="cart-item" data-product-id="${item.product_id}" data-available-stock="${item.available_stock}" data-current-quantity="${item.quantity}">
                     <div class="d-flex align-items-center">
                         <div class="cart-item-image">
                             ${item.product.image_url
@@ -687,8 +687,8 @@ if (MaintenanceMode::handle()) {
                                     <i class="fas fa-minus"></i>
                                 </button>
                                 <input type="number" class="quantity-input" value="${item.quantity}"
-                                       min="1" max="99" onchange="updateQuantity(${item.product_id}, this.value)">
-                                <button class="quantity-btn" onclick="updateQuantity(${item.product_id}, ${item.quantity + 1})">
+                                       min="1" max="${Math.max(item.available_stock, item.quantity, 1)}" onchange="updateQuantity(${item.product_id}, this.value)">
+                                <button class="quantity-btn" onclick="updateQuantity(${item.product_id}, ${item.quantity + 1})" ${(!item.in_stock || item.quantity >= item.available_stock) ? 'disabled' : ''}>
                                     <i class="fas fa-plus"></i>
                                 </button>
                             </div>
@@ -735,9 +735,45 @@ if (MaintenanceMode::handle()) {
             }
         }
 
+        function getCartItemStockState(productId) {
+            const cartItem = document.querySelector(`.cart-item[data-product-id="${productId}"]`);
+            if (!cartItem) {
+                return { availableStock: null, currentQuantity: null, input: null };
+            }
+
+            return {
+                availableStock: parseInt(cartItem.dataset.availableStock, 10),
+                currentQuantity: parseInt(cartItem.dataset.currentQuantity, 10),
+                input: cartItem.querySelector('.quantity-input')
+            };
+        }
+
         // Update quantity
         async function updateQuantity(productId, newQuantity) {
-            if (newQuantity < 1) return;
+            let parsedQuantity = parseInt(newQuantity, 10);
+            if (isNaN(parsedQuantity) || parsedQuantity < 1) {
+                return;
+            }
+
+            const { availableStock, currentQuantity, input } = getCartItemStockState(productId);
+            if (Number.isInteger(availableStock) && availableStock >= 0) {
+                const allowedMaximum = availableStock > 0 ? availableStock : currentQuantity;
+
+                if (parsedQuantity > allowedMaximum) {
+                    parsedQuantity = allowedMaximum;
+
+                    if (input) {
+                        input.value = allowedMaximum;
+                    }
+
+                    showAlert(
+                        availableStock > 0
+                            ? `Maximum order for this item is ${availableStock} based on live stock.`
+                            : 'This item is now out of stock. Please reduce the quantity or remove it from your cart.',
+                        'warning'
+                    );
+                }
+            }
 
             try {
                 const response = await fetch(`${API_BASE}/shop/cart.php`, {
@@ -747,7 +783,7 @@ if (MaintenanceMode::handle()) {
                     },
                     body: JSON.stringify({
                         product_id: productId,
-                        quantity: parseInt(newQuantity)
+                        quantity: parsedQuantity
                     })
                 });
 
@@ -758,7 +794,7 @@ if (MaintenanceMode::handle()) {
                     const cartItems = JSON.parse(localStorage.getItem('cart') || '[]');
                     const itemIndex = cartItems.findIndex(item => parseInt(item.id) === parseInt(productId));
                     if (itemIndex !== -1) {
-                        cartItems[itemIndex].quantity = parseInt(newQuantity);
+                        cartItems[itemIndex].quantity = parsedQuantity;
                         localStorage.setItem('cart', JSON.stringify(cartItems));
                     }
 
